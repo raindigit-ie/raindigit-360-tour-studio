@@ -1,0 +1,30 @@
+services:
+  studio:
+    build:
+      context: .
+      target: studio
+    working_dir: /workspace
+    command: ["node", "scripts/tour-editor-server.mjs", "--port", "8767"]
+    ports:
+      - "8767:8767"
+    volumes:
+      - .:/workspace
+
+  preview:
+    build:
+      context: .
+      target: studio
+    working_dir: /workspace
+    command: ["node", "scripts/tour-editor-server.mjs", "--preview", "--port", "8768"]
+    ports:
+      - "8768:8768"
+    volumes:
+      - .:/workspace
+
+  release:
+    profiles: ["release"]
+    build:
+      context: .
+      target: release
+    ports:
+      - "8080:8080"

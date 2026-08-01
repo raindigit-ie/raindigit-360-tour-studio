@@ -1,0 +1,13 @@
+.git
+.DS_Store
+.playwright-cli
+originals
+working
+qa
+demo-site
+studio-workspace
+dist
+*.zip
+web-tour/panoramas
+web-tour/thumbnails
+release/.build-tmp

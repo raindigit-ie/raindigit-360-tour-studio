@@ -1,0 +1,266 @@
+#!/usr/bin/env node
+
+import { createHash } from "node:crypto";
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const projectRoot = resolve(import.meta.dirname, "..");
+
+function parseArguments(argv) {
+  const options = {
+    workspace: join(projectRoot, "studio-workspace"),
+    output: join(projectRoot, "release"),
+    zip: null,
+    quality: 86,
+    replace: false
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--workspace") options.workspace = resolve(argv[++index] || "");
+    else if (argument === "--output") options.output = resolve(argv[++index] || "");
+    else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
+    else if (argument === "--quality") options.quality = Number(argv[++index]);
+    else if (argument === "--replace") options.replace = true;
+    else if (argument === "--help") {
+      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--quality 84..94] [--replace]");
+      process.exit(0);
+    } else {
+      throw new Error(`Unknown argument: ${argument}`);
+    }
+  }
+  if (!Number.isInteger(options.quality) || options.quality < 84 || options.quality > 94) {
+    throw new Error("JPEG quality must be an integer from 84 to 94.");
+  }
+  return options;
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function jpegDimensions(buffer) {
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    while (buffer[offset] === 0xff) offset += 1;
+    const marker = buffer[offset++];
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (offset + 1 >= buffer.length) return null;
+    const length = buffer.readUInt16BE(offset);
+    if (length < 2 || offset + length > buffer.length) return null;
+    if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+      return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
+    }
+    offset += length;
+  }
+  return null;
+}
+
+async function run(command, arguments_, options = {}) {
+  try {
+    return await execFileAsync(command, arguments_, { maxBuffer: 1024 * 1024, ...options });
+  } catch (error) {
+    throw new Error(`${command} failed: ${error.stderr || error.message}`);
+  }
+}
+
+async function readJson(path, fallback) {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT" && fallback !== undefined) return fallback;
+    throw error;
+  }
+}
+
+function isSceneId(value) {
+  return typeof value === "string" && /^scene-\d{3,}$/i.test(value);
+}
+
+function normaliseProject(project) {
+  assert(project?.schema === "raindigit-tour-project/v1", "Missing raindigit-tour-project/v1 manifest.");
+  assert(typeof project.title === "string" && project.title.trim(), "Project title is required.");
+  assert(Array.isArray(project.scenes) && project.scenes.length >= 1 && project.scenes.length <= 100, "A release needs from 1 to 100 scenes.");
+  const ids = new Set();
+  project.scenes.forEach((scene) => {
+    assert(isSceneId(scene.id) && !ids.has(scene.id), `Invalid or duplicate scene id: ${scene.id}`);
+    ids.add(scene.id);
+    assert(typeof scene.title === "string" && scene.title.trim(), `Scene ${scene.id} needs a title.`);
+    assert(typeof scene.panorama === "string" && /^panoramas\/scene-\d{3,}\.jpg$/i.test(scene.panorama), `Invalid panorama path for ${scene.id}.`);
+    assert(typeof scene.thumb === "string" && /^thumbnails\/scene-\d{3,}\.jpg$/i.test(scene.thumb), `Invalid thumbnail path for ${scene.id}.`);
+    assert(Array.isArray(scene.hotspots), `Scene ${scene.id} must define hotspots.`);
+  });
+  assert(ids.has(project.firstScene || project.scenes[0].id), "Initial scene must exist in the project.");
+  return structuredClone(project);
+}
+
+function clamp(value, minimum, maximum, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+}
+
+function applyDraft(project, draft) {
+  if (!draft || draft.schema !== "raindigit-tour-hotspot-overrides/v1") return project;
+  const byId = Object.fromEntries(project.scenes.map((scene) => [scene.id, scene]));
+  Object.entries(draft.addedHotspots || {}).forEach(([sceneId, hotspots]) => {
+    if (!byId[sceneId] || !Array.isArray(hotspots)) return;
+    byId[sceneId].hotspots.push(...hotspots.filter((hotspot) => byId[hotspot?.target]).map((hotspot) => ({ ...hotspot })));
+  });
+  Object.entries(draft.overrides || {}).forEach(([key, override]) => {
+    const [sceneId, indexValue] = key.split("::");
+    const hotspot = byId[sceneId]?.hotspots[Number(indexValue)];
+    if (!hotspot) return;
+    hotspot.pitch = clamp(override.pitch, -85, 85, hotspot.pitch);
+    hotspot.yaw = clamp(override.yaw, -180, 180, hotspot.yaw);
+    hotspot.targetPitch = clamp(override.targetPitch, -85, 85, hotspot.targetPitch);
+    hotspot.targetYaw = clamp(override.targetYaw, -180, 180, hotspot.targetYaw);
+    hotspot.targetHfov = clamp(override.targetHfov, 58, 112, hotspot.targetHfov);
+  });
+  Object.entries(draft.sceneMetadata || {}).forEach(([sceneId, metadata]) => {
+    if (!byId[sceneId] || typeof metadata?.title !== "string" || !metadata.title.trim()) return;
+    byId[sceneId].title = metadata.title.trim().slice(0, 80);
+    byId[sceneId].subtitle = typeof metadata.subtitle === "string" ? metadata.subtitle.slice(0, 120) : "";
+    byId[sceneId].spaceLabel = byId[sceneId].title;
+  });
+  return project;
+}
+
+function imageCommands(input, output, adjustment, quality) {
+  const brightness = clamp(adjustment?.brightness, 70, 130, 100) - 100;
+  const contrast = clamp(adjustment?.contrast, 70, 130, 100) - 100;
+  const saturation = clamp(adjustment?.saturation, 0, 160, 100);
+  const warmth = clamp(adjustment?.warmth, -20, 20, 0);
+  const commands = [input, "-auto-orient", "-strip", "-brightness-contrast", `${brightness}x${contrast}`, "-modulate", `100,${saturation},100`];
+  if (warmth !== 0) {
+    commands.push("-fill", warmth > 0 ? "#e5ad62" : "#6ea6dd", "-colorize", `${Math.abs(warmth) * 1.1}%`);
+  }
+  commands.push("-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", String(quality), output);
+  return commands;
+}
+
+function localOverlaySvg(area, image) {
+  const width = clamp(area.width, 80, 720, 240) * image.width / 1000;
+  const height = clamp(area.height, 80, 520, 180) * image.height / 600;
+  const yaw = clamp(area.yaw, -180, 180, 0);
+  const pitch = clamp(area.pitch, -85, 85, 0);
+  const centerX = (yaw + 180) / 360 * image.width;
+  const centerY = (90 - pitch) / 180 * image.height;
+  const opacity = Math.min(0.72, Math.abs(clamp(area.intensity, -100, 100, 30)) / 100 * 0.72);
+  const color = typeof area.color === "string" && /^#[0-9a-f]{6}$/i.test(area.color) ? area.color : "#fff1b8";
+  const blur = Math.max(8, Math.min(width, height) * 0.22);
+  const shape = area.shape === "rectangle"
+    ? `<rect x="${centerX - width / 2}" y="${centerY - height / 2}" width="${width}" height="${height}" rx="${Math.min(width, height) * 0.07}" />`
+    : `<ellipse cx="${centerX}" cy="${centerY}" rx="${width / 2}" ry="${height / 2}" />`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${image.width}" height="${image.height}" viewBox="0 0 ${image.width} ${image.height}"><defs><filter id="fade" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${blur}" /></filter></defs><g fill="${color}" fill-opacity="${opacity}" filter="url(#fade)">${shape}</g></svg>`;
+}
+
+async function applyLocalAreas(input, output, areas, image, temporaryRoot) {
+  let current = input;
+  for (const [index, area] of areas.entries()) {
+    const overlayPath = join(temporaryRoot, `area-${index}.svg`);
+    const nextPath = join(temporaryRoot, `area-${index}.jpg`);
+    await writeFile(overlayPath, localOverlaySvg(area, image), "utf8");
+    const compose = clamp(area.intensity, -100, 100, 30) >= 0 ? "screen" : "multiply";
+    await run("magick", [current, overlayPath, "-compose", compose, "-composite", nextPath]);
+    current = nextPath;
+  }
+  await rename(current, output);
+}
+
+async function hashFile(path) {
+  return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+async function buildScene(scene, workspace, output, draft, temporaryRoot, quality) {
+  const input = join(workspace, scene.panorama);
+  const source = await readFile(input);
+  const dimensions = jpegDimensions(source);
+  assert(dimensions && dimensions.width >= 1600 && Math.abs(dimensions.width / dimensions.height - 2) <= 0.02, `${scene.id} is not a valid 2:1 JPEG panorama.`);
+  const workImage = join(temporaryRoot, `${scene.id}-base.jpg`);
+  await run("magick", imageCommands(input, workImage, draft.sceneAdjustments?.[scene.id], quality));
+  const areas = Array.isArray(draft.localAdjustments?.[scene.id]) ? draft.localAdjustments[scene.id] : [];
+  const finishedImage = join(temporaryRoot, `${scene.id}-finished.jpg`);
+  if (areas.length > 0) await applyLocalAreas(workImage, finishedImage, areas, dimensions, temporaryRoot);
+  else await rename(workImage, finishedImage);
+  const panoramaHash = await hashFile(finishedImage);
+  const panoramaRelative = `assets/p/${panoramaHash.slice(0, 20)}.jpg`;
+  const panoramaOutput = join(output, panoramaRelative);
+  await mkdir(dirname(panoramaOutput), { recursive: true });
+  await rename(finishedImage, panoramaOutput);
+  const thumbnailWork = join(temporaryRoot, `${scene.id}-thumb.jpg`);
+  await run("magick", [panoramaOutput, "-thumbnail", "480x240^", "-gravity", "center", "-extent", "480x240", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "82", thumbnailWork]);
+  const thumbnailHash = await hashFile(thumbnailWork);
+  const thumbnailRelative = `assets/t/${thumbnailHash.slice(0, 20)}.jpg`;
+  const thumbnailOutput = join(output, thumbnailRelative);
+  await mkdir(dirname(thumbnailOutput), { recursive: true });
+  await rename(thumbnailWork, thumbnailOutput);
+  return { panorama: panoramaRelative, thumb: thumbnailRelative, bytes: (await stat(panoramaOutput)).size + (await stat(thumbnailOutput)).size };
+}
+
+async function copyRuntime(output) {
+  const source = join(projectRoot, "web-tour");
+  await cp(join(source, "index.html"), join(output, "index.html"));
+  await cp(join(source, "css"), join(output, "css"), { recursive: true });
+  await mkdir(join(output, "js"), { recursive: true });
+  await cp(join(source, "js", "pannellum.js"), join(output, "js", "pannellum.js"));
+  await cp(join(source, "js", "tour-bootstrap-release.js"), join(output, "js", "tour-bootstrap.js"));
+  const studioRuntime = await readFile(join(source, "js", "tour.js"), "utf8");
+  const releaseRuntime = studioRuntime
+    .replace(/const isLocalEditorRequest = viewParams\.get\("edit"\) === "1"[\s\S]*?const defaultSceneAdjustment/, "const defaultSceneAdjustment")
+    .replace(/\/\/ Exposed only on explicit QA URLs[\s\S]*?\/\/ The preview can apply a saved local draft, but deliberately exposes no editor UI or write endpoint\.[\s\S]*?}\n\n/, "")
+    .replace("if (isLocalEditorRequest || isLocalDraftPreview) setNavigatorOpen(true);", "setNavigatorOpen(false);");
+  assert(!/tour-editor|tour-preview|__TOUR_EDITOR|__TOUR_DRAFT_PREVIEW/.test(releaseRuntime), "Release runtime still references local studio code.");
+  await writeFile(join(output, "js", "tour.js"), releaseRuntime, "utf8");
+  await cp(join(source, "assets"), join(output, "assets"), { recursive: true });
+  await writeFile(join(output, "robots.txt"), "User-agent: *\nDisallow: /\n", "utf8");
+}
+
+async function createZip(output, zipPath) {
+  await mkdir(dirname(zipPath), { recursive: true });
+  await rm(zipPath, { force: true });
+  await run("zip", ["-X", "-r", zipPath, "."], { cwd: output });
+}
+
+async function main() {
+  const options = parseArguments(process.argv.slice(2));
+  const workspace = options.workspace;
+  const project = applyDraft(normaliseProject(await readJson(join(workspace, "tour-project.json"))), await readJson(join(workspace, "draft.json"), null));
+  if (existsSync(options.output)) {
+    if (!options.replace) throw new Error(`Release directory already exists: ${options.output}. Use --replace to regenerate it.`);
+    await rm(options.output, { recursive: true, force: true });
+  }
+  await mkdir(options.output, { recursive: true });
+  const temporaryRoot = join(options.output, ".build-tmp");
+  await mkdir(temporaryRoot, { recursive: true });
+  try {
+    await copyRuntime(options.output);
+    let totalBytes = 0;
+    for (const scene of project.scenes) {
+      const result = await buildScene(scene, workspace, options.output, await readJson(join(workspace, "draft.json"), null) || {}, temporaryRoot, options.quality);
+      scene.panorama = result.panorama;
+      scene.thumb = result.thumb;
+      delete scene.sourceHash;
+      totalBytes += result.bytes;
+    }
+    await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
+    await rm(temporaryRoot, { recursive: true, force: true });
+    if (options.zip) await createZip(options.output, options.zip);
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, scenes: project.scenes.length, mediaBytes: totalBytes, quality: options.quality }, null, 2));
+  } catch (error) {
+    await rm(temporaryRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});

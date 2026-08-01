@@ -1,0 +1,21 @@
+# Private customer media and local evidence never enter source control.
+/originals/
+/working/
+/qa/
+/demo-site/
+/studio-workspace/
+/release/
+/dist/
+/.playwright-cli/
+/output/
+/*.zip
+
+# Browser derivatives are rebuilt from a local workspace.
+/web-tour/panoramas/*
+!/web-tour/panoramas/.gitkeep
+/web-tour/thumbnails/*
+!/web-tour/thumbnails/.gitkeep
+
+# Local runtime files.
+.DS_Store
+*.log
