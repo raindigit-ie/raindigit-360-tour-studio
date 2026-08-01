@@ -4,7 +4,7 @@
 - Purpose: local RainDigit application for turning stitched 360 panoramas into a reviewed, self-hosted property tour.
 - Contains: the original Killarney tour, a local five-stage studio, a static release builder and Docker delivery files.
 - Read full when: importing the next room set, reviewing a tour, producing a customer package or deploying it.
-- Last update: 2026-08-01
+- Last update: 2026-08-02
 
 ## Current Killarney Source
 - Media card: `/Volumes/Untitled/DCIM/Camera01`.
@@ -36,11 +36,11 @@ npm run studio
 
 Open `http://127.0.0.1:8767/?edit=1` and work through the five stages:
 
-1. **Project**: create an isolated workspace and import stitched 2:1 JPEG panoramas. Imports are normalized, have EXIF/GPS stripped and are duplicate-checked.
-2. **Scenes**: name, describe and order each camera location.
-3. **Links**: create the doorway or viewpoint transitions, then deliberately place each marker.
+1. **Rooms**: create a project, group one or more viewpoints into each room, name and order them, then choose the opening viewpoint.
+2. **Color**: apply whole-panorama corrections or smooth local light/color areas.
+3. **Transitions**: create doorway or same-room viewpoint links, then deliberately place each marker.
 4. **Arrival**: compose the first view that a visitor sees after every directed transition.
-5. **Light**: apply whole-panorama corrections or smooth local light/color areas.
+5. **Export**: review the result, build the static release, open it and download the ZIP.
 
 One **Save** persists the local draft. Review the product view at
 `http://127.0.0.1:8768/?preview=1`. When working in a newly imported project,
@@ -52,7 +52,8 @@ Create the customer package only after review approval:
 npm run build:release
 ```
 
-This creates `release/` and `dist/raindigit-360-tour.zip`. Neither is versioned;
+This creates `release/` and `dist/raindigit-360-tour.zip`. The ZIP contains an
+`INSTALL.txt` file with a ready iframe example. Neither output is versioned;
 they are generated from the private workspace. See [the product workflow](docs/product-workflow.md)
 and [asset-protection model](docs/asset-protection.md) for the exact boundaries.
 

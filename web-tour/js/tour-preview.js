@@ -7,6 +7,16 @@
   const workspace = new URLSearchParams(window.location.search).get("workspace") === "1";
   fetch(`__tour-preview/overrides${workspace ? "?workspace=1" : ""}`, { cache: "no-store" })
     .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Could not load saved draft (${response.status})`)))
-    .then((draft) => api.applyDraft(draft))
+    .then((draft) => {
+      if (api.viewer.isLoaded()) {
+        api.applyDraft(draft);
+        return;
+      }
+      const applyWhenLoaded = () => {
+        api.viewer.off("load", applyWhenLoaded);
+        api.applyDraft(draft);
+      };
+      api.viewer.on("load", applyWhenLoaded);
+    })
     .catch((error) => console.warn(error.message));
 })();

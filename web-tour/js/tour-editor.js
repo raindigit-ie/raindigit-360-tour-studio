@@ -5,135 +5,139 @@
   if (!api) return;
 
   const endpoint = "__tour-editor";
-  const roundCoordinate = (value) => Math.round(value * 10) / 10;
   const workspaceMode = new URLSearchParams(window.location.search).get("workspace") === "1";
+  const stageOrder = ["project", "light", "links", "arrival", "export"];
+  const stageStorageKey = "raindigit-tour-studio-stage";
+  const restoredStage = window.sessionStorage.getItem(stageStorageKey);
+  const roundCoordinate = (value) => Math.round(value * 10) / 10;
   const state = {
-    activeStage: "project",
+    activeStage: stageOrder.includes(restoredStage) ? restoredStage : "project",
     selected: null,
     selectedAdjustmentId: null,
     placement: null,
     arrival: null,
     savedAt: null,
     workspaceProject: null,
-    importing: false
+    importing: false,
+    building: false,
+    release: { ready: false }
   };
+  window.sessionStorage.removeItem(stageStorageKey);
 
   const panel = document.createElement("aside");
   panel.className = "editor-panel";
-  panel.setAttribute("aria-label", "Tour studio editor");
+  panel.setAttribute("aria-label", "RainDigit tour studio");
   panel.innerHTML = `
     <div class="editor-panel__header">
-      <p class="editor-panel__title">Tour studio</p>
+      <div>
+        <p class="editor-panel__eyebrow">RainDigit</p>
+        <p class="editor-panel__title">360 Tour Studio</p>
+      </div>
       <button class="editor-button editor-button--icon" id="editorClose" type="button" aria-label="Hide tour studio" title="Hide tour studio">&times;</button>
     </div>
-    <div class="editor-workflow" role="tablist" aria-label="Tour preparation steps">
-      <button class="editor-stage" data-stage="project" type="button" role="tab">Project</button>
-      <button class="editor-stage" data-stage="scenes" type="button" role="tab">Scenes</button>
-      <button class="editor-stage" data-stage="links" type="button" role="tab">Links</button>
-      <button class="editor-stage" data-stage="arrival" type="button" role="tab">Arrival</button>
-      <button class="editor-stage" data-stage="light" type="button" role="tab">Light</button>
+    <div class="editor-workflow" role="tablist" aria-label="Tour production steps">
+      <button class="editor-stage" data-stage="project" type="button" role="tab"><span>1</span>Rooms</button>
+      <button class="editor-stage" data-stage="light" type="button" role="tab"><span>2</span>Color</button>
+      <button class="editor-stage" data-stage="links" type="button" role="tab"><span>3</span>Transitions</button>
+      <button class="editor-stage" data-stage="arrival" type="button" role="tab"><span>4</span>Arrival</button>
+      <button class="editor-stage" data-stage="export" type="button" role="tab"><span>5</span>Export</button>
     </div>
     <div class="editor-panel__scene">
-      <button class="editor-button editor-button--icon" id="editorPreviousScene" type="button" aria-label="Previous scene" title="Previous scene">&larr;</button>
-      <strong class="editor-panel__scene-name" id="editorSceneName"></strong>
-      <button class="editor-button editor-button--icon" id="editorNextScene" type="button" aria-label="Next scene" title="Next scene">&rarr;</button>
+      <button class="editor-button editor-button--icon" id="editorPreviousScene" type="button" aria-label="Previous panorama" title="Previous panorama">&larr;</button>
+      <div>
+        <span id="editorRoomName"></span>
+        <strong class="editor-panel__scene-name" id="editorSceneName"></strong>
+      </div>
+      <button class="editor-button editor-button--icon" id="editorNextScene" type="button" aria-label="Next panorama" title="Next panorama">&rarr;</button>
     </div>
-    <section class="editor-stage-panel" data-stage-panel="project">
-      <p class="editor-help" id="editorProjectHelp"></p>
-      <label class="editor-field">
-        <span>Project title</span>
-        <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 3D Tour" />
-      </label>
-      <div class="editor-panel__actions">
-        <button class="editor-button" id="editorCreateWorkspace" type="button">Create local workspace</button>
-        <button class="editor-button" id="editorOpenWorkspace" type="button">Open workspace</button>
-      </div>
-      <label class="editor-field">
-        <span>Stitched 2:1 JPEG panoramas</span>
-        <input id="editorImportFiles" type="file" accept="image/jpeg,.jpg,.jpeg" multiple />
-      </label>
-      <div class="editor-panel__actions">
-        <button class="editor-button" id="editorImport" type="button">Import selected panoramas</button>
-      </div>
-      <div class="editor-project-order" id="editorProjectOrder" aria-label="Workspace scene order"></div>
-    </section>
-    <section class="editor-stage-panel" data-stage-panel="scenes">
-      <label class="editor-field">
-        <span>Location name</span>
-        <input id="editorSceneTitle" type="text" maxlength="80" autocomplete="off" />
-      </label>
-      <label class="editor-field">
-        <span>View description</span>
-        <input id="editorSceneSubtitle" type="text" maxlength="120" autocomplete="off" />
-      </label>
-    </section>
-    <section class="editor-stage-panel" data-stage-panel="links">
-      <div class="editor-hotspot-list" id="editorHotspotList"></div>
-      <div class="editor-panel__actions">
-        <button class="editor-button" id="editorPlace" type="button">Place selected point</button>
-        <button class="editor-button" id="editorRemoveLink" type="button">Remove local link</button>
-      </div>
-      <details class="editor-new-link">
-        <summary>Add transition</summary>
-        <label class="editor-field"><span>Destination</span><select id="editorLinkTarget" aria-label="Transition destination"></select></label>
-        <label class="editor-field"><span>Marker type</span><select id="editorLinkKind" aria-label="Transition marker type"><option value="doorway">Walk through</option><option value="viewpoint">Other camera view</option></select></label>
-        <label class="editor-field"><span>Label</span><input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" /></label>
-        <div class="editor-panel__actions"><button class="editor-button" id="editorAddLink" type="button">Add transition</button></div>
-      </details>
-    </section>
-    <section class="editor-stage-panel" data-stage-panel="arrival">
-      <p class="editor-help" id="editorArrivalHelp"></p>
-      <div class="editor-panel__actions">
-        <button class="editor-button" id="editorEditArrival" type="button">Set arrival view</button>
-        <button class="editor-button" id="editorSaveArrival" type="button">Save arrival view</button>
-      </div>
-    </section>
-    <section class="editor-stage-panel" data-stage-panel="light">
-      <details class="editor-image" open>
-        <summary>Whole panorama</summary>
+    <div class="editor-panel__content">
+      <section class="editor-stage-panel" data-stage-panel="project">
+        <div class="editor-step-heading"><span>Step 1</span><h2>Rooms and viewpoints</h2></div>
+        <label class="editor-field editor-field--stacked">
+          <span>Project title</span>
+          <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 3D Tour" />
+        </label>
+        <div class="editor-panel__actions">
+          <button class="editor-button editor-button--primary" id="editorCreateWorkspace" type="button">Create project</button>
+          <button class="editor-button" id="editorOpenWorkspace" type="button">Open project</button>
+        </div>
+        <div class="editor-import" id="editorImportBlock">
+          <label class="editor-field editor-field--stacked">
+            <span>Room</span>
+            <select id="editorImportRoom" aria-label="Room for imported panoramas"></select>
+          </label>
+          <label class="editor-field editor-field--stacked" id="editorNewRoomField">
+            <span>New room name</span>
+            <input id="editorNewRoomName" type="text" maxlength="80" autocomplete="off" value="Room 1" />
+          </label>
+          <label class="editor-field editor-field--stacked">
+            <span>Stitched 2:1 JPEG panoramas</span>
+            <input id="editorImportFiles" type="file" accept="image/jpeg,.jpg,.jpeg" multiple />
+          </label>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorImport" type="button">Import into room</button>
+        </div>
+        <p class="editor-empty" id="editorProjectEmpty"></p>
+        <div class="editor-project-order" id="editorProjectOrder" aria-label="Rooms and panorama order"></div>
+        <button class="editor-button editor-button--wide" id="editorSaveStructure" type="button">Save room structure</button>
+      </section>
+      <section class="editor-stage-panel" data-stage-panel="light">
+        <div class="editor-step-heading"><span>Step 2</span><h2>Color and light</h2></div>
         <div class="editor-image__controls" id="editorImageControls"></div>
-      </details>
-      <div class="editor-local-header">
-        <strong>Soft light and color areas</strong>
-        <button class="editor-button" id="editorAddAdjustment" type="button">Add area</button>
-      </div>
-      <div class="editor-adjustment-list" id="editorAdjustmentList"></div>
-      <div class="editor-adjustment-controls" id="editorAdjustmentControls"></div>
-    </section>
+        <div class="editor-local-header">
+          <strong>Local areas</strong>
+          <button class="editor-button" id="editorAddAdjustment" type="button">Add area</button>
+        </div>
+        <div class="editor-adjustment-list" id="editorAdjustmentList"></div>
+        <div class="editor-adjustment-controls" id="editorAdjustmentControls"></div>
+      </section>
+      <section class="editor-stage-panel" data-stage-panel="links">
+        <div class="editor-step-heading"><span>Step 3</span><h2>Transitions</h2></div>
+        <div class="editor-hotspot-list" id="editorHotspotList"></div>
+        <div class="editor-panel__actions">
+          <button class="editor-button editor-button--primary" id="editorPlace" type="button">Place selected point</button>
+          <button class="editor-button" id="editorRemoveLink" type="button">Remove</button>
+        </div>
+        <div class="editor-new-link">
+          <label class="editor-field editor-field--stacked"><span>Destination</span><select id="editorLinkTarget" aria-label="Transition destination"></select></label>
+          <label class="editor-field editor-field--stacked"><span>Marker type</span><select id="editorLinkKind" aria-label="Transition marker type"><option value="doorway">Walk through</option><option value="viewpoint">Other camera viewpoint</option></select></label>
+          <label class="editor-field editor-field--stacked"><span>Label</span><input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" /></label>
+          <button class="editor-button editor-button--wide" id="editorAddLink" type="button">Add transition</button>
+        </div>
+      </section>
+      <section class="editor-stage-panel" data-stage-panel="arrival">
+        <div class="editor-step-heading"><span>Step 4</span><h2>Arrival views</h2></div>
+        <div class="editor-hotspot-list" id="editorArrivalList"></div>
+        <p class="editor-empty" id="editorArrivalHelp"></p>
+        <div class="editor-panel__actions">
+          <button class="editor-button editor-button--primary" id="editorEditArrival" type="button">Compose destination</button>
+          <button class="editor-button editor-button--primary" id="editorSaveArrival" type="button">Use current view</button>
+        </div>
+      </section>
+      <section class="editor-stage-panel" data-stage-panel="export">
+        <div class="editor-step-heading"><span>Step 5</span><h2>Review and export</h2></div>
+        <div class="editor-export-summary" id="editorExportSummary"></div>
+        <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open review preview</a>
+        <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build release package</button>
+        <div class="editor-release-actions" id="editorReleaseActions" hidden>
+          <a class="editor-button editor-button--wide" id="editorReleasePreview" target="_blank" rel="noopener">Open built release</a>
+          <a class="editor-button editor-button--primary editor-button--wide" id="editorDownload" download="raindigit-360-tour.zip">Download ZIP</a>
+        </div>
+        <p class="editor-empty" id="editorReleaseStatus"></p>
+      </section>
+    </div>
     <div class="editor-panel__footer">
-      <span class="editor-panel__status" id="editorStatus">Loading draft</span>
+      <button class="editor-button" id="editorBack" type="button">Back</button>
+      <span class="editor-panel__status" id="editorStatus" role="status">Loading project</span>
       <button class="editor-button" id="editorSave" type="button">Save</button>
+      <button class="editor-button editor-button--primary" id="editorContinue" type="button">Continue</button>
     </div>
   `;
   document.body.appendChild(panel);
   document.body.classList.add("is-editor-open");
 
-  const sceneName = panel.querySelector("#editorSceneName");
-  const projectHelp = panel.querySelector("#editorProjectHelp");
-  const projectTitleInput = panel.querySelector("#editorProjectTitle");
-  const createWorkspaceButton = panel.querySelector("#editorCreateWorkspace");
-  const openWorkspaceButton = panel.querySelector("#editorOpenWorkspace");
-  const importFilesInput = panel.querySelector("#editorImportFiles");
-  const importButton = panel.querySelector("#editorImport");
-  const projectOrder = panel.querySelector("#editorProjectOrder");
-  const sceneTitleInput = panel.querySelector("#editorSceneTitle");
-  const sceneSubtitleInput = panel.querySelector("#editorSceneSubtitle");
-  const hotspotList = panel.querySelector("#editorHotspotList");
-  const placeButton = panel.querySelector("#editorPlace");
-  const removeLinkButton = panel.querySelector("#editorRemoveLink");
-  const linkTarget = panel.querySelector("#editorLinkTarget");
-  const linkKind = panel.querySelector("#editorLinkKind");
-  const linkLabel = panel.querySelector("#editorLinkLabel");
-  const addLinkButton = panel.querySelector("#editorAddLink");
-  const editArrivalButton = panel.querySelector("#editorEditArrival");
-  const saveArrivalButton = panel.querySelector("#editorSaveArrival");
-  const arrivalHelp = panel.querySelector("#editorArrivalHelp");
-  const imageControls = panel.querySelector("#editorImageControls");
-  const adjustmentList = panel.querySelector("#editorAdjustmentList");
-  const adjustmentControls = panel.querySelector("#editorAdjustmentControls");
-  const addAdjustmentButton = panel.querySelector("#editorAddAdjustment");
-  const saveButton = panel.querySelector("#editorSave");
-  const status = panel.querySelector("#editorStatus");
+  const elements = Object.fromEntries([
+    "SceneName", "RoomName", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ImportBlock", "ImportRoom", "NewRoomField", "NewRoomName", "ImportFiles", "Import", "ProjectEmpty", "ProjectOrder", "SaveStructure", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "PreviewLink", "Build", "ReleaseActions", "ReleasePreview", "Download", "ReleaseStatus", "Back", "Status", "Save", "Continue"
+  ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
 
   const editorToggle = document.createElement("button");
@@ -145,7 +149,7 @@
   document.querySelector(".toolbar").appendChild(editorToggle);
 
   function setStatus(message) {
-    status.textContent = message;
+    elements.Status.textContent = message;
   }
 
   function studioUrl(path, workspace = workspaceMode) {
@@ -167,92 +171,198 @@
     return hotspot ? { scene, hotspot } : null;
   }
 
-  function setStage(stage) {
-    state.activeStage = stage;
-    render();
-  }
-
-  function setSelected(sceneId, hotspotIndex) {
-    state.selected = { sceneId, hotspotIndex };
-    state.placement = null;
-    state.arrival = null;
-    setStage("links");
-    focusSelectedMarker();
-  }
-
   function selectedAdjustment() {
     const scene = currentScene();
     if (!scene || !state.selectedAdjustmentId) return null;
     return api.getLocalAdjustments(scene.id).find((adjustment) => adjustment.id === state.selectedAdjustmentId) || null;
   }
 
-  function syncSelectedMarker() {
-    const activeId = state.selected ? api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex) : "";
-    viewerElement.querySelectorAll(".nav-hotspot").forEach((element) => {
-      element.classList.toggle("is-editor-selected", element.dataset.editorHotspotId === activeId);
-    });
+  function roomMap(project = state.workspaceProject) {
+    const rooms = new Map();
+    for (const scene of project?.scenes || []) {
+      if (!rooms.has(scene.space)) rooms.set(scene.space, { id: scene.space, label: scene.spaceLabel, scenes: [] });
+      rooms.get(scene.space).scenes.push(scene);
+    }
+    return rooms;
+  }
+
+  function setStage(stage) {
+    if (!stageOrder.includes(stage)) return;
+    state.activeStage = stage;
+    state.placement = null;
+    if (stage !== "arrival") state.arrival = null;
+    render();
+  }
+
+  function stageOffset(offset) {
+    const index = stageOrder.indexOf(state.activeStage);
+    return stageOrder[Math.max(0, Math.min(stageOrder.length - 1, index + offset))];
+  }
+
+  function setSelected(sceneId, hotspotIndex, stage = "links") {
+    state.selected = { sceneId, hotspotIndex };
+    state.placement = null;
+    state.arrival = null;
+    setStage(stage);
+    focusSelectedMarker();
   }
 
   function renderStages() {
+    panel.dataset.stage = state.activeStage;
+    document.body.dataset.editorStage = state.activeStage;
     panel.querySelectorAll(".editor-stage").forEach((button) => {
       const active = button.dataset.stage === state.activeStage;
+      const complete = stageOrder.indexOf(button.dataset.stage) < stageOrder.indexOf(state.activeStage);
+      const available = button.dataset.stage === "project" || Boolean(workspaceMode && state.workspaceProject?.scenes?.length);
       button.classList.toggle("is-active", active);
+      button.classList.toggle("is-complete", complete);
       button.setAttribute("aria-selected", String(active));
+      button.disabled = !available;
+      button.setAttribute("aria-disabled", String(!available));
     });
     panel.querySelectorAll(".editor-stage-panel").forEach((section) => {
       section.hidden = section.dataset.stagePanel !== state.activeStage;
     });
+    const index = stageOrder.indexOf(state.activeStage);
+    elements.Back.hidden = index === 0;
+    elements.Continue.hidden = index === stageOrder.length - 1;
+    elements.Save.hidden = state.activeStage === "project" || state.activeStage === "export";
+    elements.Continue.textContent = state.activeStage === "arrival" ? "Review" : "Continue";
+  }
+
+  function populateImportRooms() {
+    const selected = elements.ImportRoom.value;
+    elements.ImportRoom.replaceChildren();
+    for (const room of roomMap().values()) {
+      const option = document.createElement("option");
+      option.value = room.id;
+      option.textContent = room.label;
+      elements.ImportRoom.appendChild(option);
+    }
+    const newOption = document.createElement("option");
+    newOption.value = "__new__";
+    newOption.textContent = "New room";
+    elements.ImportRoom.appendChild(newOption);
+    elements.ImportRoom.value = [...elements.ImportRoom.options].some((option) => option.value === selected) ? selected : "__new__";
+    elements.NewRoomField.hidden = elements.ImportRoom.value !== "__new__";
+  }
+
+  function moveWorkspaceScene(index, direction) {
+    const project = state.workspaceProject;
+    const target = index + direction;
+    if (!project || target < 0 || target >= project.scenes.length) return;
+    [project.scenes[index], project.scenes[target]] = [project.scenes[target], project.scenes[index]];
+    renderProjectPanel();
   }
 
   function renderProjectPanel() {
     const project = state.workspaceProject;
-    projectTitleInput.disabled = Boolean(project);
-    createWorkspaceButton.textContent = project ? "Replace local workspace" : "Create local workspace";
-    openWorkspaceButton.hidden = !project || workspaceMode;
-    importFilesInput.disabled = !project || state.importing;
-    importButton.disabled = !project || state.importing || importFilesInput.files.length === 0;
-    importButton.textContent = state.importing ? "Importing panoramas" : "Import selected panoramas";
-    projectOrder.replaceChildren();
-    if (!project) {
-      projectHelp.textContent = "Create an isolated local workspace, then import stitched 2:1 JPEG panoramas. Existing review files remain untouched.";
-      return;
+    elements.CreateWorkspace.textContent = project ? "Replace project" : "Create project";
+    elements.OpenWorkspace.hidden = !project?.scenes?.length || workspaceMode;
+    elements.ImportBlock.hidden = !project;
+    elements.ImportFiles.disabled = !project || state.importing;
+    elements.Import.disabled = !project || state.importing || elements.ImportFiles.files.length === 0;
+    elements.Import.textContent = state.importing ? "Importing..." : "Import into room";
+    elements.SaveStructure.hidden = !project?.scenes?.length || !workspaceMode;
+    elements.ProjectEmpty.hidden = Boolean(project?.scenes?.length);
+    elements.ProjectEmpty.textContent = project ? "No panoramas imported yet." : "Create a project to begin.";
+    elements.ProjectOrder.replaceChildren();
+    if (!project) return;
+    elements.ProjectTitle.value = project.title;
+    populateImportRooms();
+
+    for (const room of roomMap(project).values()) {
+      const section = document.createElement("section");
+      section.className = "editor-room";
+      const header = document.createElement("div");
+      header.className = "editor-room__header";
+      const roomName = document.createElement("input");
+      roomName.value = room.label;
+      roomName.maxLength = 80;
+      roomName.setAttribute("aria-label", `Room name: ${room.label}`);
+      roomName.addEventListener("input", () => {
+        room.scenes.forEach((scene) => { scene.spaceLabel = roomName.value; });
+        setStatus("Room structure changed");
+      });
+      const count = document.createElement("span");
+      count.textContent = `${room.scenes.length} view${room.scenes.length === 1 ? "" : "s"}`;
+      header.append(roomName, count);
+      section.appendChild(header);
+
+      for (const scene of room.scenes) {
+        const row = document.createElement("div");
+        row.className = "editor-project-scene";
+        const thumb = document.createElement("img");
+        thumb.src = api.sceneById[scene.id]?.thumb || scene.thumb;
+        thumb.alt = "";
+        const fields = document.createElement("div");
+        fields.className = "editor-project-scene__fields";
+        const title = document.createElement("input");
+        title.value = scene.title;
+        title.maxLength = 80;
+        title.setAttribute("aria-label", "Viewpoint name");
+        title.addEventListener("input", () => { scene.title = title.value; setStatus("Viewpoint changed"); });
+        const subtitle = document.createElement("input");
+        subtitle.value = scene.subtitle || "";
+        subtitle.maxLength = 120;
+        subtitle.placeholder = "View description";
+        subtitle.setAttribute("aria-label", "Viewpoint description");
+        subtitle.addEventListener("input", () => { scene.subtitle = subtitle.value; setStatus("Viewpoint changed"); });
+        fields.append(title, subtitle);
+        const controls = document.createElement("div");
+        controls.className = "editor-project-scene__controls";
+        const roomSelect = document.createElement("select");
+        roomSelect.setAttribute("aria-label", `Move ${scene.title} to room`);
+        for (const candidate of roomMap(project).values()) {
+          const option = document.createElement("option");
+          option.value = candidate.id;
+          option.textContent = candidate.label;
+          roomSelect.appendChild(option);
+        }
+        roomSelect.value = scene.space;
+        roomSelect.addEventListener("change", () => {
+          const targetRoom = roomMap(project).get(roomSelect.value);
+          scene.space = targetRoom.id;
+          scene.spaceLabel = targetRoom.label;
+          setStatus("Viewpoint moved");
+          renderProjectPanel();
+        });
+        const index = project.scenes.indexOf(scene);
+        const up = document.createElement("button");
+        up.className = "editor-button editor-button--icon";
+        up.type = "button";
+        up.textContent = "↑";
+        up.title = "Move earlier";
+        up.setAttribute("aria-label", `Move ${scene.title} earlier`);
+        up.disabled = index === 0;
+        up.addEventListener("click", () => moveWorkspaceScene(index, -1));
+        const down = document.createElement("button");
+        down.className = "editor-button editor-button--icon";
+        down.type = "button";
+        down.textContent = "↓";
+        down.title = "Move later";
+        down.setAttribute("aria-label", `Move ${scene.title} later`);
+        down.disabled = index === project.scenes.length - 1;
+        down.addEventListener("click", () => moveWorkspaceScene(index, 1));
+        const start = document.createElement("button");
+        start.className = `editor-button editor-button--icon${project.firstScene === scene.id ? " is-active" : ""}`;
+        start.type = "button";
+        start.textContent = "★";
+        start.title = "Use as opening view";
+        start.setAttribute("aria-label", `Use ${scene.title} as opening view`);
+        start.addEventListener("click", () => { project.firstScene = scene.id; renderProjectPanel(); });
+        controls.append(roomSelect, up, down, start);
+        row.append(thumb, fields, controls);
+        section.appendChild(row);
+      }
+      elements.ProjectOrder.appendChild(section);
     }
-    projectHelp.textContent = workspaceMode
-      ? "This workspace is isolated from the existing tour. Reorder scenes here before marking links and saving the draft."
-      : "Workspace is ready. Import panoramas, then open it to name rooms, set links and compose the tour.";
-    projectTitleInput.value = project.title;
-    project.scenes.forEach((scene, index) => {
-      const currentTitle = api.sceneById[scene.id]?.title || scene.title;
-      const row = document.createElement("div");
-      row.className = "editor-project-scene";
-      const label = document.createElement("span");
-      label.textContent = `${index + 1}. ${currentTitle}`;
-      const up = document.createElement("button");
-      up.className = "editor-button editor-button--icon";
-      up.type = "button";
-      up.textContent = "↑";
-      up.title = "Move scene earlier";
-      up.setAttribute("aria-label", `Move ${currentTitle} earlier`);
-      up.disabled = index === 0 || !workspaceMode;
-      up.addEventListener("click", () => moveWorkspaceScene(index, -1));
-      const down = document.createElement("button");
-      down.className = "editor-button editor-button--icon";
-      down.type = "button";
-      down.textContent = "↓";
-      down.title = "Move scene later";
-      down.setAttribute("aria-label", `Move ${currentTitle} later`);
-      down.disabled = index === project.scenes.length - 1 || !workspaceMode;
-      down.addEventListener("click", () => moveWorkspaceScene(index, 1));
-      row.append(label, up, down);
-      projectOrder.appendChild(row);
-    });
   }
 
   async function refreshWorkspaceProject() {
     const response = await fetch(studioUrl("workspace-project", false));
     if (!response.ok) throw new Error(`Could not read workspace (${response.status})`);
-    const body = await response.json();
-    state.workspaceProject = body.project || null;
+    state.workspaceProject = (await response.json()).project || null;
     return state.workspaceProject;
   }
 
@@ -260,139 +370,165 @@
     const response = await fetch(studioUrl("workspace-project", false), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "create", title: projectTitleInput.value, replace })
+      body: JSON.stringify({ action: "create", title: elements.ProjectTitle.value, replace })
     });
     if (response.status === 409 && !replace) {
-      if (window.confirm("Replace the existing local workspace? Its workspace images and draft will be removed; the current tour and source panoramas will not change.")) {
-        return createWorkspace(true);
-      }
+      if (window.confirm("Replace the existing local project? Its imported workspace and draft will be removed. Camera originals and the Killarney source tour remain unchanged.")) return createWorkspace(true);
       return null;
     }
-    if (!response.ok) throw new Error(`Could not create workspace (${response.status})`);
+    if (!response.ok) throw new Error((await response.json()).error || `Could not create project (${response.status})`);
     state.workspaceProject = await response.json();
+    setStatus("Project ready");
+    renderProjectPanel();
     return state.workspaceProject;
   }
 
-  async function moveWorkspaceScene(index, direction) {
+  async function saveWorkspaceStructure(nextStage = null) {
     const project = state.workspaceProject;
-    const target = index + direction;
-    if (!project || target < 0 || target >= project.scenes.length) return;
-    const sceneIds = project.scenes.map((scene) => scene.id);
-    [sceneIds[index], sceneIds[target]] = [sceneIds[target], sceneIds[index]];
-    setStatus("Saving scene order");
+    if (!project?.scenes?.length) throw new Error("Import at least one panorama first.");
     const response = await fetch(studioUrl("workspace-project", false), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "reorder", sceneIds })
+      body: JSON.stringify({
+        action: "structure",
+        title: elements.ProjectTitle.value,
+        firstScene: project.firstScene,
+        sceneIds: project.scenes.map((scene) => scene.id),
+        scenes: project.scenes.map(({ id, title, subtitle, space, spaceLabel }) => ({ id, title, subtitle, space, spaceLabel }))
+      })
     });
-    if (!response.ok) {
-      setStatus(`Could not reorder scenes (${response.status})`);
-      return;
-    }
+    if (!response.ok) throw new Error((await response.json()).error || `Could not save room structure (${response.status})`);
     state.workspaceProject = await response.json();
-    setStatus("Scene order saved; reloading workspace");
-    window.location.reload();
+    setStatus("Room structure saved");
+    if (workspaceMode) {
+      window.sessionStorage.setItem(stageStorageKey, nextStage || "project");
+      window.location.reload();
+    } else {
+      window.sessionStorage.setItem(stageStorageKey, nextStage || "project");
+      window.location.assign(workspaceEditorUrl());
+    }
   }
 
   async function importPanoramas() {
-    const files = [...importFilesInput.files];
-    if (files.length === 0) return;
+    const files = [...elements.ImportFiles.files];
+    if (!files.length || !state.workspaceProject) return;
+    const existingRoom = elements.ImportRoom.value !== "__new__" ? roomMap().get(elements.ImportRoom.value) : null;
+    const roomLabel = existingRoom?.label || elements.NewRoomName.value.trim();
+    if (!roomLabel) {
+      setStatus("Enter a room name");
+      return;
+    }
+    const roomId = existingRoom?.id || `room-${Date.now().toString(36)}`;
+    state.importing = true;
+    renderProjectPanel();
+    let imported = 0;
     try {
-      if (!state.workspaceProject) await createWorkspace();
-      if (!state.workspaceProject) return;
-      state.importing = true;
-      renderProjectPanel();
-      for (const [index, file] of files.entries()) {
-        setStatus(`Importing ${index + 1} of ${files.length}`);
+      for (const file of files) {
+        setStatus(`Importing ${file.name}`);
         const response = await fetch(studioUrl("workspace-import", true), {
           method: "POST",
           headers: {
             "content-type": "image/jpeg",
-            "x-tour-file-name": encodeURIComponent(file.name)
+            "x-tour-file-name": encodeURIComponent(file.name),
+            "x-tour-room-id": encodeURIComponent(roomId),
+            "x-tour-room-label": encodeURIComponent(roomLabel)
           },
           body: file
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || `Import failed (${response.status})`);
         state.workspaceProject = body.project;
+        imported += 1;
       }
-      importFilesInput.value = "";
-      setStatus("Panoramas imported; opening workspace");
+      setStatus(`${imported} panorama${imported === 1 ? "" : "s"} imported`);
+      window.sessionStorage.setItem(stageStorageKey, "project");
       window.location.assign(workspaceEditorUrl());
     } catch (error) {
-      setStatus(error.message);
-    } finally {
+      setStatus(imported ? `${imported} imported; ${error.message}` : error.message);
+      await refreshWorkspaceProject();
       state.importing = false;
+      elements.ImportFiles.value = "";
       renderProjectPanel();
     }
   }
 
+  function renderSceneHeading(scene) {
+    elements.SceneName.textContent = scene.title;
+    elements.RoomName.textContent = scene.spaceLabel || scene.title;
+  }
+
   function renderSceneFields(scene) {
-    sceneTitleInput.value = scene.title;
-    sceneSubtitleInput.value = scene.subtitle || "";
+    renderSceneHeading(scene);
+  }
+
+  function renderHotspotButtons(container, scene, targetStage) {
+    container.replaceChildren();
+    if (!scene.hotspots.length) {
+      const empty = document.createElement("p");
+      empty.className = "editor-empty";
+      empty.textContent = "No transitions in this panorama.";
+      container.appendChild(empty);
+      return;
+    }
+    scene.hotspots.forEach((hotspot, hotspotIndex) => {
+      const button = document.createElement("button");
+      button.className = `editor-hotspot${state.selected?.sceneId === scene.id && state.selected.hotspotIndex === hotspotIndex ? " is-selected" : ""}`;
+      button.type = "button";
+      button.innerHTML = `<span class="editor-hotspot__type">${hotspot.kind === "viewpoint" ? "V" : "W"}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords">${roundCoordinate(hotspot.pitch)} / ${roundCoordinate(hotspot.yaw)}</span>`;
+      button.querySelector(".editor-hotspot__label").textContent = hotspot.label;
+      button.addEventListener("click", () => setSelected(scene.id, hotspotIndex, targetStage));
+      container.appendChild(button);
+    });
   }
 
   function renderHotspotList(scene) {
-    hotspotList.replaceChildren();
-    scene.hotspots.forEach((hotspot, hotspotIndex) => {
-      const button = document.createElement("button");
-      const selected = state.selected?.sceneId === scene.id && state.selected.hotspotIndex === hotspotIndex;
-      button.className = `editor-hotspot${selected ? " is-selected" : ""}`;
-      button.type = "button";
-      button.innerHTML = `
-        <span class="editor-hotspot__type" aria-hidden="true">${hotspot.kind === "viewpoint" ? "V" : "W"}</span>
-        <span class="editor-hotspot__label"></span>
-        <span class="editor-hotspot__coords"></span>
-      `;
-      button.querySelector(".editor-hotspot__label").textContent = hotspot.label;
-      button.querySelector(".editor-hotspot__coords").textContent = `${hotspot.pitch.toFixed(1)} / ${hotspot.yaw.toFixed(1)}`;
-      button.addEventListener("click", () => setSelected(scene.id, hotspotIndex));
-      hotspotList.appendChild(button);
-    });
-    placeButton.disabled = !selectedHotspot();
-    placeButton.classList.toggle("is-active", state.placement?.type === "hotspot");
-    placeButton.textContent = state.placement?.type === "hotspot" ? "Click panorama to place" : "Place selected point";
+    renderHotspotButtons(elements.HotspotList, scene, "links");
+    elements.Place.disabled = !selectedHotspot();
+    elements.Place.classList.toggle("is-active", state.placement?.type === "hotspot");
+    elements.Place.textContent = state.placement?.type === "hotspot" ? "Click panorama to place" : "Place selected point";
     const selectedIndex = state.selected?.sceneId === scene.id ? state.selected.hotspotIndex : -1;
-    removeLinkButton.hidden = selectedIndex < api.getBaseHotspotCount(scene.id);
+    elements.RemoveLink.hidden = selectedIndex < api.getBaseHotspotCount(scene.id);
     renderLinkCreator(scene);
   }
 
   function suggestedLinkLabel() {
-    const targetScene = api.sceneById[linkTarget.value];
-    return `${linkKind.value === "viewpoint" ? "View" : "Walk"} to ${targetScene?.title || "destination"}`;
+    const targetScene = api.sceneById[elements.LinkTarget.value];
+    return `${elements.LinkKind.value === "viewpoint" ? "View" : "Walk"} to ${targetScene?.spaceLabel || targetScene?.title || "destination"}`;
   }
 
   function renderLinkCreator(scene) {
-    const selectedTarget = linkTarget.value;
-    linkTarget.replaceChildren();
+    const selectedTarget = elements.LinkTarget.value;
+    elements.LinkTarget.replaceChildren();
     api.scenes.filter((candidate) => candidate.id !== scene.id).forEach((candidate) => {
       const option = document.createElement("option");
       option.value = candidate.id;
-      option.textContent = candidate.title;
-      linkTarget.appendChild(option);
+      option.textContent = `${candidate.spaceLabel || candidate.title} - ${candidate.title}`;
+      elements.LinkTarget.appendChild(option);
     });
-    if ([...linkTarget.options].some((option) => option.value === selectedTarget)) linkTarget.value = selectedTarget;
-    if (!linkLabel.value) linkLabel.value = suggestedLinkLabel();
+    if ([...elements.LinkTarget.options].some((option) => option.value === selectedTarget)) elements.LinkTarget.value = selectedTarget;
+    if (!elements.LinkLabel.value) elements.LinkLabel.value = suggestedLinkLabel();
+    elements.AddLink.disabled = elements.LinkTarget.options.length === 0;
   }
 
-  function renderArrivalPanel() {
+  function renderArrivalPanel(scene) {
+    renderHotspotButtons(elements.ArrivalList, scene, "arrival");
     const selected = selectedHotspot();
     if (!selected) {
-      arrivalHelp.textContent = "Select a transition in Links first.";
-      editArrivalButton.disabled = true;
-      saveArrivalButton.hidden = true;
+      elements.ArrivalHelp.textContent = "Select a transition above.";
+      elements.EditArrival.disabled = true;
+      elements.SaveArrival.hidden = true;
       return;
     }
-    editArrivalButton.disabled = false;
+    elements.EditArrival.disabled = false;
     if (state.arrival) {
-      arrivalHelp.textContent = `Adjust the destination view for ${selected.hotspot.label}, then save it.`;
-      editArrivalButton.hidden = true;
-      saveArrivalButton.hidden = false;
+      elements.ArrivalHelp.textContent = `Composing: ${selected.hotspot.label}`;
+      elements.EditArrival.hidden = true;
+      elements.SaveArrival.hidden = false;
       return;
     }
-    arrivalHelp.textContent = `Choose the exact first view after ${selected.hotspot.label}.`;
-    editArrivalButton.hidden = false;
-    saveArrivalButton.hidden = true;
+    elements.ArrivalHelp.textContent = selected.hotspot.label;
+    elements.EditArrival.hidden = false;
+    elements.SaveArrival.hidden = true;
   }
 
   function renderImageControls(sceneId) {
@@ -401,9 +537,9 @@
       { key: "brightness", label: "Brightness", min: 70, max: 130, unit: "%" },
       { key: "contrast", label: "Contrast", min: 70, max: 130, unit: "%" },
       { key: "saturation", label: "Saturation", min: 0, max: 160, unit: "%" },
-      { key: "warmth", label: "Warm/cool tint", min: -20, max: 20, unit: "" }
+      { key: "warmth", label: "Warm / cool", min: -20, max: 20, unit: "" }
     ];
-    imageControls.replaceChildren();
+    elements.ImageControls.replaceChildren();
     fields.forEach((field) => {
       const label = document.createElement("label");
       label.className = "editor-image__control";
@@ -423,11 +559,11 @@
       input.addEventListener("input", () => {
         api.setSceneAdjustment(sceneId, { ...api.getSceneAdjustment(sceneId), [field.key]: Number(input.value) });
         output.textContent = `${input.value}${field.unit}`;
-        setStatus("Unsaved image changes");
+        setStatus("Color changes not saved");
       });
       row.append(input, output);
       label.append(name, row);
-      imageControls.appendChild(label);
+      elements.ImageControls.appendChild(label);
     });
   }
 
@@ -435,9 +571,8 @@
     const scene = currentScene();
     const adjustment = selectedAdjustment();
     if (!scene || !adjustment) return;
-    const next = api.getLocalAdjustments(scene.id).map((item) => item.id === adjustment.id ? { ...item, ...change } : item);
-    api.setLocalAdjustments(scene.id, next);
-    setStatus("Unsaved local adjustment");
+    api.setLocalAdjustments(scene.id, api.getLocalAdjustments(scene.id).map((item) => item.id === adjustment.id ? { ...item, ...change } : item));
+    setStatus("Local area not saved");
     renderLocalAdjustments(scene.id);
   }
 
@@ -469,50 +604,39 @@
 
   function renderLocalAdjustments(sceneId) {
     const adjustments = api.getLocalAdjustments(sceneId);
-    adjustmentList.replaceChildren();
-    if (state.selectedAdjustmentId && !adjustments.some((adjustment) => adjustment.id === state.selectedAdjustmentId)) {
-      state.selectedAdjustmentId = null;
-    }
+    elements.AdjustmentList.replaceChildren();
+    if (state.selectedAdjustmentId && !adjustments.some((adjustment) => adjustment.id === state.selectedAdjustmentId)) state.selectedAdjustmentId = null;
     adjustments.forEach((adjustment, index) => {
       const button = document.createElement("button");
       button.className = `editor-adjustment${adjustment.id === state.selectedAdjustmentId ? " is-selected" : ""}`;
       button.type = "button";
       button.textContent = `Area ${index + 1}`;
-      button.addEventListener("click", () => {
-        state.selectedAdjustmentId = adjustment.id;
-        renderLocalAdjustments(sceneId);
-      });
-      adjustmentList.appendChild(button);
+      button.addEventListener("click", () => { state.selectedAdjustmentId = adjustment.id; renderLocalAdjustments(sceneId); });
+      elements.AdjustmentList.appendChild(button);
     });
-    adjustmentControls.replaceChildren();
+    elements.AdjustmentControls.replaceChildren();
     const selected = selectedAdjustment();
     if (!selected) return;
 
     const shape = document.createElement("label");
-    shape.className = "editor-field";
+    shape.className = "editor-field editor-field--stacked";
     shape.innerHTML = `<span>Shape</span><select aria-label="Adjustment shape"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Square / rectangle</option></select>`;
     const shapeSelect = shape.querySelector("select");
     shapeSelect.value = selected.shape;
     shapeSelect.addEventListener("change", () => updateSelectedAdjustment({ shape: shapeSelect.value }));
-
     const color = document.createElement("label");
-    color.className = "editor-field editor-field--color";
+    color.className = "editor-field editor-field--stacked editor-field--color";
     color.innerHTML = `<span>Light color</span><input type="color" aria-label="Light color" />`;
     const colorInput = color.querySelector("input");
     colorInput.value = selected.color;
     colorInput.addEventListener("input", () => updateSelectedAdjustment({ color: colorInput.value }));
-
     const actions = document.createElement("div");
     actions.className = "editor-panel__actions";
     const place = document.createElement("button");
-    place.className = "editor-button";
+    place.className = `editor-button${state.placement?.type === "adjustment" ? " is-active" : ""}`;
     place.type = "button";
     place.textContent = state.placement?.type === "adjustment" ? "Click panorama to place" : "Place area";
-    place.classList.toggle("is-active", state.placement?.type === "adjustment");
-    place.addEventListener("click", () => {
-      state.placement = state.placement?.type === "adjustment" ? null : { type: "adjustment", id: selected.id };
-      renderLocalAdjustments(sceneId);
-    });
+    place.addEventListener("click", () => { state.placement = state.placement?.type === "adjustment" ? null : { type: "adjustment", id: selected.id }; renderLocalAdjustments(sceneId); });
     const remove = document.createElement("button");
     remove.className = "editor-button";
     remove.type = "button";
@@ -521,12 +645,11 @@
       api.setLocalAdjustments(sceneId, adjustments.filter((adjustment) => adjustment.id !== selected.id));
       state.selectedAdjustmentId = null;
       state.placement = null;
-      setStatus("Unsaved local adjustment");
+      setStatus("Local area removed");
       renderLocalAdjustments(sceneId);
     });
     actions.append(place, remove);
-
-    adjustmentControls.append(
+    elements.AdjustmentControls.append(
       shape,
       color,
       createRangeControl("Light / shadow", "intensity", -100, 100, "%"),
@@ -536,17 +659,46 @@
     );
   }
 
+  function renderExportPanel() {
+    const rooms = new Set(api.scenes.map((scene) => scene.space)).size;
+    const transitions = api.scenes.reduce((sum, scene) => sum + scene.hotspots.length, 0);
+    const adjusted = api.scenes.filter((scene) => {
+      const adjustment = api.getSceneAdjustment(scene.id);
+      return adjustment.brightness !== 100 || adjustment.contrast !== 100 || adjustment.saturation !== 100 || adjustment.warmth !== 0 || api.getLocalAdjustments(scene.id).length > 0;
+    }).length;
+    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Transitions</span></div><div><strong>${adjusted}</strong><span>Color edits</span></div>`;
+    const previewUrl = `http://127.0.0.1:8768/?preview=1${workspaceMode ? "&workspace=1" : ""}`;
+    elements.PreviewLink.href = previewUrl;
+    elements.Build.disabled = !workspaceMode || state.building;
+    elements.Build.textContent = state.building ? "Building package..." : "Build release package";
+    elements.ReleaseActions.hidden = !state.release.ready;
+    elements.ReleasePreview.href = `${endpoint}/release/index.html`;
+    elements.Download.href = studioUrl("release-download");
+    elements.ReleaseStatus.textContent = !workspaceMode
+      ? "Create a workspace project before export."
+      : state.release.ready
+        ? `Package ready${state.release.bytes ? ` - ${(state.release.bytes / 1024 / 1024).toFixed(1)} MB` : ""}`
+        : "No current package built.";
+  }
+
+  function syncSelectedMarker() {
+    const activeId = state.selected ? api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex) : "";
+    viewerElement.querySelectorAll(".nav-hotspot").forEach((element) => {
+      element.classList.toggle("is-editor-selected", element.dataset.editorHotspotId === activeId);
+    });
+  }
+
   function render() {
     const scene = currentScene();
     if (!scene) return;
-    sceneName.textContent = scene.title;
     renderStages();
     renderProjectPanel();
     renderSceneFields(scene);
     renderHotspotList(scene);
-    renderArrivalPanel();
+    renderArrivalPanel(scene);
     renderImageControls(scene.id);
     renderLocalAdjustments(scene.id);
+    renderExportPanel();
     syncSelectedMarker();
   }
 
@@ -570,15 +722,14 @@
       const selected = selectedHotspot();
       if (!selected) return;
       api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) });
-      setStatus("Unsaved point placement");
+      setStatus("Transition position not saved");
     }
     if (state.placement?.type === "adjustment") {
       const scene = currentScene();
-      const next = api.getLocalAdjustments(scene.id).map((adjustment) => adjustment.id === state.placement.id
+      api.setLocalAdjustments(scene.id, api.getLocalAdjustments(scene.id).map((adjustment) => adjustment.id === state.placement.id
         ? { ...adjustment, pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) }
-        : adjustment);
-      api.setLocalAdjustments(scene.id, next);
-      setStatus("Unsaved local adjustment");
+        : adjustment));
+      setStatus("Local area not saved");
     }
     state.placement = null;
     render();
@@ -627,22 +778,42 @@
 
   async function saveDraft() {
     const draft = createDraft();
-    saveButton.disabled = true;
-    setStatus("Saving locally");
+    elements.Save.disabled = true;
+    setStatus("Saving locally...");
     try {
       const response = await fetch(studioUrl("save"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(draft)
       });
-      if (!response.ok) throw new Error(`Save failed (${response.status})`);
+      if (!response.ok) throw new Error((await response.json()).error || `Save failed (${response.status})`);
       state.savedAt = draft.updatedAt;
+      state.release = { ready: false };
       setStatus("Saved locally");
+      renderExportPanel();
+      return true;
     } catch (error) {
       setStatus(error.message);
+      return false;
     } finally {
-      saveButton.disabled = false;
+      elements.Save.disabled = false;
     }
+  }
+
+  async function continueWizard() {
+    if (state.activeStage === "project") {
+      if (state.workspaceProject?.scenes?.length) {
+        try {
+          await saveWorkspaceStructure("light");
+        } catch (error) {
+          setStatus(error.message);
+        }
+        return;
+      }
+      setStatus(state.workspaceProject ? "Import at least one panorama first" : "Create a project first");
+      return;
+    }
+    if (await saveDraft()) setStage(stageOffset(1));
   }
 
   function beginArrivalEdit() {
@@ -651,7 +822,7 @@
     state.arrival = { ...state.selected };
     state.placement = null;
     api.viewer.loadScene(selected.hotspot.target);
-    setStatus("Adjust destination view, then save arrival");
+    setStatus("Compose the destination, then use current view");
   }
 
   function saveArrivalView() {
@@ -662,23 +833,56 @@
       hfov: roundCoordinate(api.viewer.getHfov())
     });
     state.arrival = null;
-    setStatus("Unsaved arrival view");
+    setStatus("Arrival view not saved");
     render();
   }
 
-  panel.querySelectorAll(".editor-stage").forEach((button) => button.addEventListener("click", () => setStage(button.dataset.stage)));
-  createWorkspaceButton.addEventListener("click", async () => {
+  async function refreshReleaseStatus() {
+    if (!workspaceMode) return;
     try {
-      await createWorkspace(Boolean(state.workspaceProject));
-      setStatus("Local workspace ready");
-      renderProjectPanel();
+      const response = await fetch(studioUrl("release-status"), { cache: "no-store" });
+      if (response.ok) state.release = await response.json();
+    } catch {
+      state.release = { ready: false };
+    }
+    renderExportPanel();
+  }
+
+  async function buildRelease() {
+    if (!workspaceMode || state.building) return;
+    if (!await saveDraft()) return;
+    state.building = true;
+    setStatus("Building release package...");
+    renderExportPanel();
+    try {
+      const response = await fetch(studioUrl("build-release"), { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || `Build failed (${response.status})`);
+      state.release = body;
+      setStatus("Release package ready");
     } catch (error) {
       setStatus(error.message);
+    } finally {
+      state.building = false;
+      renderExportPanel();
     }
+  }
+
+  panel.querySelectorAll(".editor-stage").forEach((button) => button.addEventListener("click", () => setStage(button.dataset.stage)));
+  elements.CreateWorkspace.addEventListener("click", async () => {
+    try { await createWorkspace(false); } catch (error) { setStatus(error.message); }
   });
-  openWorkspaceButton.addEventListener("click", () => window.location.assign(workspaceEditorUrl()));
-  importFilesInput.addEventListener("change", renderProjectPanel);
-  importButton.addEventListener("click", importPanoramas);
+  elements.OpenWorkspace.addEventListener("click", () => window.location.assign(workspaceEditorUrl()));
+  elements.ImportRoom.addEventListener("change", () => { elements.NewRoomField.hidden = elements.ImportRoom.value !== "__new__"; });
+  elements.ImportFiles.addEventListener("change", renderProjectPanel);
+  elements.Import.addEventListener("click", importPanoramas);
+  elements.SaveStructure.addEventListener("click", async () => {
+    try { await saveWorkspaceStructure(); } catch (error) { setStatus(error.message); }
+  });
+  elements.Back.addEventListener("click", () => setStage(stageOffset(-1)));
+  elements.Continue.addEventListener("click", continueWizard);
+  elements.Save.addEventListener("click", saveDraft);
+  elements.Build.addEventListener("click", buildRelease);
   panel.querySelector("#editorClose").addEventListener("click", () => document.body.classList.remove("is-editor-open"));
   editorToggle.addEventListener("click", () => {
     const isOpen = document.body.classList.toggle("is-editor-open");
@@ -687,75 +891,54 @@
   });
   panel.querySelector("#editorPreviousScene").addEventListener("click", () => moveScene(-1));
   panel.querySelector("#editorNextScene").addEventListener("click", () => moveScene(1));
-  sceneTitleInput.addEventListener("input", () => {
-    const scene = currentScene();
-    api.setSceneMetadata(scene.id, { title: sceneTitleInput.value, subtitle: sceneSubtitleInput.value });
-    sceneName.textContent = api.sceneById[scene.id].title;
-    setStatus("Unsaved scene name");
-  });
-  sceneSubtitleInput.addEventListener("input", () => {
-    const scene = currentScene();
-    api.setSceneMetadata(scene.id, { title: sceneTitleInput.value, subtitle: sceneSubtitleInput.value });
-    setStatus("Unsaved scene name");
-  });
-  placeButton.addEventListener("click", () => {
+  elements.Place.addEventListener("click", () => {
     if (!selectedHotspot()) return;
     state.placement = state.placement?.type === "hotspot" ? null : { type: "hotspot" };
     render();
   });
-  removeLinkButton.addEventListener("click", () => {
+  elements.RemoveLink.addEventListener("click", () => {
     const scene = currentScene();
     const selected = state.selected;
     if (!scene || !selected || selected.sceneId !== scene.id || selected.hotspotIndex < api.getBaseHotspotCount(scene.id)) return;
     const localIndex = selected.hotspotIndex - api.getBaseHotspotCount(scene.id);
     api.setAddedHotspots(scene.id, api.getAddedHotspots(scene.id).filter((_, index) => index !== localIndex));
     state.selected = scene.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
-    setStatus("Unsaved local link change");
+    setStatus("Transition removed");
     render();
   });
-  linkTarget.addEventListener("change", () => { linkLabel.value = suggestedLinkLabel(); });
-  linkKind.addEventListener("change", () => { linkLabel.value = suggestedLinkLabel(); });
-  addLinkButton.addEventListener("click", () => {
+  elements.LinkTarget.addEventListener("change", () => { elements.LinkLabel.value = suggestedLinkLabel(); });
+  elements.LinkKind.addEventListener("change", () => { elements.LinkLabel.value = suggestedLinkLabel(); });
+  elements.AddLink.addEventListener("click", () => {
     const scene = currentScene();
-    const targetScene = api.sceneById[linkTarget.value];
+    const targetScene = api.sceneById[elements.LinkTarget.value];
     if (!scene || !targetScene) return;
     const additions = api.getAddedHotspots(scene.id);
     api.setAddedHotspots(scene.id, [...additions, {
-      kind: linkKind.value,
+      kind: elements.LinkKind.value,
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
       target: targetScene.id,
-      label: linkLabel.value.trim() || suggestedLinkLabel(),
+      label: elements.LinkLabel.value.trim() || suggestedLinkLabel(),
       targetPitch: targetScene.pitch,
       targetYaw: targetScene.yaw,
       targetHfov: targetScene.hfov
     }]);
     state.selected = { sceneId: scene.id, hotspotIndex: api.getBaseHotspotCount(scene.id) + additions.length };
     state.placement = { type: "hotspot" };
-    setStatus("Click panorama to place new transition");
+    setStatus("Click panorama to place transition");
     render();
   });
-  editArrivalButton.addEventListener("click", beginArrivalEdit);
-  saveArrivalButton.addEventListener("click", saveArrivalView);
-  addAdjustmentButton.addEventListener("click", () => {
+  elements.EditArrival.addEventListener("click", beginArrivalEdit);
+  elements.SaveArrival.addEventListener("click", saveArrivalView);
+  elements.AddAdjustment.addEventListener("click", () => {
     const scene = currentScene();
     const existing = api.getLocalAdjustments(scene.id);
-    const next = {
-      id: `area-${Date.now().toString(36)}`,
-      shape: "ellipse",
-      pitch: roundCoordinate(api.viewer.getPitch()),
-      yaw: roundCoordinate(api.viewer.getYaw()),
-      width: 240,
-      height: 180,
-      intensity: 30,
-      color: "#fff1b8"
-    };
+    const next = { id: `area-${Date.now().toString(36)}`, shape: "ellipse", pitch: roundCoordinate(api.viewer.getPitch()), yaw: roundCoordinate(api.viewer.getYaw()), width: 240, height: 180, intensity: 30, color: "#fff1b8" };
     api.setLocalAdjustments(scene.id, [...existing, next]);
     state.selectedAdjustmentId = next.id;
-    setStatus("Unsaved local adjustment");
+    setStatus("Local area not saved");
     renderLocalAdjustments(scene.id);
   });
-  saveButton.addEventListener("click", saveDraft);
 
   viewerElement.addEventListener("pointerdown", (event) => {
     if (state.placement) {
@@ -768,9 +951,8 @@
     const [sceneId, hotspotIndex] = marker.dataset.editorHotspotId.split("::");
     event.preventDefault();
     event.stopImmediatePropagation();
-    setSelected(sceneId, Number(hotspotIndex));
+    setSelected(sceneId, Number(hotspotIndex), state.activeStage === "arrival" ? "arrival" : "links");
   }, true);
-
   viewerElement.addEventListener("click", (event) => {
     if (state.placement) {
       event.preventDefault();
@@ -786,29 +968,25 @@
 
   api.viewer.on("scenechange", () => {
     const scene = currentScene();
-    if (!state.arrival) {
-      state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
-    }
+    if (!state.arrival) state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
     state.placement = null;
     render();
   });
 
-  fetch(studioUrl("status"))
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Local editor server unavailable")))
-    .then(() => refreshWorkspaceProject())
-    .then(() => fetch(studioUrl("overrides")))
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft")))
-    .then((draft) => {
-      applyDraft(draft);
-      const scene = currentScene();
-      state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
-      setStatus(state.savedAt ? "Saved draft loaded" : "New draft");
-      render();
-      focusSelectedMarker();
-    })
-    .catch((error) => {
-      panel.remove();
-      editorToggle.remove();
-      console.warn(error.message);
-    });
+  Promise.all([
+    fetch(studioUrl("status")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Local editor server unavailable"))),
+    refreshWorkspaceProject(),
+    fetch(studioUrl("overrides")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft")))
+  ]).then(([, , draft]) => {
+    applyDraft(draft);
+    const scene = currentScene();
+    state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
+    setStatus(state.savedAt ? "Saved draft loaded" : "Project ready");
+    render();
+    refreshReleaseStatus();
+  }).catch((error) => {
+    panel.remove();
+    editorToggle.remove();
+    console.warn(error.message);
+  });
 })();

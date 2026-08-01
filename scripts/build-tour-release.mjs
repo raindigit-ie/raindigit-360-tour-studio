@@ -128,7 +128,6 @@ function applyDraft(project, draft) {
     if (!byId[sceneId] || typeof metadata?.title !== "string" || !metadata.title.trim()) return;
     byId[sceneId].title = metadata.title.trim().slice(0, 80);
     byId[sceneId].subtitle = typeof metadata.subtitle === "string" ? metadata.subtitle.slice(0, 120) : "";
-    byId[sceneId].spaceLabel = byId[sceneId].title;
   });
   return project;
 }
@@ -221,6 +220,16 @@ async function copyRuntime(output) {
   await writeFile(join(output, "js", "tour.js"), releaseRuntime, "utf8");
   await cp(join(source, "assets"), join(output, "assets"), { recursive: true });
   await writeFile(join(output, "robots.txt"), "User-agent: *\nDisallow: /\n", "utf8");
+  await writeFile(join(output, "INSTALL.txt"), [
+    "RainDigit 360 Tour - installation",
+    "",
+    "1. Upload every file and folder from this archive to one public directory.",
+    "2. Open that directory URL to verify the tour.",
+    "3. Embed it on another page with:",
+    '<iframe src="https://example.com/tour/" title="360 virtual tour" allow="fullscreen" allowfullscreen loading="lazy" style="width:100%;aspect-ratio:16/9;border:0"></iframe>',
+    "",
+    "Keep the archive structure unchanged. The exported package contains no editor or local draft data."
+  ].join("\n"), "utf8");
 }
 
 async function createZip(output, zipPath) {

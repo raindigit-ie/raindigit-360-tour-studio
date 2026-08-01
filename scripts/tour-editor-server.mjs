@@ -17,6 +17,8 @@ const draftPath = process.env.INSTA360_TOUR_DRAFT_PATH ? resolve(process.env.INS
 const workspaceRoot = process.env.INSTA360_TOUR_WORKSPACE ? resolve(process.env.INSTA360_TOUR_WORKSPACE) : defaultWorkspaceRoot;
 const workspaceProjectPath = join(workspaceRoot, "tour-project.json");
 const workspaceDraftPath = join(workspaceRoot, "draft.json");
+const releaseRoot = join(projectRoot, "release");
+const releaseZipPath = join(projectRoot, "dist", "raindigit-360-tour.zip");
 const host = "127.0.0.1";
 const previewMode = process.argv.includes("--preview");
 const portArgument = process.argv.indexOf("--port");
@@ -35,7 +37,8 @@ const contentTypes = {
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
-  ".txt": "text/plain; charset=utf-8"
+  ".txt": "text/plain; charset=utf-8",
+  ".zip": "application/zip"
 };
 
 function responseHeaders(contentType, cacheControl = "no-store") {
@@ -160,11 +163,49 @@ function validateWorkspaceProject(value) {
     ids.add(scene.id);
     return typeof scene.title === "string" && scene.title.trim().length >= 1 && scene.title.length <= 80 &&
       typeof scene.subtitle === "string" && scene.subtitle.length <= 120 &&
+      typeof scene.space === "string" && /^[a-z0-9-]{1,60}$/i.test(scene.space) &&
+      typeof scene.spaceLabel === "string" && scene.spaceLabel.trim().length >= 1 && scene.spaceLabel.length <= 80 &&
       typeof scene.panorama === "string" && /^panoramas\/scene-\d{3,}\.jpg$/i.test(scene.panorama) &&
       typeof scene.thumb === "string" && /^thumbnails\/scene-\d{3,}\.jpg$/i.test(scene.thumb) &&
       Number.isFinite(scene.pitch) && Number.isFinite(scene.yaw) && Number.isFinite(scene.hfov) &&
       Array.isArray(scene.hotspots);
   });
+}
+
+function cleanHeader(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== "string") return "";
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+function roomId(label, preferred = "") {
+  if (/^[a-z0-9-]{1,60}$/i.test(preferred)) return preferred;
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42);
+  return `room-${slug || Date.now().toString(36)}`;
+}
+
+async function releaseStatus() {
+  try {
+    const [archive, manifest] = await Promise.all([stat(releaseZipPath), stat(workspaceProjectPath)]);
+    let latestInput = manifest.mtimeMs;
+    try {
+      latestInput = Math.max(latestInput, (await stat(workspaceDraftPath)).mtimeMs);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    return {
+      ready: archive.mtimeMs >= latestInput,
+      bytes: archive.size,
+      updatedAt: archive.mtime.toISOString()
+    };
+  } catch (error) {
+    if (error.code === "ENOENT") return { ready: false };
+    throw error;
+  }
 }
 
 async function readBody(request, maximumBytes = 256 * 1024) {
@@ -361,6 +402,46 @@ const server = createServer(async (request, response) => {
         replyJson(response, 200, existing);
         return;
       }
+      if (body?.action === "structure") {
+        if (!existing || !Array.isArray(body.scenes) || body.scenes.length !== existing.scenes.length) {
+          replyJson(response, 400, { error: "A complete workspace structure is required." });
+          return;
+        }
+        const incomingById = new Map(body.scenes.map((scene) => [scene?.id, scene]));
+        if (incomingById.size !== existing.scenes.length || existing.scenes.some((scene) => !incomingById.has(scene.id))) {
+          replyJson(response, 400, { error: "Workspace structure must contain every panorama exactly once." });
+          return;
+        }
+        const title = typeof body.title === "string" ? body.title.trim().slice(0, 100) : existing.title;
+        if (!title) {
+          replyJson(response, 400, { error: "A project title is required." });
+          return;
+        }
+        const nextScenes = [];
+        for (const original of existing.scenes) {
+          const incoming = incomingById.get(original.id);
+          const sceneTitle = typeof incoming.title === "string" ? incoming.title.trim().slice(0, 80) : "";
+          const subtitle = typeof incoming.subtitle === "string" ? incoming.subtitle.trim().slice(0, 120) : "";
+          const space = typeof incoming.space === "string" && /^[a-z0-9-]{1,60}$/i.test(incoming.space) ? incoming.space : "";
+          const spaceLabel = typeof incoming.spaceLabel === "string" ? incoming.spaceLabel.trim().slice(0, 80) : "";
+          if (!sceneTitle || !space || !spaceLabel) {
+            replyJson(response, 400, { error: `Panorama ${original.id} needs a room, title and room label.` });
+            return;
+          }
+          nextScenes.push({ ...original, title: sceneTitle, subtitle, space, spaceLabel });
+        }
+        const order = Array.isArray(body.sceneIds) ? body.sceneIds : nextScenes.map((scene) => scene.id);
+        if (order.length !== nextScenes.length || new Set(order).size !== nextScenes.length || order.some((id) => !incomingById.has(id))) {
+          replyJson(response, 400, { error: "Panorama order must contain every workspace panorama exactly once." });
+          return;
+        }
+        existing.title = title;
+        existing.scenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
+        existing.firstScene = typeof body.firstScene === "string" && incomingById.has(body.firstScene) ? body.firstScene : existing.scenes[0]?.id || null;
+        await writeWorkspaceProject(existing);
+        replyJson(response, 200, existing);
+        return;
+      }
       replyJson(response, 400, { error: "Unsupported workspace action." });
       return;
     }
@@ -370,9 +451,7 @@ const server = createServer(async (request, response) => {
         replyJson(response, 409, { error: "Create a local workspace before importing panoramas." });
         return;
       }
-      const filenameHeader = request.headers["x-tour-file-name"];
-      const rawName = Array.isArray(filenameHeader) ? filenameHeader[0] : filenameHeader;
-      const fileName = typeof rawName === "string" ? decodeURIComponent(rawName).replace(/[\\/]/g, "") : "";
+      const fileName = cleanHeader(request.headers["x-tour-file-name"]).replace(/[\\/]/g, "");
       if (!fileName || !/\.jpe?g$/i.test(fileName)) {
         replyJson(response, 400, { error: "Only JPEG equirectangular panoramas are accepted." });
         return;
@@ -390,6 +469,11 @@ const server = createServer(async (request, response) => {
         return;
       }
       const id = nextSceneId(project.scenes);
+      const requestedRoomLabel = cleanHeader(request.headers["x-tour-room-label"]).slice(0, 80);
+      const requestedRoomId = cleanHeader(request.headers["x-tour-room-id"]);
+      const existingRoom = project.scenes.find((scene) => scene.space === requestedRoomId);
+      const spaceLabel = existingRoom?.spaceLabel || requestedRoomLabel || fileNameToTitle(fileName);
+      const space = existingRoom?.space || roomId(spaceLabel, requestedRoomId);
       const panorama = `panoramas/${id}.jpg`;
       const thumb = `thumbnails/${id}.jpg`;
       const temporaryInput = join(workspaceRoot, `.upload-${process.pid}-${Date.now()}.jpg`);
@@ -408,8 +492,8 @@ const server = createServer(async (request, response) => {
         id,
         title: fileNameToTitle(fileName),
         subtitle: "Imported panorama",
-        space: id,
-        spaceLabel: fileNameToTitle(fileName),
+        space,
+        spaceLabel,
         thumb,
         panorama,
         pitch: -8,
@@ -422,6 +506,53 @@ const server = createServer(async (request, response) => {
       project.firstScene ||= id;
       await writeWorkspaceProject(project);
       replyJson(response, 201, { scene, project });
+      return;
+    }
+    if (!previewMode && url.pathname === `${endpoint}/build-release` && request.method === "POST") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required to build a release." });
+        return;
+      }
+      const project = await readWorkspaceProject();
+      if (!project || project.scenes.length === 0) {
+        replyJson(response, 409, { error: "Import at least one panorama before building a release." });
+        return;
+      }
+      const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
+      await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--replace"], {
+        cwd: projectRoot,
+        maxBuffer: 4 * 1024 * 1024,
+        timeout: 10 * 60 * 1000
+      });
+      replyJson(response, 200, await releaseStatus());
+      return;
+    }
+    if (!previewMode && url.pathname === `${endpoint}/release-status` && request.method === "GET") {
+      replyJson(response, 200, await releaseStatus());
+      return;
+    }
+    if (!previewMode && url.pathname === `${endpoint}/release-download` && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!workspace || !status.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before downloading it." });
+        return;
+      }
+      response.writeHead(200, {
+        ...responseHeaders("application/zip"),
+        "content-disposition": "attachment; filename=raindigit-360-tour.zip",
+        "content-length": status.bytes
+      });
+      createReadStream(releaseZipPath).pipe(response);
+      return;
+    }
+    if (!previewMode && url.pathname.startsWith(`${endpoint}/release/`) && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!status.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before opening its release." });
+        return;
+      }
+      const relativePath = decodeURIComponent(url.pathname.slice(`${endpoint}/release/`.length)) || "index.html";
+      await serveFile(response, releaseRoot, relativePath, "no-store");
       return;
     }
     if (!previewMode && url.pathname === `${endpoint}/save` && request.method === "POST") {

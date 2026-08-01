@@ -251,16 +251,12 @@ function setSceneMetadata(sceneId, metadata = {}) {
   if (!title) return false;
   scene.title = title;
   scene.subtitle = subtitle;
-  scene.spaceLabel = title;
   configScenes[sceneId].title = title;
-  configScenes[sceneId].spaceLabel = title;
   const card = document.querySelector(`.scene-card[data-scene="${sceneId}"]`);
   if (card) {
     card.querySelector("span > span").textContent = title;
     card.querySelector("small").textContent = subtitle;
   }
-  const routeNode = document.querySelector(`[data-route-space="${scene.space}"]`);
-  if (routeNode) routeNode.textContent = title;
   if (viewer.getScene() === sceneId) setActiveScene(sceneId);
   return true;
 }
@@ -276,19 +272,14 @@ function getBaseHotspotCount(sceneId) {
 
 function removeLiveNavigationHotspot(sceneId, id) {
   const isActiveScene = viewer.getScene() === sceneId;
-  if (isActiveScene) {
-    viewer.getContainer().querySelectorAll(".nav-hotspot,[data-local-adjustment-id]").forEach((element) => {
-      if (element.dataset.editorHotspotId === id || element.dataset.localAdjustmentId === id) element.remove();
-    });
-  }
   // Before the first Pannellum load, active-scene hotspot records have no DOM
   // node yet. Updating config is sufficient; removeHotSpot would dereference
   // that absent node while Pannellum finishes its initial render.
   if (isActiveScene && !viewer.isLoaded()) return;
 
   const remove = isActiveScene ? () => viewer.removeHotSpot(id) : () => viewer.removeHotSpot(id, sceneId);
-  // Pannellum stores hotspots differently for active and inactive scenes.
-  // Remove every matching instance before placing the single canonical marker.
+  // Let Pannellum remove both its model record and DOM node. Removing the DOM
+  // first makes its own cleanup dereference a detached hotspot element.
   while (remove()) {
     // Deliberately empty: each pass removes one matching Pannellum instance.
   }
@@ -426,7 +417,7 @@ if (isLocalEditorRequest) {
 
 // The preview can apply a saved local draft, but deliberately exposes no editor UI or write endpoint.
 if (isLocalDraftPreview) {
-  window.__TOUR_DRAFT_PREVIEW_API = { applyDraft };
+  window.__TOUR_DRAFT_PREVIEW_API = { applyDraft, viewer };
 }
 
 const sceneList = document.querySelector("#sceneList");

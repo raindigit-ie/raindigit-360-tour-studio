@@ -20,13 +20,13 @@
   }
 
   (async () => {
-    await loadScript("js/pannellum.js?v=20260801-studio-v13");
+    await loadScript("js/pannellum.js?v=20260802-wizard-v1");
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
-      : "js/tour-config.js?v=20260801-studio-v13");
-    await loadScript("js/tour.js?v=20260801-studio-v13");
-    if (editing) await loadScript("js/tour-editor.js?v=20260801-studio-v13");
-    if (previewing) await loadScript("js/tour-preview.js?v=20260801-studio-v13");
+      : "js/tour-config.js?v=20260802-wizard-v1");
+    await loadScript("js/tour.js?v=20260802-wizard-v1");
+    if (editing) await loadScript("js/tour-editor.js?v=20260802-wizard-v1");
+    if (previewing) await loadScript("js/tour-preview.js?v=20260802-wizard-v1");
   })().catch((error) => {
     console.error(error);
     document.body.dataset.tourError = "true";
