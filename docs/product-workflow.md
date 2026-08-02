@@ -23,7 +23,8 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 3. **Rooms**
    - The first room is created automatically. Add any additional rooms with the dedicated control.
-   - Assign each stable panorama card to a room, rename rooms and viewpoints, reorder viewpoints and choose the opening camera position.
+   - Keep room management and panorama assignment as separate lists. Assign each stable panorama card to a room, rename rooms and viewpoints, reorder viewpoints and choose the opening camera position.
+   - Update room counts immediately without moving a panorama card under the pointer. Allow an accidental empty room to be removed.
 
 4. **Color**
    - Use restrained whole-panorama brightness, contrast, saturation and warm/cool corrections.
@@ -32,15 +33,17 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 5. **Transitions**
    - Create a link only where a visitor can move: a physical doorway/passage or another camera viewpoint.
+   - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. The suggested label names the target viewpoint or room accordingly.
    - Select its type and destination, then use the explicit placement mode to put its marker. Rotating the panorama alone never moves a marker.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
 
 6. **Arrival**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
+   - After saving the target composition, return to the transition's source panorama so the operator does not lose context.
 
 7. **Export**
-   - Review the room, viewpoint, transition and color-edit counts, then open the read-only preview.
+   - Review the room, viewpoint, transition and color-edit counts, then open the same-origin read-only preview supplied by the studio.
    - Build the static package only after the preview is accepted.
    - Download `raindigit-360-tour.html` as the one-file customer installation and `raindigit-tour-project.rdtour` as the editable project backup.
 

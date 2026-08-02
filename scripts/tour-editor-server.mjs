@@ -27,6 +27,7 @@ const previewMode = process.argv.includes("--preview");
 const portArgument = process.argv.indexOf("--port");
 const port = portArgument >= 0 ? Number(process.argv[portArgument + 1]) : previewMode ? 8768 : 8767;
 const endpoint = previewMode ? "/__tour-preview" : "/__tour-editor";
+const previewEndpoint = "/__tour-preview";
 const maxUploadBytes = 128 * 1024 * 1024;
 const maxProjectBytes = 512 * 1024 * 1024;
 
@@ -412,22 +413,24 @@ async function serveFile(response, root, relativePath, cacheControl = "no-store"
 const server = createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${host}:${port}`);
   try {
+    const routeEndpoint = !previewMode && url.pathname.startsWith(`${previewEndpoint}/`) ? previewEndpoint : endpoint;
+    const readOnly = previewMode || routeEndpoint === previewEndpoint;
     const workspace = isWorkspaceRequest(url);
-    if (url.pathname === `${endpoint}/status` && request.method === "GET") {
+    if (url.pathname === `${routeEndpoint}/status` && request.method === "GET") {
       replyJson(response, 200, {
-        editor: previewMode ? "raindigit-tour-draft-preview" : "raindigit-tour-editor",
-        writable: !previewMode,
+        editor: readOnly ? "raindigit-tour-draft-preview" : "raindigit-tour-editor",
+        writable: !readOnly,
         draftPath: activeDraftPath(url),
         workspace,
         workspaceAvailable: Boolean(await readWorkspaceProject())
       });
       return;
     }
-    if (url.pathname === `${endpoint}/overrides` && request.method === "GET") {
+    if (url.pathname === `${routeEndpoint}/overrides` && request.method === "GET") {
       replyJson(response, 200, await readDraft(activeDraftPath(url)));
       return;
     }
-    if (url.pathname === `${endpoint}/workspace-config.js` && request.method === "GET") {
+    if (url.pathname === `${routeEndpoint}/workspace-config.js` && request.method === "GET") {
       if (!workspace) {
         replyJson(response, 400, { error: "Workspace mode is required." });
         return;
@@ -438,20 +441,20 @@ const server = createServer(async (request, response) => {
         return;
       }
       response.writeHead(200, responseHeaders("application/javascript; charset=utf-8"));
-      response.end(`window.TOUR_CONFIG = ${JSON.stringify(workspaceConfig(project, endpoint))};\n`);
+      response.end(`window.TOUR_CONFIG = ${JSON.stringify(workspaceConfig(project, routeEndpoint))};\n`);
       return;
     }
-    if (url.pathname.startsWith(`${endpoint}/workspace/`) && request.method === "GET") {
-      const relativePath = decodeURIComponent(url.pathname.slice(`${endpoint}/workspace/`.length));
+    if (url.pathname.startsWith(`${routeEndpoint}/workspace/`) && request.method === "GET") {
+      const relativePath = decodeURIComponent(url.pathname.slice(`${routeEndpoint}/workspace/`.length));
       await serveFile(response, workspaceRoot, relativePath, "no-store");
       return;
     }
-    if (url.pathname === `${endpoint}/workspace-project` && request.method === "GET") {
+    if (url.pathname === `${routeEndpoint}/workspace-project` && request.method === "GET") {
       const project = await readWorkspaceProject();
       replyJson(response, 200, { project });
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/workspace-project` && request.method === "POST") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/workspace-project` && request.method === "POST") {
       const body = await readJsonBody(request);
       const existing = await readWorkspaceProject();
       if (body?.action === "create") {
@@ -573,7 +576,7 @@ const server = createServer(async (request, response) => {
       replyJson(response, 400, { error: "Unsupported workspace action." });
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/workspace-import` && request.method === "POST") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/workspace-import` && request.method === "POST") {
       const project = await readWorkspaceProject();
       if (!project) {
         replyJson(response, 409, { error: "Create a local workspace before importing panoramas." });
@@ -636,7 +639,7 @@ const server = createServer(async (request, response) => {
       replyJson(response, 201, { scene, project });
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/build-release` && request.method === "POST") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/build-release` && request.method === "POST") {
       if (!workspace) {
         replyJson(response, 400, { error: "Workspace mode is required to build a release." });
         return;
@@ -655,11 +658,11 @@ const server = createServer(async (request, response) => {
       replyJson(response, 200, await releaseStatus());
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/release-status` && request.method === "GET") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-status` && request.method === "GET") {
       replyJson(response, 200, await releaseStatus());
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/release-download` && request.method === "GET") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-download` && request.method === "GET") {
       const status = await releaseStatus();
       if (!workspace || !status.ready) {
         replyJson(response, 404, { error: "Build the current workspace before downloading it." });
@@ -673,7 +676,7 @@ const server = createServer(async (request, response) => {
       createReadStream(releaseZipPath).pipe(response);
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/release-single-download` && request.method === "GET") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-single-download` && request.method === "GET") {
       const status = await releaseStatus();
       if (!workspace || !status.ready) {
         replyJson(response, 404, { error: "Build the current workspace before downloading it." });
@@ -687,7 +690,7 @@ const server = createServer(async (request, response) => {
       createReadStream(releaseSinglePath).pipe(response);
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/project-download` && request.method === "GET") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/project-download` && request.method === "GET") {
       if (!workspace) {
         replyJson(response, 400, { error: "Workspace mode is required." });
         return;
@@ -701,23 +704,23 @@ const server = createServer(async (request, response) => {
       createReadStream(projectBackupPath).pipe(response);
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/project-import` && request.method === "POST") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/project-import` && request.method === "POST") {
       const source = await readBody(request, maxProjectBytes);
       const project = await restoreProjectBackup(source);
       replyJson(response, 200, { restored: true, project });
       return;
     }
-    if (!previewMode && url.pathname.startsWith(`${endpoint}/release/`) && request.method === "GET") {
+    if (!readOnly && url.pathname.startsWith(`${routeEndpoint}/release/`) && request.method === "GET") {
       const status = await releaseStatus();
       if (!status.ready) {
         replyJson(response, 404, { error: "Build the current workspace before opening its release." });
         return;
       }
-      const relativePath = decodeURIComponent(url.pathname.slice(`${endpoint}/release/`.length)) || "index.html";
+      const relativePath = decodeURIComponent(url.pathname.slice(`${routeEndpoint}/release/`.length)) || "index.html";
       await serveFile(response, releaseRoot, relativePath, "no-store");
       return;
     }
-    if (!previewMode && url.pathname === `${endpoint}/save` && request.method === "POST") {
+    if (!readOnly && url.pathname === `${routeEndpoint}/save` && request.method === "POST") {
       const draft = await readJsonBody(request);
       if (!validateDraft(draft)) {
         replyJson(response, 400, { error: "Invalid hotspot draft." });

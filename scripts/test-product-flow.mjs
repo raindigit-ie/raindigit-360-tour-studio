@@ -170,6 +170,18 @@ async function main() {
     const config = await configResponse.text();
     assert(configResponse.ok && config.includes("room-kitchen") && config.includes("room-hall"), "Workspace preview config must contain both rooms.");
 
+    const sameOriginPreviewStatus = await requestJson(`${baseUrl}/__tour-preview/status?workspace=1`);
+    assert(sameOriginPreviewStatus.writable === false && sameOriginPreviewStatus.workspaceAvailable === true, "The studio must expose a same-origin read-only preview.");
+    const sameOriginPreviewConfigResponse = await fetch(`${baseUrl}/__tour-preview/workspace-config.js?workspace=1`);
+    const sameOriginPreviewConfig = await sameOriginPreviewConfigResponse.text();
+    assert(sameOriginPreviewConfigResponse.ok && sameOriginPreviewConfig.includes("/__tour-preview/workspace/"), "Same-origin preview assets must use the read-only endpoint.");
+    const rejectedPreviewWrite = await fetch(`${baseUrl}/__tour-preview/save?workspace=1`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(draft)
+    });
+    assert(!rejectedPreviewWrite.ok, "The same-origin preview endpoint must reject writes.");
+
     await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--replace"], { cwd: projectRoot });
     await execFileAsync("unzip", ["-t", zip]);
     const { stdout: listing } = await execFileAsync("unzip", ["-Z1", zip]);
@@ -234,6 +246,7 @@ async function main() {
       transitions: 1,
       singlePanorama: true,
       editableProjectRoundTrip: true,
+      sameOriginPreview: true,
       singleHtml: true,
       archiveBytes: (await stat(zip)).size
     }, null, 2));

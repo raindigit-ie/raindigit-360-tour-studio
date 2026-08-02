@@ -31,6 +31,7 @@
     restoring: false,
     importProgress: { current: 0, total: 0 },
     building: false,
+    linkDraftSceneId: null,
     release: { ready: false }
   };
   window.sessionStorage.removeItem(stageStorageKey);
@@ -97,6 +98,8 @@
       </section>
       <section class="editor-stage-panel" data-stage-panel="rooms">
         <div class="editor-step-heading"><span>Step 2</span><h2>Organize rooms</h2></div>
+        <div class="editor-section-label"><strong>Rooms</strong></div>
+        <div class="editor-room-list" id="editorRoomList" aria-label="Project rooms"></div>
         <div class="editor-add-room">
           <label class="editor-field editor-field--stacked">
             <span>Room name</span>
@@ -104,7 +107,8 @@
           </label>
           <button class="editor-button" id="editorAddRoom" type="button">Add room</button>
         </div>
-        <div class="editor-project-order" id="editorProjectOrder" aria-label="Rooms and panorama order"></div>
+        <div class="editor-section-label"><strong>Panoramas</strong><span id="editorAssignmentStatus"></span></div>
+        <div class="editor-project-order" id="editorProjectOrder" aria-label="Panorama room assignments"></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="light">
         <div class="editor-step-heading"><span>Step 3</span><h2>Color and light</h2></div>
@@ -139,8 +143,8 @@
         <div class="editor-hotspot-list" id="editorArrivalList"></div>
         <p class="editor-empty" id="editorArrivalHelp"></p>
         <div class="editor-panel__actions">
-          <button class="editor-button editor-button--primary" id="editorEditArrival" type="button">Compose destination</button>
-          <button class="editor-button editor-button--primary" id="editorSaveArrival" type="button">Use current view</button>
+          <button class="editor-button editor-button--primary" id="editorEditArrival" type="button">Set arrival view</button>
+          <button class="editor-button editor-button--primary" id="editorSaveArrival" type="button">Save arrival view</button>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="export">
@@ -165,7 +169,7 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "PreviewLink", "Build", "ReleaseActions", "DownloadSingle", "DownloadProject", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "PreviewLink", "Build", "ReleaseActions", "DownloadSingle", "DownloadProject", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
 
@@ -351,8 +355,45 @@
     renderRoomsPanel();
   }
 
+  function removeRoom(roomId) {
+    const project = state.workspaceProject;
+    const rooms = projectRooms(project);
+    const room = rooms.find((candidate) => candidate.id === roomId);
+    if (!project || !room) return;
+    if (rooms.length === 1) {
+      setStatus("A project needs at least one room");
+      return;
+    }
+    if (project.scenes.some((scene) => scene.space === roomId)) {
+      setStatus(`Move panoramas out of ${room.label} first`);
+      return;
+    }
+    project.rooms = rooms.filter((candidate) => candidate.id !== roomId);
+    setStatus(`${room.label} removed`);
+    renderRoomsPanel();
+  }
+
+  function updateRoomSummary() {
+    const project = state.workspaceProject;
+    if (!project) return;
+    const roomIds = new Set(projectRooms(project).map((room) => room.id));
+    const assigned = project.scenes.filter((scene) => roomIds.has(scene.space)).length;
+    elements.AssignmentStatus.textContent = `${assigned} of ${project.scenes.length} assigned`;
+    elements.RoomList.querySelectorAll("[data-room-id]").forEach((row) => {
+      const count = project.scenes.filter((scene) => scene.space === row.dataset.roomId).length;
+      const output = row.querySelector("[data-room-count]");
+      if (output) output.textContent = `${count} view${count === 1 ? "" : "s"}`;
+      const remove = row.querySelector("[data-remove-room]");
+      if (remove) {
+        remove.disabled = count > 0 || projectRooms(project).length === 1;
+        remove.title = count > 0 ? "Move its panoramas before removing" : "Remove empty room";
+      }
+    });
+  }
+
   function renderRoomsPanel() {
     const project = state.workspaceProject;
+    elements.RoomList.replaceChildren();
     elements.ProjectOrder.replaceChildren();
     if (!project) return;
     ensureInitialRoom();
@@ -361,6 +402,7 @@
     for (const room of rooms) {
       const section = document.createElement("section");
       section.className = "editor-room";
+      section.dataset.roomId = room.id;
       const header = document.createElement("div");
       header.className = "editor-room__header";
       const roomName = document.createElement("input");
@@ -370,15 +412,28 @@
       roomName.addEventListener("input", () => {
         room.label = roomName.value;
         project.scenes.filter((scene) => scene.space === room.id).forEach((scene) => { scene.spaceLabel = roomName.value; });
+        roomName.setAttribute("aria-label", `Room name: ${roomName.value}`);
+        removeRoomButton.setAttribute("aria-label", `Remove ${roomName.value}`);
+        elements.ProjectOrder.querySelectorAll(`option[value="${room.id}"]`).forEach((option) => { option.textContent = roomName.value; });
         setStatus("Room structure changed");
       });
       const count = document.createElement("span");
       const roomScenes = project.scenes.filter((scene) => scene.space === room.id);
       count.textContent = `${roomScenes.length} view${roomScenes.length === 1 ? "" : "s"}`;
-      header.append(roomName, count);
+      count.dataset.roomCount = "";
+      const removeRoomButton = document.createElement("button");
+      removeRoomButton.className = "editor-button editor-button--icon editor-button--danger";
+      removeRoomButton.type = "button";
+      removeRoomButton.textContent = "×";
+      removeRoomButton.dataset.removeRoom = "";
+      removeRoomButton.setAttribute("aria-label", `Remove ${room.label}`);
+      removeRoomButton.addEventListener("click", () => removeRoom(room.id));
+      header.append(roomName, count, removeRoomButton);
       section.appendChild(header);
+      elements.RoomList.appendChild(section);
+    }
 
-      for (const scene of roomScenes) {
+    for (const scene of project.scenes) {
         const row = document.createElement("div");
         row.className = "editor-project-scene";
         const thumb = document.createElement("img");
@@ -413,7 +468,8 @@
           const targetRoom = rooms.find((candidate) => candidate.id === roomSelect.value);
           scene.space = targetRoom.id;
           scene.spaceLabel = targetRoom.label;
-          setStatus("Viewpoint moved");
+          setStatus(`${scene.title} assigned to ${targetRoom.label}`);
+          updateRoomSummary();
         });
         const index = project.scenes.indexOf(scene);
         const up = document.createElement("button");
@@ -448,10 +504,9 @@
         remove.addEventListener("click", () => removeWorkspaceScene(scene.id, scene.title, "rooms"));
         controls.append(roomSelect, up, down, start, remove);
         row.append(thumb, fields, controls);
-        section.appendChild(row);
-      }
-      elements.ProjectOrder.appendChild(section);
+        elements.ProjectOrder.appendChild(row);
     }
+    updateRoomSummary();
   }
 
   function renderProjectPanel() {
@@ -616,9 +671,14 @@
     renderLinkCreator(scene);
   }
 
+  function suggestedLinkKind(scene = currentScene(), targetScene = api.sceneById[elements.LinkTarget.value]) {
+    return scene && targetScene && scene.space === targetScene.space ? "viewpoint" : "doorway";
+  }
+
   function suggestedLinkLabel() {
     const targetScene = api.sceneById[elements.LinkTarget.value];
-    return `${elements.LinkKind.value === "viewpoint" ? "View" : "Walk"} to ${targetScene?.spaceLabel || targetScene?.title || "destination"}`;
+    if (elements.LinkKind.value === "viewpoint") return `View ${targetScene?.title || "destination"}`;
+    return `Walk to ${targetScene?.spaceLabel || targetScene?.title || "destination"}`;
   }
 
   function renderLinkCreator(scene) {
@@ -631,7 +691,13 @@
       elements.LinkTarget.appendChild(option);
     });
     if ([...elements.LinkTarget.options].some((option) => option.value === selectedTarget)) elements.LinkTarget.value = selectedTarget;
-    if (!elements.LinkLabel.value) elements.LinkLabel.value = suggestedLinkLabel();
+    if (state.linkDraftSceneId !== scene.id) {
+      state.linkDraftSceneId = scene.id;
+      elements.LinkKind.value = suggestedLinkKind(scene);
+      elements.LinkLabel.value = suggestedLinkLabel();
+    } else if (!elements.LinkLabel.value) {
+      elements.LinkLabel.value = suggestedLinkLabel();
+    }
     elements.AddLink.disabled = elements.LinkTarget.options.length === 0;
   }
 
@@ -648,12 +714,14 @@
     }
     elements.EditArrival.disabled = false;
     if (state.arrival) {
-      elements.ArrivalHelp.textContent = `Composing: ${selected.hotspot.label}`;
+      const target = api.sceneById[selected.hotspot.target];
+      elements.ArrivalHelp.textContent = `Arrival in ${target?.title || "destination"}`;
       elements.EditArrival.hidden = true;
       elements.SaveArrival.hidden = false;
       return;
     }
-    elements.ArrivalHelp.textContent = selected.hotspot.label;
+    const target = api.sceneById[selected.hotspot.target];
+    elements.ArrivalHelp.textContent = `${selected.hotspot.label} · ${target?.title || "destination"}`;
     elements.EditArrival.hidden = false;
     elements.SaveArrival.hidden = true;
   }
@@ -763,7 +831,11 @@
     place.className = `editor-button${state.placement?.type === "adjustment" ? " is-active" : ""}`;
     place.type = "button";
     place.textContent = state.placement?.type === "adjustment" ? "Click panorama to place" : "Place area";
-    place.addEventListener("click", () => { state.placement = state.placement?.type === "adjustment" ? null : { type: "adjustment", id: selected.id }; renderLocalAdjustments(sceneId); });
+    place.addEventListener("click", () => {
+      state.placement = state.placement?.type === "adjustment" ? null : { type: "adjustment", id: selected.id };
+      setStatus(state.placement ? "Click the panorama to position the area" : "Area placement cancelled");
+      renderLocalAdjustments(sceneId);
+    });
     const remove = document.createElement("button");
     remove.className = "editor-button";
     remove.type = "button";
@@ -794,7 +866,7 @@
       return adjustment.brightness !== 100 || adjustment.contrast !== 100 || adjustment.saturation !== 100 || adjustment.warmth !== 0 || api.getLocalAdjustments(scene.id).length > 0;
     }).length;
     elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Transitions</span></div><div><strong>${adjusted}</strong><span>Color edits</span></div>`;
-    const previewUrl = `http://127.0.0.1:8768/?preview=1${workspaceMode ? "&workspace=1" : ""}`;
+    const previewUrl = `${window.location.origin}${window.location.pathname}?preview=1${workspaceMode ? "&workspace=1" : ""}`;
     elements.PreviewLink.href = state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
     elements.PreviewLink.textContent = state.release.ready ? "Open final tour" : "Open review preview";
     elements.Build.disabled = !workspaceMode || state.building;
@@ -849,14 +921,14 @@
       const selected = selectedHotspot();
       if (!selected) return;
       api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) });
-      setStatus("Transition position not saved");
+      setStatus(`Transition positioned at ${roundCoordinate(pitch)} / ${roundCoordinate(yaw)}`);
     }
     if (state.placement?.type === "adjustment") {
       const scene = currentScene();
       api.setLocalAdjustments(scene.id, api.getLocalAdjustments(scene.id).map((adjustment) => adjustment.id === state.placement.id
         ? { ...adjustment, pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) }
         : adjustment));
-      setStatus("Local area not saved");
+      setStatus(`Area positioned at ${roundCoordinate(pitch)} / ${roundCoordinate(yaw)}`);
     }
     state.placement = null;
     render();
@@ -953,19 +1025,21 @@
     state.arrival = { ...state.selected };
     state.placement = null;
     api.viewer.loadScene(selected.hotspot.target);
-    setStatus("Compose the destination, then use current view");
+    setStatus("Rotate to the arrival view, then save it");
   }
 
   function saveArrivalView() {
     if (!state.arrival) return;
-    api.updateHotspotArrival(state.arrival.sceneId, state.arrival.hotspotIndex, {
+    const originSceneId = state.arrival.sceneId;
+    api.updateHotspotArrival(originSceneId, state.arrival.hotspotIndex, {
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
       hfov: roundCoordinate(api.viewer.getHfov())
     });
     state.arrival = null;
-    setStatus("Arrival view not saved");
-    render();
+    setStatus("Arrival view updated");
+    if (api.viewer.getScene() !== originSceneId) api.viewer.loadScene(originSceneId);
+    else render();
   }
 
   async function refreshReleaseStatus() {
@@ -1035,7 +1109,6 @@
 
   async function downloadEditableProject() {
     if (!workspaceMode || !state.workspaceProject?.scenes?.length) return;
-    if (!await saveDraft()) return;
     elements.DownloadProject.disabled = true;
     setStatus("Preparing editable project...");
     try {
@@ -1093,7 +1166,10 @@
     setStatus("Transition removed");
     render();
   });
-  elements.LinkTarget.addEventListener("change", () => { elements.LinkLabel.value = suggestedLinkLabel(); });
+  elements.LinkTarget.addEventListener("change", () => {
+    elements.LinkKind.value = suggestedLinkKind();
+    elements.LinkLabel.value = suggestedLinkLabel();
+  });
   elements.LinkKind.addEventListener("change", () => { elements.LinkLabel.value = suggestedLinkLabel(); });
   elements.AddLink.addEventListener("click", () => {
     const scene = currentScene();
@@ -1198,7 +1274,9 @@
       ? "Ready to create a project"
       : state.workspaceProject.scenes.length === 0
         ? "Project ready. Upload panoramas."
-        : state.savedAt ? "Saved project loaded" : "Project ready");
+        : state.activeStage === "upload"
+          ? `${state.workspaceProject.scenes.length} panorama${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
+          : state.savedAt ? "Saved project loaded" : "Project ready");
     render();
     refreshReleaseStatus();
   }).catch((error) => {
