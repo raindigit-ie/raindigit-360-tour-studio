@@ -26,6 +26,30 @@
 - Scene labels are: Kitchen, Passage, Hall and Living Room.
 - Each physical transition is checked in the browser from its source doorway and on arrival. The route matrix is `qa/route-matrix.md`.
 
+## Start The Studio
+
+On macOS, double-click `Start RainDigit 360 Studio.command`. The launcher starts
+Docker Desktop when needed, builds the private local service, waits for its health
+check and opens `http://127.0.0.1:8767/?edit=1`. No local Node.js or ImageMagick
+installation is required. Double-click `Stop RainDigit 360 Studio.command` when
+finished; the editable workspace remains on disk.
+
+The equivalent terminal commands are:
+
+```bash
+npm run app:start
+npm run app:stop
+```
+
+Build a clean operator package for another Mac with:
+
+```bash
+npm run build:studio-kit
+```
+
+It creates `dist/raindigit-360-tour-studio.zip` containing the local application
+and launchers, while excluding every workspace, panorama, draft, release and Git file.
+
 ## Product Workflow
 
 Start the local studio:
@@ -42,7 +66,8 @@ Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 4. **Color**: apply whole-panorama corrections or smooth local light/color areas.
 5. **Transitions**: create doorway or same-room viewpoint links, then deliberately place each marker.
 6. **Arrival**: compose the first view that a visitor sees after every directed transition.
-7. **Export**: review and create the single website file plus editable project backup.
+7. **Export**: review, test the real one-file website inside an iframe, create the
+   customer HTML, copy ready embed code and download the editable project backup.
 
 Each **Continue** validates and saves the current step. The Export screen opens a
 read-only same-origin preview, normally `http://127.0.0.1:8767/?preview=1&workspace=1`.
@@ -54,25 +79,30 @@ Create the customer package only after review approval:
 npm run build:release
 ```
 
-This creates `release/`, `dist/raindigit-360-tour.html` and the advanced
+The studio blocks export when a newly added transition has not been explicitly
+positioned or its arrival view has not been saved. This prevents a technically
+valid but unfinished navigation graph from reaching a customer.
+
+The release build creates `release/`, `dist/raindigit-360-tour.html` and the advanced
 `dist/raindigit-360-tour.zip`. The HTML is the simplest one-file handoff; the ZIP contains an
 `INSTALL.txt` file with a ready iframe example. Generated output is not versioned;
 they are generated from the private workspace. See [the product workflow](docs/product-workflow.md)
-and [asset-protection model](docs/asset-protection.md) for the exact boundaries.
+and [client handoff](docs/client-handoff.md) for the exact operator and website-installation paths.
 
 ## Docker
 
 ```bash
-docker compose up studio preview
-docker compose --profile release up release
+docker compose up -d --build studio
 ```
 
 The studio binds only to localhost and mounts the local project directory. The
 release service serves only the built static output at `http://127.0.0.1:8080`.
 
-Run `npm run test:studio-ui` for the complete browser journey: create, upload,
+Run `npm run test:all` for the complete server, browser and mobile matrix. The
+studio journey covers create, upload,
 rooms, color, transition, arrival, preview, both downloads, local release,
-editable-project restore and the mobile Rooms layout.
+editable-project restore, direct offline opening of the downloaded HTML, iframe
+installation and the mobile Rooms layout.
 
 ## Boundaries
 

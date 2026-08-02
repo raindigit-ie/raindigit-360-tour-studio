@@ -1,5 +1,6 @@
 services:
   studio:
+    init: true
     build:
       context: .
       target: studio
@@ -11,6 +12,11 @@ services:
       - "127.0.0.1:8767:8767"
     volumes:
       - .:/workspace
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8767/__tour-editor/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   preview:
     build:

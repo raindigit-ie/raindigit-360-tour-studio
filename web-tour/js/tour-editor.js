@@ -150,11 +150,33 @@
       <section class="editor-stage-panel" data-stage-panel="export">
         <div class="editor-step-heading"><span>Step 6</span><h2>Review and export</h2></div>
         <div class="editor-export-summary" id="editorExportSummary"></div>
+        <div class="editor-readiness" id="editorReadiness" role="status"></div>
         <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open review preview</a>
         <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Prepare final files</button>
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
-          <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadSingle" download="raindigit-360-tour.html">Download website file (.html)</a>
-          <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable project (.rdtour)</button>
+          <div class="editor-publish-card">
+            <strong>1. Test the finished tour</strong>
+            <a class="editor-button editor-button--wide" id="editorEmbedTestLink" target="_blank" rel="noopener">Open website embed test</a>
+          </div>
+          <div class="editor-publish-card">
+            <strong>2. Download the two delivery files</strong>
+            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadSingle" download="raindigit-360-tour.html">Download tour website (.html)</a>
+            <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable backup (.rdtour)</button>
+          </div>
+          <div class="editor-publish-card">
+            <strong>3. Install on a website</strong>
+            <span>Upload the HTML file, enter its public URL, then paste the generated iframe into the page.</span>
+            <label class="editor-field editor-field--stacked">
+              <span>Published tour URL</span>
+              <input id="editorInstallUrl" type="url" value="./raindigit-360-tour.html" autocomplete="off" />
+            </label>
+            <textarea class="editor-embed-code" id="editorEmbedCode" readonly aria-label="Website embed code"></textarea>
+            <button class="editor-button editor-button--wide" id="editorCopyEmbed" type="button">Copy embed code</button>
+          </div>
+          <details class="editor-advanced">
+            <summary>Advanced hosting</summary>
+            <a class="editor-button editor-button--wide" id="editorDownloadZip" download="raindigit-360-tour.zip">Download folder package (.zip)</a>
+          </details>
         </div>
         <p class="editor-empty" id="editorReleaseStatus"></p>
       </section>
@@ -169,7 +191,7 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "PreviewLink", "Build", "ReleaseActions", "DownloadSingle", "DownloadProject", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
 
@@ -654,8 +676,14 @@
       const button = document.createElement("button");
       button.className = `editor-hotspot${state.selected?.sceneId === scene.id && state.selected.hotspotIndex === hotspotIndex ? " is-selected" : ""}`;
       button.type = "button";
-      button.innerHTML = `<span class="editor-hotspot__type">${hotspot.kind === "viewpoint" ? "V" : "W"}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords">${roundCoordinate(hotspot.pitch)} / ${roundCoordinate(hotspot.yaw)}</span>`;
+      const pending = targetStage === "links" && hotspot.positionConfirmed === false
+        ? "Place point"
+        : targetStage === "arrival" && hotspot.arrivalConfirmed === false
+          ? "Set arrival"
+          : `${roundCoordinate(hotspot.pitch)} / ${roundCoordinate(hotspot.yaw)}`;
+      button.innerHTML = `<span class="editor-hotspot__type">${hotspot.kind === "viewpoint" ? "V" : "W"}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords"></span>`;
       button.querySelector(".editor-hotspot__label").textContent = hotspot.label;
+      button.querySelector(".editor-hotspot__coords").textContent = pending;
       button.addEventListener("click", () => setSelected(scene.id, hotspotIndex, targetStage));
       container.appendChild(button);
     });
@@ -866,18 +894,50 @@
       return adjustment.brightness !== 100 || adjustment.contrast !== 100 || adjustment.saturation !== 100 || adjustment.warmth !== 0 || api.getLocalAdjustments(scene.id).length > 0;
     }).length;
     elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Transitions</span></div><div><strong>${adjusted}</strong><span>Color edits</span></div>`;
+    const readiness = releaseReadiness();
+    elements.Readiness.classList.toggle("is-ready", readiness.ready);
+    elements.Readiness.textContent = readiness.ready
+      ? "Ready to publish"
+      : `${readiness.pendingPositions} transition point${readiness.pendingPositions === 1 ? "" : "s"} and ${readiness.pendingArrivals} arrival view${readiness.pendingArrivals === 1 ? "" : "s"} still need review.`;
     const previewUrl = `${window.location.origin}${window.location.pathname}?preview=1${workspaceMode ? "&workspace=1" : ""}`;
     elements.PreviewLink.href = state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
     elements.PreviewLink.textContent = state.release.ready ? "Open final tour" : "Open review preview";
-    elements.Build.disabled = !workspaceMode || state.building;
+    elements.Build.disabled = !workspaceMode || state.building || !readiness.ready;
     elements.Build.textContent = state.building ? "Preparing files..." : "Prepare final files";
     elements.ReleaseActions.hidden = !state.release.ready;
+    elements.EmbedTestLink.href = `${endpoint}/release-embed-test.html`;
     elements.DownloadSingle.href = studioUrl("release-single-download");
+    elements.DownloadZip.href = studioUrl("release-download");
+    updateEmbedCode();
     elements.ReleaseStatus.textContent = !workspaceMode
       ? "Create a workspace project before export."
       : state.release.ready
         ? `Website file ready${state.release.singleBytes ? ` - ${(state.release.singleBytes / 1024 / 1024).toFixed(1)} MB` : ""}`
         : "No current package built.";
+  }
+
+  function releaseReadiness() {
+    const hotspots = api.scenes.flatMap((scene) => scene.hotspots);
+    const pendingPositions = hotspots.filter((hotspot) => hotspot.positionConfirmed === false).length;
+    const pendingArrivals = hotspots.filter((hotspot) => hotspot.arrivalConfirmed === false).length;
+    return { ready: pendingPositions === 0 && pendingArrivals === 0, pendingPositions, pendingArrivals };
+  }
+
+  function updateEmbedCode() {
+    const source = (elements.InstallUrl.value.trim() || "./raindigit-360-tour.html").replace(/"/g, "&quot;");
+    elements.EmbedCode.value = `<iframe src="${source}" title="360 virtual tour" allow="fullscreen" allowfullscreen loading="lazy" style="width:100%;aspect-ratio:16/9;border:0"></iframe>`;
+  }
+
+  async function copyEmbedCode() {
+    updateEmbedCode();
+    try {
+      await navigator.clipboard.writeText(elements.EmbedCode.value);
+    } catch {
+      elements.EmbedCode.focus();
+      elements.EmbedCode.select();
+      document.execCommand("copy");
+    }
+    setStatus("Embed code copied");
   }
 
   function syncSelectedMarker() {
@@ -920,6 +980,7 @@
     if (state.placement?.type === "hotspot") {
       const selected = selectedHotspot();
       if (!selected) return;
+      selected.hotspot.positionConfirmed = true;
       api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) });
       setStatus(`Transition positioned at ${roundCoordinate(pitch)} / ${roundCoordinate(yaw)}`);
     }
@@ -1016,6 +1077,15 @@
       }
       return;
     }
+    const readiness = releaseReadiness();
+    if (state.activeStage === "links" && readiness.pendingPositions > 0) {
+      setStatus(`Place ${readiness.pendingPositions} transition point${readiness.pendingPositions === 1 ? "" : "s"} before continuing`);
+      return;
+    }
+    if (state.activeStage === "arrival" && readiness.pendingArrivals > 0) {
+      setStatus(`Save ${readiness.pendingArrivals} arrival view${readiness.pendingArrivals === 1 ? "" : "s"} before review`);
+      return;
+    }
     if (await saveDraft()) setStage(stageOffset(1));
   }
 
@@ -1031,6 +1101,8 @@
   function saveArrivalView() {
     if (!state.arrival) return;
     const originSceneId = state.arrival.sceneId;
+    const selected = selectedHotspot();
+    if (selected) selected.hotspot.arrivalConfirmed = true;
     api.updateHotspotArrival(originSceneId, state.arrival.hotspotIndex, {
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
@@ -1143,6 +1215,8 @@
   elements.Continue.addEventListener("click", continueWizard);
   elements.Build.addEventListener("click", buildRelease);
   elements.DownloadProject.addEventListener("click", downloadEditableProject);
+  elements.InstallUrl.addEventListener("input", updateEmbedCode);
+  elements.CopyEmbed.addEventListener("click", copyEmbedCode);
   panel.querySelector("#editorClose").addEventListener("click", () => document.body.classList.remove("is-editor-open"));
   editorToggle.addEventListener("click", () => {
     const isOpen = document.body.classList.toggle("is-editor-open");
@@ -1184,7 +1258,9 @@
       label: elements.LinkLabel.value.trim() || suggestedLinkLabel(),
       targetPitch: targetScene.pitch,
       targetYaw: targetScene.yaw,
-      targetHfov: targetScene.hfov
+      targetHfov: targetScene.hfov,
+      positionConfirmed: false,
+      arrivalConfirmed: false
     }]);
     state.selected = { sceneId: scene.id, hotspotIndex: api.getBaseHotspotCount(scene.id) + additions.length };
     state.placement = { type: "hotspot" };

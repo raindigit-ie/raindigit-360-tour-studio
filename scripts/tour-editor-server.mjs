@@ -137,7 +137,9 @@ function isValidAddedHotspot(value) {
     typeof value.label === "string" && value.label.trim().length >= 1 && value.label.length <= 80 &&
     Number.isFinite(value.targetPitch) && value.targetPitch >= -85 && value.targetPitch <= 85 &&
     Number.isFinite(value.targetYaw) && value.targetYaw >= -180 && value.targetYaw <= 180 &&
-    Number.isFinite(value.targetHfov) && value.targetHfov >= 58 && value.targetHfov <= 112;
+    Number.isFinite(value.targetHfov) && value.targetHfov >= 58 && value.targetHfov <= 112 &&
+    (value.positionConfirmed === undefined || typeof value.positionConfirmed === "boolean") &&
+    (value.arrivalConfirmed === undefined || typeof value.arrivalConfirmed === "boolean");
 }
 
 function validateDraft(value) {
@@ -690,6 +692,19 @@ const server = createServer(async (request, response) => {
       createReadStream(releaseSinglePath).pipe(response);
       return;
     }
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-single-preview.html` && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!workspace || !status.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before previewing it." });
+        return;
+      }
+      response.writeHead(200, {
+        ...responseHeaders("text/html; charset=utf-8"),
+        "content-length": status.singleBytes
+      });
+      createReadStream(releaseSinglePath).pipe(response);
+      return;
+    }
     if (!readOnly && url.pathname === `${routeEndpoint}/project-download` && request.method === "GET") {
       if (!workspace) {
         replyJson(response, 400, { error: "Workspace mode is required." });
@@ -718,6 +733,16 @@ const server = createServer(async (request, response) => {
       }
       const relativePath = decodeURIComponent(url.pathname.slice(`${routeEndpoint}/release/`.length)) || "index.html";
       await serveFile(response, releaseRoot, relativePath, "no-store");
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-embed-test.html` && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!status.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before testing its embed." });
+        return;
+      }
+      response.writeHead(200, responseHeaders("text/html; charset=utf-8"));
+      response.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RainDigit embed test</title><style>html{font-family:Arial,sans-serif;color:#20231f;background:#f4f5f2}body{max-width:1180px;margin:0 auto;padding:24px}h1{font-size:24px;margin:0 0 8px}p{color:#59605a;margin:0 0 18px}.frame{overflow:hidden;border:1px solid #c9cec8;background:#10110e;box-shadow:0 12px 30px rgba(16,17,14,.12)}iframe{display:block;width:100%;aspect-ratio:16/9;border:0}@media(max-width:640px){body{padding:12px}h1{font-size:19px}.frame{margin-inline:-12px;border-inline:0}}</style></head><body><h1>Website embed test</h1><p>This page embeds the same one-file HTML delivered to a customer.</p><div class="frame"><iframe src="${routeEndpoint}/release-single-preview.html?workspace=1" title="360 virtual tour" allow="fullscreen" allowfullscreen loading="eager"></iframe></div></body></html>`);
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/save` && request.method === "POST") {

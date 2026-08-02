@@ -68,7 +68,9 @@ function normaliseAddedHotspot(sceneId, hotspot = {}) {
     label,
     targetPitch: clamp(hotspot.targetPitch, -85, 85, targetScene.pitch),
     targetYaw: clamp(hotspot.targetYaw, -180, 180, targetScene.yaw),
-    targetHfov: clamp(hotspot.targetHfov, 58, 112, targetScene.hfov)
+    targetHfov: clamp(hotspot.targetHfov, 58, 112, targetScene.hfov),
+    ...(typeof hotspot.positionConfirmed === "boolean" ? { positionConfirmed: hotspot.positionConfirmed } : {}),
+    ...(typeof hotspot.arrivalConfirmed === "boolean" ? { arrivalConfirmed: hotspot.arrivalConfirmed } : {})
   };
 }
 

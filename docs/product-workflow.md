@@ -36,16 +36,20 @@ The studio is local-first. It keeps source material and the editable workspace o
    - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. The suggested label names the target viewpoint or room accordingly.
    - Select its type and destination, then use the explicit placement mode to put its marker. Rotating the panorama alone never moves a marker.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
+   - A newly added transition remains incomplete until placement mode records an explicit point. The wizard must not advance while any transition says **Place point**.
 
 6. **Arrival**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
    - After saving the target composition, return to the transition's source panorama so the operator does not lose context.
+   - The wizard must not open Export while any new transition still says **Set arrival**.
 
 7. **Export**
    - Review the room, viewpoint, transition and color-edit counts, then open the same-origin read-only preview supplied by the studio.
-   - Build the static package only after the preview is accepted.
+   - Build the static package only after the preview is accepted and the readiness gate is green.
+   - Open **Website embed test**. It embeds the actual self-contained HTML delivery, not a separate development build.
    - Download `raindigit-360-tour.html` as the one-file customer installation and `raindigit-tour-project.rdtour` as the editable project backup.
+   - Enter the uploaded HTML URL and copy the generated iframe. Keep the folder ZIP under **Advanced hosting**.
 
 ## Review Gate
 
@@ -65,6 +69,9 @@ Use **Prepare final files** on the Export screen, or run `npm run build:release`
 - the studio download endpoint creates `raindigit-tour-project.rdtour`, containing project JSON, draft JSON and normalized editable media.
 
 For the simplest customer handoff, upload the single HTML file and use its URL directly. The ZIP remains available for hosts that prefer normal cacheable assets and includes `INSTALL.txt`.
+
+The single HTML must also open directly from disk and render when embedded in a
+fullscreen-enabled iframe. Both paths are part of the automated product test.
 
 Deploy the contents of `release/` to a customer-controlled host, then embed it with one iframe:
 

@@ -1520,7 +1520,72 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
 
 .editor-release-actions {
   display: grid;
-  gap: 0;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.editor-readiness {
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-left: 3px solid #df7b6d;
+  color: #ffd9d2;
+  background: rgba(184, 64, 48, 0.14);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.editor-readiness.is-ready {
+  border-left-color: #69c2a3;
+  color: #bce9d9;
+  background: rgba(49, 130, 101, 0.14);
+}
+
+.editor-publish-card {
+  display: grid;
+  gap: 7px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 249, 236, 0.13);
+}
+
+.editor-publish-card > strong {
+  color: #fff9ec;
+  font-size: 12px;
+}
+
+.editor-publish-card > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.editor-publish-card .editor-button--wide,
+.editor-advanced .editor-button--wide {
+  margin-top: 0;
+}
+
+.editor-embed-code {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid rgba(255, 249, 236, 0.18);
+  border-radius: 4px;
+  color: #d9e5df;
+  background: #0d0c09;
+  font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.editor-advanced {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 249, 236, 0.13);
+}
+
+.editor-advanced summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .editor-panel__footer {

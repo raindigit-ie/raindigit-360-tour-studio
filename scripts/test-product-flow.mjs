@@ -139,7 +139,7 @@ async function main() {
         "scene-001::0": { pitch: -18.5, yaw: 42.5, targetPitch: -4, targetYaw: 90, targetHfov: 82 }
       },
       addedHotspots: {
-        "scene-001": [{ kind: "doorway", pitch: -18.5, yaw: 42.5, target: "scene-003", label: "Walk to Hall", targetPitch: -4, targetYaw: 90, targetHfov: 82 }],
+        "scene-001": [{ kind: "doorway", pitch: -18.5, yaw: 42.5, target: "scene-003", label: "Walk to Hall", targetPitch: -4, targetYaw: 90, targetHfov: 82, positionConfirmed: false, arrivalConfirmed: false }],
         "scene-002": [],
         "scene-003": []
       },
@@ -182,6 +182,20 @@ async function main() {
     });
     assert(!rejectedPreviewWrite.ok, "The same-origin preview endpoint must reject writes.");
 
+    let incompleteBuildRejected = false;
+    try {
+      await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--replace"], { cwd: projectRoot });
+    } catch (error) {
+      incompleteBuildRejected = /Place every transition point/.test(error.stderr || error.message);
+    }
+    assert(incompleteBuildRejected, "The release builder must reject an unreviewed transition.");
+    draft.addedHotspots["scene-001"][0].positionConfirmed = true;
+    draft.addedHotspots["scene-001"][0].arrivalConfirmed = true;
+    await requestJson(`${baseUrl}/__tour-editor/save?workspace=1`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(draft)
+    });
     await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--replace"], { cwd: projectRoot });
     await execFileAsync("unzip", ["-t", zip]);
     const { stdout: listing } = await execFileAsync("unzip", ["-Z1", zip]);
@@ -192,6 +206,7 @@ async function main() {
     assert(releaseConfig.includes('"pitch":-8') && releaseConfig.includes('"yaw":-60') && releaseConfig.includes('"hfov":92'), "Saved default viewpoints must be baked into the release.");
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
+    assert(!releaseConfig.includes("positionConfirmed") && !releaseConfig.includes("arrivalConfirmed"), "Editor review metadata must not leak into the public release.");
     const singleRelease = await readFile(singleHtml, "utf8");
     assert(singleRelease.includes("data:image/jpeg;base64,") && singleRelease.includes("window.TOUR_CONFIG"), "The single HTML must embed its tour and panorama data.");
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");
@@ -246,6 +261,7 @@ async function main() {
       transitions: 1,
       singlePanorama: true,
       editableProjectRoundTrip: true,
+      releaseReadinessGate: true,
       sameOriginPreview: true,
       singleHtml: true,
       archiveBytes: (await stat(zip)).size

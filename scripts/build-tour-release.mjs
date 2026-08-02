@@ -152,6 +152,25 @@ function applyDraft(project, draft) {
   return project;
 }
 
+function assertReleaseReady(project, draft) {
+  const sceneIds = new Set(project.scenes.map((scene) => scene.id));
+  for (const [sourceId, hotspots] of Object.entries(draft?.addedHotspots || {})) {
+    assert(sceneIds.has(sourceId), `Transition source does not exist: ${sourceId}.`);
+    for (const hotspot of hotspots) {
+      assert(sceneIds.has(hotspot.target), `Transition destination does not exist: ${hotspot.target}.`);
+      assert(hotspot.positionConfirmed !== false, `Place every transition point before publishing (${hotspot.label}).`);
+      assert(hotspot.arrivalConfirmed !== false, `Save every arrival view before publishing (${hotspot.label}).`);
+    }
+  }
+}
+
+function stripEditorMetadata(project) {
+  project.scenes.forEach((scene) => scene.hotspots.forEach((hotspot) => {
+    delete hotspot.positionConfirmed;
+    delete hotspot.arrivalConfirmed;
+  }));
+}
+
 function releaseDimensions(source) {
   let width = source.width;
   while (width > 8192) width = Math.floor(width / 2);
@@ -311,7 +330,10 @@ async function createSingleHtml(output, project, singlePath) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const workspace = options.workspace;
-  const project = applyDraft(normaliseProject(await readJson(join(workspace, "tour-project.json"))), await readJson(join(workspace, "draft.json"), null));
+  const draft = await readJson(join(workspace, "draft.json"), null);
+  const project = applyDraft(normaliseProject(await readJson(join(workspace, "tour-project.json"))), draft);
+  assertReleaseReady(project, draft);
+  stripEditorMetadata(project);
   if (existsSync(options.output)) {
     if (!options.replace) throw new Error(`Release directory already exists: ${options.output}. Use --replace to regenerate it.`);
     await rm(options.output, { recursive: true, force: true });

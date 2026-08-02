@@ -114,11 +114,17 @@ async function main() {
     assert(await page.getByLabel("Transition marker type").inputValue() === "doorway", "A different room must default to doorway.");
     assert(await page.getByLabel("Label").inputValue() === "Walk to Hall", "A doorway label must name the target room.");
     await page.getByRole("button", { name: "Add transition" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    assert(await page.getByRole("heading", { name: "Transitions" }).isVisible(), "An unplaced transition must block the next step.");
+    assert((await page.locator("#editorStatus").textContent()).includes("Place 1 transition point"), "The transition gate must explain what remains.");
     await page.locator("#panorama").click({ position: { x: 320, y: 360 } });
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("heading", { name: "Arrival views" }).waitFor();
 
     const sourceScene = await page.locator("#editorSceneName").textContent();
+    await page.getByRole("button", { name: "Review" }).click();
+    assert(await page.getByRole("heading", { name: "Arrival views" }).isVisible(), "An unsaved arrival view must block export.");
+    assert((await page.locator("#editorStatus").textContent()).includes("Save 1 arrival view"), "The arrival gate must explain what remains.");
     await page.getByRole("button", { name: "Set arrival view" }).click();
     await page.getByRole("button", { name: "Save arrival view" }).click();
     await page.locator("#editorSceneName").filter({ hasText: sourceScene }).waitFor();
@@ -135,21 +141,37 @@ async function main() {
     await preview.close();
 
     await page.getByRole("button", { name: "Prepare final files" }).click();
-    await page.getByRole("link", { name: "Download website file (.html)" }).waitFor({ timeout: 90_000 });
-    assert(await page.getByRole("button", { name: "Download editable project (.rdtour)" }).isVisible(), "Editable project download is missing.");
+    await page.getByRole("link", { name: "Download tour website (.html)" }).waitFor({ timeout: 90_000 });
+    assert(await page.getByRole("button", { name: "Download editable backup (.rdtour)" }).isVisible(), "Editable project download is missing.");
+    assert(await page.getByRole("link", { name: "Open website embed test" }).isVisible(), "The local embed test is missing.");
+    await page.locator("#editorInstallUrl").fill("https://client.example/tours/home.html");
+    assert((await page.locator("#editorEmbedCode").inputValue()).includes('src="https://client.example/tours/home.html"'), "The generated iframe must use the entered public URL.");
+
+    const embedTestHref = await page.getByRole("link", { name: "Open website embed test" }).getAttribute("href");
+    const embedTest = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await embedTest.goto(new URL(embedTestHref, baseUrl).href);
+    await embedTest.frameLocator("iframe").locator(".pnlm-render-container canvas").waitFor({ timeout: 20_000 });
+    assert(await embedTest.locator("iframe").getAttribute("allowfullscreen") !== null, "The generated embed test must allow fullscreen.");
+    assert((await embedTest.locator("iframe").getAttribute("src")).includes("release-single-preview.html"), "The embed test must exercise the primary one-file delivery.");
+    await embedTest.close();
 
     const websitePath = join(root, "client-tour.html");
     const [websiteDownload] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("link", { name: "Download website file (.html)" }).click()
+      page.getByRole("link", { name: "Download tour website (.html)" }).click()
     ]);
     await websiteDownload.saveAs(websitePath);
     assert((await stat(websitePath)).size > 100_000, "The one-file website download is unexpectedly small.");
+    const offlineTour = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    await offlineTour.goto(`file://${websitePath}`);
+    await offlineTour.locator(".pnlm-render-container canvas").waitFor({ timeout: 20_000 });
+    assert(!await offlineTour.locator("body").getAttribute("data-tour-error"), "The downloaded one-file tour must open without a web server.");
+    await offlineTour.close();
 
     const backupPath = join(root, "client-project.rdtour");
     const [projectDownload] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "Download editable project (.rdtour)" }).click()
+      page.getByRole("button", { name: "Download editable backup (.rdtour)" }).click()
     ]);
     await projectDownload.saveAs(backupPath);
     assert((await stat(backupPath)).size > 10_000, "The editable project download is unexpectedly small.");
@@ -181,7 +203,7 @@ async function main() {
     assert(mobileLayout.scrollWidth <= mobileLayout.viewport && mobileLayout.widestRoom <= mobileLayout.viewport, `Rooms overflow on mobile: ${JSON.stringify(mobileLayout)}`);
 
     assert(consoleErrors.length === 0, `Studio console errors: ${consoleErrors.join(" | ")}`);
-    console.log(JSON.stringify({ passed: true, stages: 7, rooms: 3, viewpoints: 4, sameOriginPreview: true, localRelease: true, downloads: 2, projectRestore: true, mobileRooms: true }, null, 2));
+    console.log(JSON.stringify({ passed: true, stages: 7, rooms: 3, viewpoints: 4, transitionGate: true, arrivalGate: true, sameOriginPreview: true, embedTest: true, offlineSingleFile: true, localRelease: true, downloads: 2, projectRestore: true, mobileRooms: true }, null, 2));
   } finally {
     if (browser) await browser.close();
     server.kill("SIGTERM");
