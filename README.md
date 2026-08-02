@@ -62,10 +62,10 @@ Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
 1. **Start**: create a new tour or explicitly open an editable `.rdtour` project file. The studio does not list or silently reopen a previous local workspace.
 2. **Photos**: add all ready 2:1 JPG photos without making room decisions.
-3. **Rooms**: name rooms and views, then assign each stable photo card. Additional rooms and per-photo options stay collapsed until needed.
+3. **Rooms**: process one photo at a time. Name the view, choose an existing room, or create a different room. Choose the same room again when it contains a second camera position.
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
-5. **Movement**: choose a destination, add its button, rotate to the required area, then switch to **Place selected** and click once. Placement locks the camera so existing points cannot be shifted while another point is being set. Button type and label are optional advanced controls.
-6. **First views**: choose the useful first frame shown after each movement.
+5. **Movement**: choose one plainly labelled destination, rotate until the real doorway or other camera position is under the centre target, then press **Save point here**. The studio chooses walking versus same-room view markers automatically.
+6. **First views**: open one destination at a time, rotate to its useful first frame and save it. Buttons remain disabled while a photo or cross-fade is loading.
 7. **Publish**: check readiness, build and download one self-contained website file. Preview, website-install code, editable backup and folder package are separate collapsed options.
 
 Every movement placement, removal, arrival view and picture adjustment is saved
@@ -101,9 +101,9 @@ The studio binds only to localhost and mounts the local project directory. The
 release service serves only the built static output at `http://127.0.0.1:8080`.
 
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
-studio journey covers create, upload, rooms, look, movement, first views, preview,
-both downloads, local release, editable-tour restore, direct offline opening of
-the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points keep independent coordinates, placement drags do not rotate the camera, an anchored marker follows the panorama projection without changing yaw/pitch, and unfinished work is reopened automatically.
+studio journey covers create, upload, one-photo room assignment, look, centre-target movement placement, first views, preview,
+downloads, local release, editable-tour restore, direct offline opening of
+the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points from one source keep independent coordinates through Back/Next navigation, same-room destinations are explained plainly, and panorama loading cannot be skipped by rapid clicks.
 It also enforces a novice-default action budget and checks that technical terms do
 not leak into the visible task surface.
 

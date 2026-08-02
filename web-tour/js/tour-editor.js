@@ -34,7 +34,18 @@
     sceneMoving: false,
     linkDraftSceneId: null,
     pendingFocus: null,
-    release: { ready: false }
+    release: { ready: false },
+    roomSceneIndex: 0,
+    roomChoiceId: null,
+    lookSceneIndex: 0,
+    linkSceneIndex: 0,
+    linkStep: "choose",
+    linkTargetId: null,
+    linkIsNew: false,
+    arrivalLoading: false,
+    viewportSettling: false,
+    viewerSettled: false,
+    statusMessage: "Loading project"
   };
   window.sessionStorage.removeItem(stageStorageKey);
 
@@ -97,21 +108,32 @@
         <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded 360 photos"></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="rooms">
-        <div class="editor-step-heading"><span>Step 2</span><h2>Name rooms and views</h2></div>
-        <div class="editor-section-label"><strong>Rooms</strong></div>
-        <div class="editor-room-list" id="editorRoomList" aria-label="Project rooms"></div>
-        <details class="editor-disclosure editor-disclosure--compact">
-          <summary>Add another room</summary>
-          <div class="editor-add-room">
-            <label class="editor-field editor-field--stacked">
-              <span>Room name</span>
-              <input id="editorNewRoomName" type="text" maxlength="80" autocomplete="off" value="Room 2" />
-            </label>
-            <button class="editor-button editor-button--wide" id="editorAddRoom" type="button">Add room</button>
-          </div>
-        </details>
-        <div class="editor-section-label"><strong>Photos</strong><span id="editorAssignmentStatus"></span></div>
-        <div class="editor-project-order" id="editorProjectOrder" aria-label="360 photo room assignments"></div>
+        <div class="editor-step-heading"><span>Step 2</span><h2>Where was this photo taken?</h2></div>
+        <p class="editor-task-progress" id="editorRoomTaskProgress"></p>
+        <article class="editor-guided-card">
+          <img class="editor-guided-card__image" id="editorRoomTaskThumb" alt="Current 360 photo" />
+          <label class="editor-field editor-field--stacked">
+            <span>Name this view</span>
+            <input id="editorRoomSceneTitle" type="text" maxlength="80" autocomplete="off" />
+          </label>
+          <fieldset class="editor-choice-fieldset">
+            <legend>Choose one room</legend>
+            <div class="editor-choice-list" id="editorRoomChoices"></div>
+          </fieldset>
+          <details class="editor-disclosure editor-disclosure--compact" id="editorNewRoomPanel">
+            <summary>This is a different room</summary>
+            <div class="editor-add-room">
+              <label class="editor-field editor-field--stacked">
+                <span>New room name</span>
+                <input id="editorNewRoomName" type="text" maxlength="80" autocomplete="off" value="Room 2" />
+              </label>
+              <button class="editor-button editor-button--wide" id="editorAddRoom" type="button">Create and choose this room</button>
+            </div>
+          </details>
+        </article>
+        <div class="editor-room-list" id="editorRoomList" hidden></div>
+        <span id="editorAssignmentStatus" hidden></span>
+        <div id="editorProjectOrder" hidden></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="light">
         <div class="editor-step-heading"><span>Step 3</span><h2>Choose the look</h2></div>
@@ -128,36 +150,41 @@
         </details>
       </section>
       <section class="editor-stage-panel" data-stage-panel="links">
-        <div class="editor-step-heading"><span>Step 4</span><h2>Add ways to move</h2></div>
-        <div class="editor-hotspot-list" id="editorHotspotList"></div>
+        <div class="editor-step-heading"><span>Step 4</span><h2 id="editorMovementHeading">Choose where people can go</h2></div>
+        <p class="editor-task-progress" id="editorLinkTaskProgress"></p>
+        <p class="editor-guidance" id="editorLinkGuidance"></p>
+        <div class="editor-hotspot-list" id="editorHotspotList" aria-label="Saved movements"></div>
+        <div class="editor-new-link" id="editorNewLink">
+          <fieldset class="editor-choice-fieldset">
+            <legend>Choose one destination</legend>
+            <div class="editor-choice-list" id="editorLinkChoices"></div>
+          </fieldset>
+          <label class="editor-field editor-field--stacked" hidden><span>Move to</span><select id="editorLinkTarget" aria-label="Move to"></select></label>
+          <select id="editorLinkKind" aria-label="Movement type" hidden><option value="doorway">Walk to another room</option><option value="viewpoint">Move inside this room</option></select>
+          <input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" hidden />
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorAddLink" type="button">Place this movement</button>
+        </div>
+        <div class="editor-place-at-centre" id="editorPlaceAtCentre" hidden>
+          <strong>Put the doorway or camera position under the centre target.</strong>
+          <span>You can drag the 360 photo normally. The saved point will stay attached to the room.</span>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorConfirmCentre" type="button">Save point here</button>
+          <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Choose a different destination</button>
+        </div>
         <div class="editor-placement-modes" id="editorPlacementModes" hidden>
           <button class="editor-button" id="editorRotate" type="button" aria-pressed="true">Rotate view</button>
           <button class="editor-button" id="editorPlace" type="button" aria-pressed="false">Place selected</button>
         </div>
-        <div class="editor-panel__actions">
-          <button class="editor-button" id="editorRemoveLink" type="button">Remove</button>
-        </div>
-        <div class="editor-new-link" id="editorNewLink">
-          <label class="editor-field editor-field--stacked"><span>Move to</span><select id="editorLinkTarget" aria-label="Move to"></select></label>
-          <details class="editor-disclosure editor-disclosure--compact">
-            <summary>Link options</summary>
-            <label class="editor-field editor-field--stacked"><span>Movement type</span><select id="editorLinkKind" aria-label="Movement type"><option value="doorway">Walk to another room</option><option value="viewpoint">Move inside this room</option></select></label>
-            <label class="editor-field editor-field--stacked"><span>Button name</span><input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" /></label>
-          </details>
-          <button class="editor-button editor-button--primary editor-button--wide" id="editorAddLink" type="button">Add and place</button>
-        </div>
+        <button class="editor-button" id="editorRemoveLink" type="button" hidden>Remove movement</button>
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
-        <div class="editor-step-heading"><span>Step 5</span><h2>Choose first views</h2></div>
-        <div class="editor-default-view">
-          <div><strong>Room opening view</strong><span id="editorDefaultView"></span></div>
-          <button class="editor-button editor-button--wide" id="editorSaveSceneView" type="button">Use as room opening</button>
-        </div>
-        <div class="editor-hotspot-list" id="editorArrivalList"></div>
-        <p class="editor-empty" id="editorArrivalHelp"></p>
-        <div class="editor-panel__actions">
-          <button class="editor-button editor-button--primary" id="editorEditArrival" type="button">Choose destination view</button>
-          <button class="editor-button editor-button--primary" id="editorSaveArrival" type="button">Use as destination view</button>
+        <div class="editor-step-heading"><span>Step 5</span><h2>Choose what people see first</h2></div>
+        <p class="editor-guidance" id="editorArrivalHelp"></p>
+        <div class="editor-hotspot-list" id="editorArrivalList" hidden></div>
+        <button class="editor-button" id="editorEditArrival" type="button" hidden>Choose destination view</button>
+        <button class="editor-button editor-button--primary editor-button--wide" id="editorSaveArrival" type="button">Save this first view</button>
+        <div class="editor-default-view" hidden>
+          <span id="editorDefaultView"></span>
+          <button id="editorSaveSceneView" type="button">Use as room opening</button>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="export">
@@ -202,14 +229,14 @@
     <div class="editor-panel__footer">
       <button class="editor-button" id="editorBack" type="button">Back</button>
       <span class="editor-panel__status" id="editorStatus" role="status">Loading project</span>
-      <button class="editor-button editor-button--primary" id="editorContinue" type="button">Continue</button>
+      <button class="editor-button editor-button--primary" id="editorContinue" type="button" hidden>Continue</button>
     </div>
   `;
   document.body.appendChild(panel);
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "PlacementModes", "Rotate", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "NewRoomPanel", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomTaskThumb", "RoomSceneTitle", "RoomChoices", "HotspotList", "ArrivalList", "PlacementModes", "Rotate", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "LinkChoices", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
   const placementSurface = document.createElement("div");
@@ -218,6 +245,11 @@
   placementSurface.tabIndex = 0;
   placementSurface.setAttribute("role", "button");
   viewerElement.appendChild(placementSurface);
+  const centreTarget = document.createElement("div");
+  centreTarget.className = "editor-centre-target";
+  centreTarget.hidden = true;
+  centreTarget.setAttribute("aria-hidden", "true");
+  viewerElement.appendChild(centreTarget);
   let placementPointerStart = null;
   let suppressPlacementClick = false;
   let draftSavePromise = Promise.resolve(true);
@@ -299,6 +331,7 @@
   }
 
   function setStatus(message) {
+    state.statusMessage = message;
     elements.Status.textContent = message;
     studioLog("status", { message });
   }
@@ -359,6 +392,13 @@
     state.placement = null;
     state.pendingFocus = null;
     if (stage !== "arrival") state.arrival = null;
+    if (stage === "rooms" && previousStage === "upload") state.roomSceneIndex = 0;
+    if (stage === "light" && previousStage === "rooms") state.lookSceneIndex = 0;
+    if (stage === "links" && previousStage === "light") {
+      state.linkSceneIndex = 0;
+      state.linkStep = "choose";
+      state.linkTargetId = null;
+    }
     studioLog("stage-change", { from: previousStage, to: stage }, true);
     render();
   }
@@ -417,10 +457,27 @@
     elements.ProgressCount.textContent = state.activeStage === "start" ? "Ready" : `${index} of ${stageOrder.length - 1}`;
     elements.ProgressFill.style.width = `${index / (stageOrder.length - 1) * 100}%`;
     elements.Home.hidden = state.activeStage === "start";
+    const readiness = releaseReadiness();
     elements.Back.hidden = ["start", "upload"].includes(state.activeStage);
-    elements.Continue.hidden = ["start", "export"].includes(state.activeStage);
-    elements.Continue.disabled = state.activeStage === "upload" && !state.workspaceProject?.scenes?.length;
-    elements.Continue.textContent = state.activeStage === "arrival" ? "Check tour" : "Continue";
+    elements.Continue.hidden = ["start", "export"].includes(state.activeStage)
+      || (state.activeStage === "links" && state.linkStep === "place")
+      || (state.activeStage === "arrival" && readiness.pendingArrivals > 0);
+    const viewerRequired = ["light", "links", "arrival"].includes(state.activeStage);
+    const viewerBusy = viewerRequired && (!api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling);
+    elements.Continue.disabled = (state.activeStage === "upload" && !state.workspaceProject?.scenes?.length) || viewerBusy;
+    elements.Status.textContent = viewerBusy ? "Loading photo..." : state.statusMessage;
+    const totalScenes = state.workspaceProject?.scenes?.length || api.scenes.length;
+    elements.Continue.textContent = state.activeStage === "rooms"
+      ? state.roomSceneIndex < totalScenes - 1 ? "Save and next photo" : "Save rooms"
+      : state.activeStage === "light"
+        ? state.lookSceneIndex < api.scenes.length - 1 ? "Next photo" : "Continue"
+        : state.activeStage === "links"
+          ? state.linkSceneIndex < api.scenes.length - 1 ? "Next photo" : "Choose first views"
+          : state.activeStage === "arrival" ? "Check tour" : "Continue";
+    elements.Continue.classList.toggle("editor-button--primary", state.activeStage !== "links");
+    panel.querySelector(".editor-panel__scene").hidden = ["start", "upload", "rooms", "export"].includes(state.activeStage);
+    panel.querySelector("#editorPreviousScene").hidden = true;
+    panel.querySelector("#editorNextScene").hidden = true;
   }
 
   function moveWorkspaceScene(index, direction) {
@@ -493,8 +550,16 @@
     }
     const id = `room-${Date.now().toString(36)}`;
     projectRooms(project).push({ id, label });
+    const scene = project.scenes[state.roomSceneIndex];
+    if (scene) {
+      scene.space = id;
+      scene.spaceLabel = label;
+      state.roomChoiceId = id;
+    }
     elements.NewRoomName.value = nextRoomName();
-    setStatus(`${label} added`);
+    elements.NewRoomPanel.open = false;
+    setStatus(`${label} chosen for this photo`);
+    studioLog("room-created-and-selected", { roomId: id, label, sceneId: scene?.id || null });
     renderRoomsPanel();
   }
 
@@ -538,124 +603,34 @@
     const project = state.workspaceProject;
     elements.RoomList.replaceChildren();
     elements.ProjectOrder.replaceChildren();
+    elements.RoomChoices.replaceChildren();
     if (!project) return;
     ensureInitialRoom();
     const rooms = projectRooms(project);
-
+    state.roomSceneIndex = Math.max(0, Math.min(state.roomSceneIndex, project.scenes.length - 1));
+    const scene = project.scenes[state.roomSceneIndex];
+    if (!scene) return;
+    state.roomChoiceId = rooms.some((room) => room.id === scene.space) ? scene.space : rooms[0]?.id || null;
+    elements.RoomTaskProgress.textContent = `Photo ${state.roomSceneIndex + 1} of ${project.scenes.length}`;
+    elements.RoomTaskThumb.src = workspaceAsset(scene.thumb);
+    elements.RoomSceneTitle.value = scene.title;
     for (const room of rooms) {
-      const section = document.createElement("section");
-      section.className = "editor-room";
-      section.dataset.roomId = room.id;
-      const header = document.createElement("div");
-      header.className = "editor-room__header";
-      const roomName = document.createElement("input");
-      roomName.value = room.label;
-      roomName.maxLength = 80;
-      roomName.setAttribute("aria-label", `Room name: ${room.label}`);
-      roomName.addEventListener("input", () => {
-        room.label = roomName.value;
-        project.scenes.filter((scene) => scene.space === room.id).forEach((scene) => { scene.spaceLabel = roomName.value; });
-        roomName.setAttribute("aria-label", `Room name: ${roomName.value}`);
-        removeRoomButton.setAttribute("aria-label", `Remove ${roomName.value}`);
-        elements.ProjectOrder.querySelectorAll(`option[value="${room.id}"]`).forEach((option) => { option.textContent = roomName.value; });
-        setStatus("Room structure changed");
+      const button = document.createElement("button");
+      button.className = `editor-choice${room.id === state.roomChoiceId ? " is-selected" : ""}`;
+      button.type = "button";
+      button.textContent = room.label;
+      button.setAttribute("aria-pressed", String(room.id === state.roomChoiceId));
+      button.addEventListener("click", () => {
+        scene.space = room.id;
+        scene.spaceLabel = room.label;
+        state.roomChoiceId = room.id;
+        setStatus(`${room.label} chosen`);
+        studioLog("room-selected", { roomId: room.id, sceneId: scene.id });
+        renderRoomsPanel();
       });
-      const count = document.createElement("span");
-      const roomScenes = project.scenes.filter((scene) => scene.space === room.id);
-      count.textContent = `${roomScenes.length} view${roomScenes.length === 1 ? "" : "s"}`;
-      count.dataset.roomCount = "";
-      const removeRoomButton = document.createElement("button");
-      removeRoomButton.className = "editor-button editor-button--icon editor-button--danger";
-      removeRoomButton.type = "button";
-      removeRoomButton.textContent = "×";
-      removeRoomButton.dataset.removeRoom = "";
-      removeRoomButton.setAttribute("aria-label", `Remove ${room.label}`);
-      removeRoomButton.addEventListener("click", () => removeRoom(room.id));
-      header.append(roomName, count, removeRoomButton);
-      section.appendChild(header);
-      elements.RoomList.appendChild(section);
+      elements.RoomChoices.appendChild(button);
     }
-
-    for (const scene of project.scenes) {
-        const row = document.createElement("div");
-        row.className = "editor-project-scene";
-        const thumb = document.createElement("img");
-        thumb.src = workspaceAsset(scene.thumb);
-        thumb.alt = "";
-        const fields = document.createElement("div");
-        fields.className = "editor-project-scene__fields";
-        const title = document.createElement("input");
-        title.value = scene.title;
-        title.maxLength = 80;
-        title.setAttribute("aria-label", "Viewpoint name");
-        title.addEventListener("input", () => { scene.title = title.value; setStatus("Viewpoint changed"); });
-        const roomSelect = document.createElement("select");
-        roomSelect.setAttribute("aria-label", `Room for ${scene.title}`);
-        for (const candidate of rooms) {
-          const option = document.createElement("option");
-          option.value = candidate.id;
-          option.textContent = candidate.label;
-          roomSelect.appendChild(option);
-        }
-        roomSelect.value = scene.space;
-        roomSelect.addEventListener("change", () => {
-          const targetRoom = rooms.find((candidate) => candidate.id === roomSelect.value);
-          scene.space = targetRoom.id;
-          scene.spaceLabel = targetRoom.label;
-          setStatus(`${scene.title} assigned to ${targetRoom.label}`);
-          updateRoomSummary();
-        });
-        fields.append(title, roomSelect);
-
-        const options = document.createElement("details");
-        options.className = "editor-scene-options";
-        const summary = document.createElement("summary");
-        summary.textContent = "More options";
-        const subtitle = document.createElement("input");
-        subtitle.value = scene.subtitle || "";
-        subtitle.maxLength = 120;
-        subtitle.placeholder = "Short description";
-        subtitle.setAttribute("aria-label", "View description");
-        subtitle.addEventListener("input", () => { scene.subtitle = subtitle.value; setStatus("View changed"); });
-        const controls = document.createElement("div");
-        controls.className = "editor-project-scene__controls";
-        const index = project.scenes.indexOf(scene);
-        const up = document.createElement("button");
-        up.className = "editor-button editor-button--icon";
-        up.type = "button";
-        up.textContent = "↑";
-        up.title = "Move earlier";
-        up.setAttribute("aria-label", `Move ${scene.title} earlier`);
-        up.disabled = index === 0;
-        up.addEventListener("click", () => moveWorkspaceScene(index, -1));
-        const down = document.createElement("button");
-        down.className = "editor-button editor-button--icon";
-        down.type = "button";
-        down.textContent = "↓";
-        down.title = "Move later";
-        down.setAttribute("aria-label", `Move ${scene.title} later`);
-        down.disabled = index === project.scenes.length - 1;
-        down.addEventListener("click", () => moveWorkspaceScene(index, 1));
-        const start = document.createElement("button");
-        start.className = `editor-button editor-button--icon${project.firstScene === scene.id ? " is-active" : ""}`;
-        start.type = "button";
-        start.textContent = "★";
-        start.title = "Use as opening view";
-        start.setAttribute("aria-label", `Use ${scene.title} as opening view`);
-        start.addEventListener("click", () => { project.firstScene = scene.id; renderProjectPanel(); });
-        const remove = document.createElement("button");
-        remove.className = "editor-button editor-button--icon editor-button--danger";
-        remove.type = "button";
-        remove.textContent = "×";
-        remove.title = "Remove viewpoint";
-        remove.setAttribute("aria-label", `Remove ${scene.title}`);
-        remove.addEventListener("click", () => removeWorkspaceScene(scene.id, scene.title, "rooms"));
-        controls.append(up, down, start, remove);
-        options.append(summary, subtitle, controls);
-        row.append(thumb, fields, options);
-        elements.ProjectOrder.appendChild(row);
-    }
-    updateRoomSummary();
+    elements.AssignmentStatus.textContent = `${state.roomSceneIndex + 1} of ${project.scenes.length}`;
   }
 
   function renderProjectPanel() {
@@ -693,7 +668,8 @@
   async function saveWorkspaceStructure(nextStage = null) {
     const project = state.workspaceProject;
     if (!project?.scenes?.length) throw new Error("Add at least one 360 photo first.");
-    const rooms = projectRooms(project).filter((room) => room.label.trim());
+    const usedRoomIds = new Set(project.scenes.map((scene) => scene.space));
+    const rooms = projectRooms(project).filter((room) => room.label.trim() && usedRoomIds.has(room.id));
     if (!rooms.length) throw new Error("Create at least one room.");
     const roomIds = new Set(rooms.map((room) => room.id));
     if (project.scenes.some((scene) => !roomIds.has(scene.space))) throw new Error("Choose a room for every photo.");
@@ -817,18 +793,36 @@
   }
 
   function renderHotspotList(scene) {
-    renderHotspotButtons(elements.HotspotList, scene, "links");
-    const selected = selectedHotspot();
-    const canPlace = Boolean(selected && selected.scene.id === scene.id);
-    const placing = canPlace && state.placement?.type === "hotspot";
-    elements.PlacementModes.hidden = !canPlace;
-    elements.Rotate.classList.toggle("is-active", canPlace && !placing);
-    elements.Place.classList.toggle("is-active", placing);
-    elements.Rotate.setAttribute("aria-pressed", String(canPlace && !placing));
-    elements.Place.setAttribute("aria-pressed", String(placing));
-    elements.Place.disabled = !canPlace;
-    const selectedIndex = state.selected?.sceneId === scene.id ? state.selected.hotspotIndex : -1;
-    elements.RemoveLink.hidden = selectedIndex < api.getBaseHotspotCount(scene.id);
+    if (state.activeStage !== "links") return;
+    const source = api.scenes[state.linkSceneIndex] || scene;
+    elements.LinkTaskProgress.textContent = `Photo ${state.linkSceneIndex + 1} of ${api.scenes.length}: ${source.title}`;
+    elements.HotspotList.replaceChildren();
+    source.hotspots.forEach((hotspot, hotspotIndex) => {
+      const target = api.sceneById[hotspot.target];
+      const row = document.createElement("button");
+      row.className = "editor-saved-movement";
+      row.type = "button";
+      row.innerHTML = `<span aria-hidden="true">${hotspot.kind === "viewpoint" ? "◎" : "↗"}</span><strong></strong><small>Move point</small>`;
+      row.querySelector("strong").textContent = target?.title || hotspot.label;
+      row.addEventListener("click", () => {
+        state.selected = { sceneId: source.id, hotspotIndex };
+        state.linkStep = "place";
+        state.linkIsNew = false;
+        setStatus("Move the photo, then save the point at the centre target");
+        render();
+      });
+      elements.HotspotList.appendChild(row);
+    });
+    elements.HotspotList.hidden = source.hotspots.length === 0 || state.linkStep === "place";
+    elements.NewLink.hidden = state.linkStep !== "choose";
+    elements.PlaceAtCentre.hidden = state.linkStep !== "place";
+    const selectedIndex = state.selected?.sceneId === source.id ? state.selected.hotspotIndex : -1;
+    elements.RemoveLink.hidden = state.linkStep !== "place" || state.linkIsNew || selectedIndex < api.getBaseHotspotCount(source.id);
+    elements.LinkGuidance.textContent = state.linkStep === "place"
+      ? "Drag the photo until the real doorway or the other camera position is exactly under the centre target."
+      : source.hotspots.length
+        ? "Saved movements are shown above. Choose another destination, or continue to the next photo."
+        : "Choose the photo a visitor can reach from here. A second photo in the same room is shown as another camera view.";
     renderLinkCreator(scene);
   }
 
@@ -843,46 +837,79 @@
   }
 
   function renderLinkCreator(scene) {
-    const selectedTarget = elements.LinkTarget.value;
+    const source = api.scenes[state.linkSceneIndex] || scene;
+    const selectedTarget = state.linkTargetId || elements.LinkTarget.value;
     elements.LinkTarget.replaceChildren();
-    api.scenes.filter((candidate) => candidate.id !== scene.id).forEach((candidate) => {
+    elements.LinkChoices.replaceChildren();
+    const linkedTargets = new Set(source.hotspots.map((hotspot) => hotspot.target));
+    const candidates = api.scenes.filter((candidate) => candidate.id !== source.id && !linkedTargets.has(candidate.id));
+    state.linkTargetId = candidates.some((candidate) => candidate.id === selectedTarget)
+      ? selectedTarget
+      : candidates[0]?.id || null;
+    candidates.forEach((candidate) => {
       const option = document.createElement("option");
       option.value = candidate.id;
       option.textContent = `${candidate.spaceLabel || candidate.title} - ${candidate.title}`;
       elements.LinkTarget.appendChild(option);
+      const sameRoom = candidate.space === source.space;
+      const button = document.createElement("button");
+      button.className = `editor-choice editor-choice--destination${candidate.id === state.linkTargetId ? " is-selected" : ""}`;
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(candidate.id === state.linkTargetId));
+      const relation = document.createElement("span");
+      relation.textContent = sameRoom ? `Another view of ${candidate.spaceLabel || "this room"}` : `Another room: ${candidate.spaceLabel || candidate.title}`;
+      const name = document.createElement("strong");
+      name.textContent = candidate.title;
+      button.append(relation, name);
+      button.addEventListener("click", () => {
+        state.linkTargetId = candidate.id;
+        elements.LinkTarget.value = candidate.id;
+        elements.LinkKind.value = suggestedLinkKind(source, candidate);
+        elements.LinkLabel.value = suggestedLinkLabel();
+        setStatus(`${candidate.title} chosen`);
+        renderLinkCreator(source);
+      });
+      elements.LinkChoices.appendChild(button);
     });
-    elements.NewLink.hidden = elements.LinkTarget.options.length === 0;
-    if ([...elements.LinkTarget.options].some((option) => option.value === selectedTarget)) elements.LinkTarget.value = selectedTarget;
-    if (state.linkDraftSceneId !== scene.id) {
-      state.linkDraftSceneId = scene.id;
-      elements.LinkKind.value = suggestedLinkKind(scene);
+    if (state.linkTargetId) elements.LinkTarget.value = state.linkTargetId;
+    if (state.linkDraftSceneId !== source.id) {
+      state.linkDraftSceneId = source.id;
+      elements.LinkKind.value = suggestedLinkKind(source);
       elements.LinkLabel.value = suggestedLinkLabel();
     } else if (!elements.LinkLabel.value) {
       elements.LinkLabel.value = suggestedLinkLabel();
     }
-    elements.AddLink.disabled = elements.LinkTarget.options.length === 0;
+    elements.AddLink.disabled = candidates.length === 0 || !state.linkTargetId;
+    elements.NewLink.hidden = state.linkStep !== "choose" || candidates.length === 0;
   }
 
   function renderArrivalPanel(scene) {
-    elements.DefaultView.textContent = "Saved";
-    renderHotspotButtons(elements.ArrivalList, scene, "arrival");
+    if (state.activeStage !== "arrival") return;
+    const viewerReady = Boolean(api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
     const selected = selectedHotspot();
     if (!selected) {
-      elements.ArrivalHelp.textContent = "Select a movement above.";
+      elements.ArrivalHelp.textContent = "Every first view is saved. Continue to check and publish the tour.";
       elements.EditArrival.disabled = true;
+      elements.EditArrival.hidden = true;
       elements.SaveArrival.hidden = true;
       return;
     }
-    elements.EditArrival.disabled = false;
+    elements.EditArrival.disabled = !viewerReady || state.arrivalLoading;
     if (state.arrival) {
       const target = api.sceneById[selected.hotspot.target];
-      elements.ArrivalHelp.textContent = `Arrival in ${target?.title || "destination"}`;
+      elements.ArrivalHelp.textContent = viewerReady
+        ? `You are now in ${target?.title || "the destination"}. Rotate to the clearest, most useful view, then save it.`
+        : `Loading ${target?.title || "the destination"}...`;
       elements.EditArrival.hidden = true;
       elements.SaveArrival.hidden = false;
+      elements.SaveArrival.disabled = !viewerReady;
       return;
     }
     const target = api.sceneById[selected.hotspot.target];
-    elements.ArrivalHelp.textContent = `${selected.hotspot.label} · ${target?.title || "destination"}`;
+    elements.ArrivalHelp.textContent = viewerReady
+      ? `Next movement: ${scene.title} to ${target?.title || "the destination"}. Open it and choose the first view.`
+      : "Loading the source photo...";
+    elements.EditArrival.textContent = `Open ${target?.title || "destination"}`;
     elements.EditArrival.hidden = false;
     elements.SaveArrival.hidden = true;
   }
@@ -1126,6 +1153,9 @@
     placementSurface.hidden = !placing;
     placementSurface.setAttribute("aria-label", state.placement?.type === "hotspot" ? "Place selected movement" : "Place light area");
     document.body.classList.toggle("is-editor-placing", placing);
+    const centring = state.activeStage === "links" && state.linkStep === "place";
+    centreTarget.hidden = !centring;
+    document.body.classList.toggle("is-editor-centre-target", centring);
   }
 
   async function moveScene(direction) {
@@ -1276,6 +1306,59 @@
     }, delay);
   }
 
+  function openSceneAt(index) {
+    const target = api.scenes[index];
+    if (!target || api.viewer.getScene() === target.id) {
+      render();
+      return;
+    }
+    api.viewer.loadScene(target.id);
+  }
+
+  function saveCurrentRoomTask() {
+    const project = state.workspaceProject;
+    const scene = project?.scenes?.[state.roomSceneIndex];
+    const room = projectRooms(project).find((candidate) => candidate.id === state.roomChoiceId);
+    const title = elements.RoomSceneTitle.value.trim();
+    if (!scene || !room || !title) {
+      setStatus(!title ? "Name this view before continuing" : "Choose one room before continuing");
+      return false;
+    }
+    scene.title = title;
+    scene.space = room.id;
+    scene.spaceLabel = room.label;
+    studioLog("room-task-complete", { sceneId: scene.id, roomId: room.id, index: state.roomSceneIndex });
+    return true;
+  }
+
+  async function backWizard() {
+    if (state.activeStage === "rooms" && state.roomSceneIndex > 0) {
+      state.roomSceneIndex -= 1;
+      render();
+      return;
+    }
+    if (state.activeStage === "light" && state.lookSceneIndex > 0) {
+      state.lookSceneIndex -= 1;
+      openSceneAt(state.lookSceneIndex);
+      return;
+    }
+    if (state.activeStage === "links" && state.linkStep === "place") {
+      state.linkStep = "choose";
+      state.linkTargetId = null;
+      render();
+      return;
+    }
+    if (state.activeStage === "links" && state.linkSceneIndex > 0) {
+      if (!await queueDraftSave("before-previous-movement-photo")) return;
+      state.linkSceneIndex -= 1;
+      state.linkTargetId = null;
+      state.selected = null;
+      openSceneAt(state.linkSceneIndex);
+      return;
+    }
+    setStage(stageOffset(-1));
+  }
+
   async function continueWizard() {
     if (state.activeStage === "upload") {
       if (!state.workspaceProject?.scenes?.length) {
@@ -1287,6 +1370,13 @@
       return;
     }
     if (state.activeStage === "rooms") {
+      if (!saveCurrentRoomTask()) return;
+      if (state.roomSceneIndex < state.workspaceProject.scenes.length - 1) {
+        state.roomSceneIndex += 1;
+        render();
+        setStatus("Choose the room for the next photo");
+        return;
+      }
       try {
         await saveWorkspaceStructure("light");
       } catch (error) {
@@ -1294,26 +1384,67 @@
       }
       return;
     }
-    const readiness = releaseReadiness();
-    if (state.activeStage === "links" && readiness.pendingPositions > 0) {
-      focusHotspotTask(findPendingHotspot("positionConfirmed"), "links", true);
-      setStatus("Place the selected movement before continuing");
+    if (state.activeStage === "light") {
+      if (!await queueDraftSave("picture-reviewed")) return;
+      if (state.lookSceneIndex < api.scenes.length - 1) {
+        state.lookSceneIndex += 1;
+        openSceneAt(state.lookSceneIndex);
+        setStatus("Choose the look for the next photo");
+        return;
+      }
+      setStage("links");
+      openSceneAt(0);
       return;
     }
+    if (state.activeStage === "links") {
+      if (state.linkStep === "place") {
+        setStatus("Save the point at the centre target first");
+        return;
+      }
+      if (!await queueDraftSave("movement-photo-reviewed")) return;
+      if (state.linkSceneIndex < api.scenes.length - 1) {
+        state.linkSceneIndex += 1;
+        state.linkTargetId = null;
+        state.selected = null;
+        openSceneAt(state.linkSceneIndex);
+        setStatus("Choose movements for the next photo");
+        return;
+      }
+      const nextArrival = findPendingHotspot("arrivalConfirmed");
+      if (nextArrival) {
+        focusHotspotTask(nextArrival, "arrival");
+        setStatus("Open the destination and choose its first view");
+      } else {
+        setStage("export");
+      }
+      return;
+    }
+    const readiness = releaseReadiness();
     if (state.activeStage === "arrival" && readiness.pendingArrivals > 0) {
       focusHotspotTask(findPendingHotspot("arrivalConfirmed"), "arrival");
-      setStatus("Choose the destination view for the selected movement");
+      setStatus("Open the destination and choose its first view");
       return;
     }
     if (await queueDraftSave("continue")) setStage(stageOffset(1));
   }
 
-  function beginArrivalEdit() {
+  async function beginArrivalEdit() {
+    if (state.arrivalLoading) return;
     const selected = selectedHotspot();
     if (!selected) return;
+    const selection = { ...state.selected };
+    state.arrivalLoading = true;
+    setStatus("Opening the destination...");
+    renderArrivalPanel(currentScene());
+    await waitForViewerSettled();
+    if (state.selected?.sceneId !== selection.sceneId || state.selected?.hotspotIndex !== selection.hotspotIndex) {
+      state.arrivalLoading = false;
+      return;
+    }
     state.arrival = { ...state.selected };
     state.placement = null;
     api.viewer.loadScene(selected.hotspot.target);
+    state.arrivalLoading = false;
     setStatus("Turn to the best view, then use what you see");
   }
 
@@ -1335,10 +1466,9 @@
       setStatus("Destination view saved. Next movement selected.");
       return;
     }
-    state.pendingFocus = { sceneId: originSceneId, hotspotIndex: state.selected.hotspotIndex, stage: "arrival", place: false };
-    setStatus("Destination view saved");
-    if (api.viewer.getScene() !== originSceneId) api.viewer.loadScene(originSceneId);
-    else applyPendingFocus();
+    state.selected = null;
+    setStatus("All destination views saved");
+    setStage("export");
   }
 
   async function refreshReleaseStatus() {
@@ -1434,9 +1564,15 @@
   });
   elements.RestoreProject.addEventListener("click", () => restoreProject(false));
   elements.ImportFiles.addEventListener("change", importPanoramas);
+  elements.RoomSceneTitle.addEventListener("input", () => {
+    const scene = state.workspaceProject?.scenes?.[state.roomSceneIndex];
+    if (!scene) return;
+    scene.title = elements.RoomSceneTitle.value;
+    studioLog("view-name-edited", { sceneId: scene.id, index: state.roomSceneIndex });
+  });
   elements.AddRoom.addEventListener("click", addRoom);
   elements.Home.addEventListener("click", () => setStage("start"));
-  elements.Back.addEventListener("click", () => setStage(stageOffset(-1)));
+  elements.Back.addEventListener("click", backWizard);
   elements.Continue.addEventListener("click", continueWizard);
   elements.Build.addEventListener("click", buildRelease);
   elements.DownloadProject.addEventListener("click", downloadEditableProject);
@@ -1462,13 +1598,16 @@
     render();
   });
   elements.RemoveLink.addEventListener("click", () => {
-    const scene = currentScene();
+    const scene = api.scenes[state.linkSceneIndex] || currentScene();
     const selected = state.selected;
     if (!scene || !selected || selected.sceneId !== scene.id || selected.hotspotIndex < api.getBaseHotspotCount(scene.id)) return;
     const localIndex = selected.hotspotIndex - api.getBaseHotspotCount(scene.id);
     const removedId = api.hotspotId(scene.id, selected.hotspotIndex);
     api.setAddedHotspots(scene.id, api.getAddedHotspots(scene.id).filter((_, index) => index !== localIndex));
-    state.selected = scene.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
+    state.selected = null;
+    state.linkStep = "choose";
+    state.linkTargetId = null;
+    state.linkIsNew = false;
     setStatus("Transition removed");
     render();
     studioLog("movement-removed", { id: removedId, sceneId: scene.id }, true);
@@ -1480,16 +1619,17 @@
   });
   elements.LinkKind.addEventListener("change", () => { elements.LinkLabel.value = suggestedLinkLabel(); });
   elements.AddLink.addEventListener("click", () => {
-    const scene = currentScene();
-    const targetScene = api.sceneById[elements.LinkTarget.value];
+    const scene = api.scenes[state.linkSceneIndex] || currentScene();
+    const targetScene = api.sceneById[state.linkTargetId || elements.LinkTarget.value];
     if (!scene || !targetScene) return;
     const additions = api.getAddedHotspots(scene.id);
+    const kind = suggestedLinkKind(scene, targetScene);
     api.setAddedHotspots(scene.id, [...additions, {
-      kind: elements.LinkKind.value,
+      kind,
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
       target: targetScene.id,
-      label: elements.LinkLabel.value.trim() || suggestedLinkLabel(),
+      label: kind === "viewpoint" ? `Go to ${targetScene.title}` : `Walk to ${targetScene.spaceLabel || targetScene.title}`,
       targetPitch: targetScene.pitch,
       targetYaw: targetScene.yaw,
       targetHfov: targetScene.hfov,
@@ -1497,16 +1637,50 @@
       arrivalConfirmed: false
     }]);
     state.selected = { sceneId: scene.id, hotspotIndex: api.getBaseHotspotCount(scene.id) + additions.length };
-    state.placement = { type: "hotspot" };
-    setStatus("Click the photo where this movement should appear");
+    state.linkStep = "place";
+    state.linkIsNew = true;
+    state.placement = null;
+    setStatus("Move the photo, then save the point at the centre target");
     render();
     studioLog("movement-added", {
       id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
       sourceSceneId: scene.id,
       targetSceneId: targetScene.id,
-      kind: elements.LinkKind.value
+      kind
     }, true);
     queueDraftSave("movement-added");
+  });
+  elements.ConfirmCentre.addEventListener("click", () => {
+    const selected = selectedHotspot();
+    if (!selected) return;
+    const pitch = roundCoordinate(api.viewer.getPitch());
+    const yaw = roundCoordinate(api.viewer.getYaw());
+    selected.hotspot.positionConfirmed = true;
+    api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch, yaw });
+    studioLog("movement-centre-confirmed", {
+      id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex), pitch, yaw
+    }, true);
+    state.linkStep = "choose";
+    state.linkTargetId = null;
+    state.linkIsNew = false;
+    state.selected = null;
+    setStatus("Movement saved. Add another, or continue to the next photo.");
+    render();
+    queueDraftSave("movement-centre-confirmed");
+  });
+  elements.CancelCentre.addEventListener("click", () => {
+    const selected = selectedHotspot();
+    if (selected && state.linkIsNew && state.selected.hotspotIndex >= api.getBaseHotspotCount(selected.scene.id)) {
+      const localIndex = state.selected.hotspotIndex - api.getBaseHotspotCount(selected.scene.id);
+      api.setAddedHotspots(selected.scene.id, api.getAddedHotspots(selected.scene.id).filter((_, index) => index !== localIndex));
+      queueDraftSave("movement-cancelled");
+    }
+    state.linkStep = "choose";
+    state.linkTargetId = null;
+    state.linkIsNew = false;
+    state.selected = null;
+    setStatus("Choose a destination");
+    render();
   });
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
   elements.SaveArrival.addEventListener("click", saveArrivalView);
@@ -1582,6 +1756,7 @@
   });
 
   api.viewer.on("scenechange", () => {
+    state.viewerSettled = false;
     if (applyPendingFocus()) return;
     const scene = currentScene();
     if (!state.arrival) state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
@@ -1590,8 +1765,16 @@
     studioLog("editor-scene-change", { sceneId: scene?.id || null }, true);
   });
 
-  api.viewer.on("load", () => {
+  api.viewer.on("load", async () => {
     studioLog("editor-scene-loaded", { sceneId: api.viewer.getScene() }, true);
+    state.viewerSettled = false;
+    await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+    await waitForViewerFade();
+    state.viewerSettled = true;
+    renderStages();
+    if (state.activeStage === "arrival") {
+      renderArrivalPanel(currentScene());
+    }
   });
 
   document.addEventListener("raindigit:tour-debug", (event) => {
@@ -1624,6 +1807,22 @@
     navigator.sendBeacon(studioUrl("studio-log", false), new Blob([JSON.stringify({ entries })], { type: "application/json" }));
   });
 
+  let viewportTimer = 0;
+  window.addEventListener("resize", () => {
+    state.viewportSettling = true;
+    renderStages();
+    window.clearTimeout(viewportTimer);
+    viewportTimer = window.setTimeout(() => {
+      api.viewer.resize();
+      window.requestAnimationFrame(() => {
+        state.viewportSettling = false;
+        state.viewerSettled = Boolean(api.viewer.isLoaded());
+        renderStages();
+        studioLog("viewer-resized", { width: window.innerWidth, height: window.innerHeight });
+      });
+    }, 280);
+  });
+
   window.__RAINDIGIT_STUDIO_DEBUG__ = {
     sessionId: studioSessionId,
     snapshot: studioInventory,
@@ -1645,12 +1844,30 @@
     });
   }
 
+  async function waitForViewerFade(timeout = 6000) {
+    const startedAt = performance.now();
+    while (performance.now() - startedAt < timeout) {
+      const fading = Array.from(viewerElement.querySelectorAll(".pnlm-fade-img"))
+        .some((element) => Number.parseFloat(getComputedStyle(element).opacity || "0") > 0.01);
+      if (!fading && api.viewer.isLoaded()) return true;
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    }
+    studioLog("viewer-settle-timeout", { sceneId: api.viewer.getScene(), timeout }, true);
+    return false;
+  }
+
+  async function waitForViewerSettled(timeout = 6000) {
+    await waitForViewerPaint();
+    return waitForViewerFade(timeout);
+  }
+
   Promise.all([
     fetch(studioUrl("status")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Local editor server unavailable"))),
     refreshWorkspaceProject(),
     fetch(studioUrl("overrides")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft")))
   ]).then(async ([, , draft]) => {
-    await waitForViewerPaint();
+    await waitForViewerSettled();
+    state.viewerSettled = true;
     applyDraft(draft);
     const scene = currentScene();
     state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;

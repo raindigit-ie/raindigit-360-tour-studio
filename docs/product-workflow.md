@@ -32,9 +32,9 @@ The studio is local-first. It keeps source material and the editable workspace o
    - It produces private normalized browser derivatives and thumbnails while stripping metadata. The source files remain outside the release flow.
 
 3. **Rooms**
-   - The first room is created automatically. Add any additional rooms with the dedicated control.
-   - Keep room management and panorama assignment as separate lists. Assign each stable panorama card to a room, rename rooms and viewpoints, reorder viewpoints and choose the opening camera position.
-   - Update room counts immediately without moving a panorama card under the pointer. Allow an accidental empty room to be removed.
+   - Show one photo at a time and ask one question: **Where was this photo taken?**
+   - Rename the view, then choose an existing room or create and choose a different room. Choosing the same room for another photo explicitly creates another camera view of that room.
+   - **Save and next photo** advances only after the current view has a name and one room. Creating a room must not erase a view name already typed on the same screen.
 
 4. **Look**
    - Show Natural, Bright and Warm as the normal choice. Keep brightness, contrast, saturation and warm/cool controls under **Fine tune picture**.
@@ -43,19 +43,19 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 5. **Movement**
    - Create a link only where a visitor can move: a physical doorway/passage or another camera viewpoint.
-   - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. Keep marker type and custom name under **Link options**.
-   - Select its type and destination, then use the explicit **Rotate view** / **Place selected** modes. Placement locks the camera; a short click/tap positions the selected marker, while a drag positions nothing. Selecting another marker never turns the camera or changes another marker.
+   - Label destinations as **Another view of this room** or **Another room**. The studio chooses the correct viewfinder or walking marker automatically.
+   - Choose one destination, rotate the panorama normally until the real doorway or other camera position is under the fixed centre target, then press **Save point here**. There is no rotate/place mode switch.
    - After placement, rotating the panorama must move the marker's screen projection while its saved spherical coordinate remains unchanged. A marker that stays screen-fixed, disappears from the active scene configuration or leaves a stale DOM copy fails review.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
-   - A newly added transition remains incomplete until placement mode records an explicit point. If Continue finds unfinished work on another photo, it opens that source photo, selects the point and enters placement mode automatically.
-   - Save immediately after adding, placing or removing a movement. Before either scene arrow changes the photo, wait for the queued save and reject overlapping arrow actions.
+   - A newly added transition remains incomplete until **Save point here** records an explicit spherical coordinate. Back cancels a new unfinished point without changing an older point.
+   - Save immediately after adding, placing or removing a movement. The wizard controls photo order itself; it waits for the queued save and for the current panorama and cross-fade to settle before enabling the next action.
    - Test at least two points by cycling through every scene forwards and backwards twice. After each cycle, the stable point IDs must match in the scene model, active Pannellum configuration, rendered DOM and persisted draft.
 
 6. **First views**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
-   - After saving the target composition, automatically select the next unsaved destination view. When none remain, return to the transition's source panorama so the operator does not lose context.
-   - The wizard must not open Publish while any new movement still says **Set arrival**.
+   - Show one directed movement at a time. First press **Open destination**, rotate to the best composition, then press **Save this first view**.
+   - After saving, automatically return to the next movement source. Disable Open/Save while a panorama or cross-fade is still loading, and do not open Publish while any first view is unfinished.
 
 7. **Publish**
    - Review the room, view, movement and picture-change counts and require a green readiness gate.
@@ -84,6 +84,11 @@ For the simplest customer handoff, upload the single HTML file and use its URL d
 
 The single HTML must also open directly from disk and render when embedded in a
 fullscreen-enabled iframe. Both paths are part of the automated product test.
+
+The guided browser regression additionally creates three photos and two rooms,
+groups two photos as separate views of one room, saves two independent points
+from the same source, cycles Back/Next, completes both first views at 390x605,
+builds the customer HTML and verifies the local diagnostic events.
 
 Deploy the contents of `release/` to a customer-controlled host, then embed it with one iframe:
 
