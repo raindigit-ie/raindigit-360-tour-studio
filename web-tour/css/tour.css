@@ -441,6 +441,11 @@ body.is-cinema-fullscreen .tour-shell {
   height: 100svh;
 }
 
+body.is-editor-open .tour-brand,
+body.is-editor-open .toolbar {
+  display: none;
+}
+
 @media (max-width: 760px) {
   /* Pannellum ships with a pale checkerboard fallback. Safari can expose it
      through a WebGL repaint beneath overlay controls, so use the tour base. */
@@ -566,6 +571,27 @@ body.is-cinema-fullscreen .tour-shell {
   font-size: 10px;
 }
 
+.editor-disclosure {
+  margin-top: 14px;
+  border-top: 1px solid rgba(255, 249, 236, 0.14);
+}
+
+.editor-disclosure > summary {
+  padding: 13px 0;
+  color: #fff9ec;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.editor-disclosure--compact {
+  margin-top: 10px;
+}
+
+.editor-disclosure--compact > summary {
+  padding: 10px 0;
+}
+
 .editor-file-picker,
 .editor-upload-zone {
   display: grid;
@@ -626,8 +652,7 @@ body.is-cinema-fullscreen .tour-shell {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(255, 249, 236, 0.14);
+  padding-bottom: 10px;
 }
 
 .editor-section-label {
@@ -1430,7 +1455,8 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
 }
 
 .editor-project-scene__fields input,
-.editor-project-scene__controls select {
+.editor-project-scene__fields select,
+.editor-scene-options > input {
   min-width: 0;
   width: 100%;
   height: 28px;
@@ -1443,10 +1469,24 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
 }
 
 .editor-project-scene__controls {
-  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 28px 28px 28px;
+  grid-template-columns: repeat(4, 28px);
   gap: 5px;
+  margin-top: 6px;
+}
+
+.editor-scene-options {
+  grid-column: 1 / -1;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 249, 236, 0.1);
+}
+
+.editor-scene-options > summary {
+  padding: 5px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 730;
 }
 
 .editor-project-scene__controls .editor-button--icon {
@@ -1487,6 +1527,31 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
 .editor-image__controls {
   display: grid;
   gap: 10px;
+}
+
+.editor-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.editor-preset {
+  min-height: 44px;
+  border: 1px solid rgba(255, 249, 236, 0.18);
+  border-radius: 4px;
+  color: #fff9ec;
+  background: rgba(255, 249, 236, 0.045);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.editor-preset:hover,
+.editor-preset:focus-visible,
+.editor-preset.is-active {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent);
 }
 
 .editor-export-summary {

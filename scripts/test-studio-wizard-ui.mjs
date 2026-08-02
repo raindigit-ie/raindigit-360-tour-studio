@@ -15,6 +15,25 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function assertSimpleStage(page, heading) {
+  const title = page.getByRole("heading", { name: heading });
+  await title.waitFor();
+  await page.waitForFunction(() => document.querySelectorAll(".editor-stage-panel[hidden]").length === 6);
+  const panel = title.locator("xpath=ancestor::section[1]");
+  const technicalCopy = await panel.innerText();
+  assert(!/\b(panorama|pitch|yaw|hfov|iframe|json|rdtour)\b/i.test(technicalCopy), `${heading} exposes technical copy: ${technicalCopy}`);
+  assert(await panel.locator(".editor-button--primary:visible").count() <= 1, `${heading} shows too many competing primary actions.`);
+}
+
+async function assertNoMobileOverflow(page, stage) {
+  const layout = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    panelRight: document.querySelector(".editor-panel")?.getBoundingClientRect().right || 0
+  }));
+  assert(layout.scrollWidth <= layout.viewport && layout.panelRight <= layout.viewport, `${stage} overflows on mobile: ${JSON.stringify(layout)}`);
+}
+
 async function runMagick(arguments_) {
   for (const binary of ["magick", "convert"]) {
     try {
@@ -72,16 +91,20 @@ async function main() {
     page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
 
     await page.goto(`${baseUrl}/?edit=1`);
-    await page.getByLabel("Project title").fill("Studio UI Journey");
-    await page.getByRole("button", { name: "Create new project" }).click();
-    await page.getByRole("heading", { name: "Upload panoramas" }).waitFor();
+    await assertSimpleStage(page, "Start a tour");
+    assert(await page.getByText("Open saved work", { exact: true }).isVisible(), "Saved work must be available without cluttering the start screen.");
+    assert(!await page.getByLabel("Choose saved tour").isVisible(), "Saved-work controls must start collapsed.");
+    await page.getByLabel("Tour name").fill("Studio UI Journey");
+    await page.getByRole("button", { name: "Create tour" }).click();
+    await assertSimpleStage(page, "Add 360 photos");
 
     await page.locator("#editorImportFiles").setInputFiles(fixtures);
-    await page.getByText("4 panoramas ready", { exact: true }).waitFor({ timeout: 90_000 });
+    await page.getByText("4 photos ready", { exact: true }).waitFor({ timeout: 90_000 });
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("heading", { name: "Organize rooms" }).waitFor();
+    await assertSimpleStage(page, "Name rooms and views");
 
     await page.getByLabel("Room name: Room 1").fill("Kitchen");
+    await page.getByText("Add another room", { exact: true }).click();
     await page.locator("#editorNewRoomName").fill("Hall");
     await page.getByRole("button", { name: "Add room" }).click();
     await page.locator("#editorNewRoomName").fill("Living room");
@@ -92,7 +115,7 @@ async function main() {
     assert(await page.locator(".editor-room").count() === 3, "An accidental empty room must be removable.");
 
     const cards = page.locator(".editor-project-scene");
-    assert(await cards.count() === 4, "The Rooms screen must keep four stable panorama cards.");
+    assert(await cards.count() === 4, "The Rooms screen must keep four stable photo cards.");
     const roomSelects = page.locator(".editor-project-scene select");
     await roomSelects.nth(0).selectOption({ label: "Kitchen" });
     await roomSelects.nth(1).selectOption({ label: "Kitchen" });
@@ -103,35 +126,40 @@ async function main() {
     assert(await cards.count() === 4, "Assigning a room must not move a card under the pointer.");
 
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("heading", { name: "Color and light" }).waitFor({ timeout: 20_000 });
+    await assertSimpleStage(page, "Choose the look");
+    assert(!await page.getByLabel("Brightness").isVisible(), "Professional picture controls must start collapsed.");
+    await page.getByRole("button", { name: "Bright", exact: true }).click();
+    await page.getByText("Fine tune picture", { exact: true }).click();
     await page.getByLabel("Brightness").fill("108");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("heading", { name: "Transitions" }).waitFor();
+    await assertSimpleStage(page, "Add ways to move");
 
-    assert(await page.getByLabel("Transition marker type").inputValue() === "viewpoint", "A same-room destination must default to viewpoint.");
-    assert(await page.getByLabel("Label").inputValue() === "View panorama 2", "A same-room label must name the target viewpoint.");
-    await page.getByLabel("Transition destination").selectOption({ label: "Hall - panorama 3" });
-    assert(await page.getByLabel("Transition marker type").inputValue() === "doorway", "A different room must default to doorway.");
-    assert(await page.getByLabel("Label").inputValue() === "Walk to Hall", "A doorway label must name the target room.");
-    await page.getByRole("button", { name: "Add transition" }).click();
+    await page.getByText("Link options", { exact: true }).click();
+    assert(await page.getByLabel("Movement type").inputValue() === "viewpoint", "A same-room destination must default to viewpoint.");
+    assert(await page.getByLabel("Button name").inputValue() === "Go to View 2", "A same-room label must name the target viewpoint.");
+    await page.getByLabel("Move to").selectOption({ label: "Hall - View 3" });
+    assert(await page.getByLabel("Movement type").inputValue() === "doorway", "A different room must default to doorway.");
+    assert(await page.getByLabel("Button name").inputValue() === "Walk to Hall", "A doorway label must name the target room.");
+    await page.getByRole("button", { name: "Add and place" }).click();
     await page.getByRole("button", { name: "Continue" }).click();
-    assert(await page.getByRole("heading", { name: "Transitions" }).isVisible(), "An unplaced transition must block the next step.");
-    assert((await page.locator("#editorStatus").textContent()).includes("Place 1 transition point"), "The transition gate must explain what remains.");
+    assert(await page.getByRole("heading", { name: "Add ways to move" }).isVisible(), "An unplaced movement point must block the next step.");
+    assert((await page.locator("#editorStatus").textContent()).includes("Place 1 movement point"), "The movement gate must explain what remains.");
     await page.locator("#panorama").click({ position: { x: 320, y: 360 } });
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("heading", { name: "Arrival views" }).waitFor();
+    await assertSimpleStage(page, "Choose first views");
 
     const sourceScene = await page.locator("#editorSceneName").textContent();
-    await page.getByRole("button", { name: "Review" }).click();
-    assert(await page.getByRole("heading", { name: "Arrival views" }).isVisible(), "An unsaved arrival view must block export.");
-    assert((await page.locator("#editorStatus").textContent()).includes("Save 1 arrival view"), "The arrival gate must explain what remains.");
-    await page.getByRole("button", { name: "Set arrival view" }).click();
-    await page.getByRole("button", { name: "Save arrival view" }).click();
+    await page.getByRole("button", { name: "Check tour" }).click();
+    assert(await page.getByRole("heading", { name: "Choose first views" }).isVisible(), "An unsaved destination view must block publish.");
+    assert((await page.locator("#editorStatus").textContent()).includes("Choose 1 destination view"), "The destination-view gate must explain what remains.");
+    await page.getByRole("button", { name: "Choose destination view" }).click();
+    await page.getByRole("button", { name: "Use as destination view" }).click();
     await page.locator("#editorSceneName").filter({ hasText: sourceScene }).waitFor();
 
-    await page.getByRole("button", { name: "Review" }).click();
-    await page.getByRole("heading", { name: "Review and export" }).waitFor();
-    const previewHref = await page.getByRole("link", { name: "Open review preview" }).getAttribute("href");
+    await page.getByRole("button", { name: "Check tour" }).click();
+    await assertSimpleStage(page, "Check and publish");
+    await page.getByText("Check the tour first", { exact: true }).click();
+    const previewHref = await page.getByRole("link", { name: "Open tour preview" }).getAttribute("href");
     assert(previewHref?.startsWith(`${baseUrl}/?preview=1`), `Preview must stay on the studio origin: ${previewHref}`);
 
     const preview = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -140,14 +168,16 @@ async function main() {
     assert(!await preview.locator("body").getAttribute("data-tour-error"), "Same-origin review preview failed.");
     await preview.close();
 
-    await page.getByRole("button", { name: "Prepare final files" }).click();
-    await page.getByRole("link", { name: "Download tour website (.html)" }).waitFor({ timeout: 90_000 });
-    assert(await page.getByRole("button", { name: "Download editable backup (.rdtour)" }).isVisible(), "Editable project download is missing.");
-    assert(await page.getByRole("link", { name: "Open website embed test" }).isVisible(), "The local embed test is missing.");
+    await page.getByRole("button", { name: "Build the tour" }).click();
+    await page.getByRole("link", { name: "Download website file" }).waitFor({ timeout: 90_000 });
+    assert(!await page.getByRole("button", { name: "Download editable backup" }).isVisible(), "Advanced downloads must stay collapsed by default.");
+    assert(!await page.getByRole("link", { name: "Open sample website" }).isVisible(), "Optional website testing must stay collapsed by default.");
+    await page.getByText("Add it to a website", { exact: true }).click();
     await page.locator("#editorInstallUrl").fill("https://client.example/tours/home.html");
     assert((await page.locator("#editorEmbedCode").inputValue()).includes('src="https://client.example/tours/home.html"'), "The generated iframe must use the entered public URL.");
 
-    const embedTestHref = await page.getByRole("link", { name: "Open website embed test" }).getAttribute("href");
+    await page.getByText("Test on a website", { exact: true }).click();
+    const embedTestHref = await page.getByRole("link", { name: "Open sample website" }).getAttribute("href");
     const embedTest = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await embedTest.goto(new URL(embedTestHref, baseUrl).href);
     await embedTest.frameLocator("iframe").locator(".pnlm-render-container canvas").waitFor({ timeout: 20_000 });
@@ -158,7 +188,7 @@ async function main() {
     const websitePath = join(root, "client-tour.html");
     const [websiteDownload] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("link", { name: "Download tour website (.html)" }).click()
+      page.getByRole("link", { name: "Download website file" }).click()
     ]);
     await websiteDownload.saveAs(websitePath);
     assert((await stat(websitePath)).size > 100_000, "The one-file website download is unexpectedly small.");
@@ -168,42 +198,59 @@ async function main() {
     assert(!await offlineTour.locator("body").getAttribute("data-tour-error"), "The downloaded one-file tour must open without a web server.");
     await offlineTour.close();
 
+    await page.getByText("Backups and advanced files", { exact: true }).click();
     const backupPath = join(root, "client-project.rdtour");
     const [projectDownload] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "Download editable backup (.rdtour)" }).click()
+      page.getByRole("button", { name: "Download editable backup" }).click()
     ]);
     await projectDownload.saveAs(backupPath);
     assert((await stat(backupPath)).size > 10_000, "The editable project download is unexpectedly small.");
 
-    const releaseHref = await page.getByRole("link", { name: "Open final tour" }).getAttribute("href");
+    const releaseHref = await page.getByRole("link", { name: "Open finished tour" }).getAttribute("href");
     const release = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await release.goto(new URL(releaseHref, baseUrl).href);
     await release.locator(".pnlm-render-container canvas").waitFor({ timeout: 20_000 });
     assert(await release.locator(".scene-card").count() === 4, "Published tour must contain all four viewpoints.");
     await release.close();
 
-    await page.getByRole("button", { name: "Projects" }).click();
-    await page.getByRole("heading", { name: "Create or open a tour" }).waitFor();
+    await page.getByRole("button", { name: "Tours" }).click();
+    await page.getByRole("heading", { name: "Start a tour" }).waitFor();
+    await page.getByText("Create or open another tour", { exact: true }).click();
+    await page.getByText("Open saved work", { exact: true }).click();
     await page.locator("#editorProjectBackup").setInputFiles(backupPath);
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Open project backup" }).click();
-    await page.getByRole("heading", { name: "Upload panoramas" }).waitFor({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Open saved tour" }).click();
+    await page.getByRole("heading", { name: "Add 360 photos" }).waitFor({ timeout: 30_000 });
     await page.locator(".editor-upload-item").first().waitFor({ timeout: 30_000 });
-    assert(await page.locator(".editor-upload-item").count() === 4, "Restoring the editable project must recover all four panoramas.");
+    assert(await page.locator(".editor-upload-item").count() === 4, "Restoring the editable project must recover all four photos.");
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("heading", { name: "Organize rooms" }).waitFor();
+    await page.getByRole("heading", { name: "Name rooms and views" }).waitFor();
     const mobileLayout = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
       widestRoom: Math.max(...Array.from(document.querySelectorAll(".editor-room, .editor-project-scene")).map((element) => element.getBoundingClientRect().right), 0)
     }));
     assert(mobileLayout.scrollWidth <= mobileLayout.viewport && mobileLayout.widestRoom <= mobileLayout.viewport, `Rooms overflow on mobile: ${JSON.stringify(mobileLayout)}`);
+    await assertNoMobileOverflow(page, "Rooms");
+
+    await page.getByRole("button", { name: "Continue" }).click();
+    await assertSimpleStage(page, "Choose the look");
+    await assertNoMobileOverflow(page, "Look");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await assertSimpleStage(page, "Add ways to move");
+    await assertNoMobileOverflow(page, "Movement");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await assertSimpleStage(page, "Choose first views");
+    await assertNoMobileOverflow(page, "First views");
+    await page.getByRole("button", { name: "Check tour" }).click();
+    await assertSimpleStage(page, "Check and publish");
+    await assertNoMobileOverflow(page, "Publish");
 
     assert(consoleErrors.length === 0, `Studio console errors: ${consoleErrors.join(" | ")}`);
-    console.log(JSON.stringify({ passed: true, stages: 7, rooms: 3, viewpoints: 4, transitionGate: true, arrivalGate: true, sameOriginPreview: true, embedTest: true, offlineSingleFile: true, localRelease: true, downloads: 2, projectRestore: true, mobileRooms: true }, null, 2));
+    console.log(JSON.stringify({ passed: true, stages: 7, noviceDefault: true, visibleActionBudget: true, rooms: 3, viewpoints: 4, movementGate: true, arrivalGate: true, sameOriginPreview: true, embedTest: true, offlineSingleFile: true, localRelease: true, downloads: 2, projectRestore: true, mobileWizard: true }, null, 2));
   } finally {
     if (browser) await browser.close();
     server.kill("SIGTERM");

@@ -9,12 +9,12 @@
   const stageOrder = ["start", "upload", "rooms", "light", "links", "arrival", "export"];
   const stageLabels = {
     start: "Start",
-    upload: "Upload",
+    upload: "Photos",
     rooms: "Rooms",
-    light: "Color",
-    links: "Transitions",
-    arrival: "Arrival",
-    export: "Export"
+    light: "Look",
+    links: "Movement",
+    arrival: "First views",
+    export: "Publish"
   };
   const stageStorageKey = "raindigit-tour-studio-stage";
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
@@ -46,7 +46,7 @@
         <p class="editor-panel__title">360 Tour Studio</p>
       </div>
       <div class="editor-panel__header-actions">
-        <button class="editor-button" id="editorHome" type="button">Projects</button>
+        <button class="editor-button" id="editorHome" type="button">Tours</button>
         <button class="editor-button editor-button--icon" id="editorClose" type="button" aria-label="Hide tour studio" title="Hide tour studio">&times;</button>
       </div>
     </div>
@@ -55,126 +55,146 @@
       <div class="editor-progress__track"><i id="editorProgressFill"></i></div>
     </div>
     <div class="editor-panel__scene">
-      <button class="editor-button editor-button--icon" id="editorPreviousScene" type="button" aria-label="Previous panorama" title="Previous panorama">&larr;</button>
+      <button class="editor-button editor-button--icon" id="editorPreviousScene" type="button" aria-label="Previous 360 photo" title="Previous 360 photo">&larr;</button>
       <div>
         <span id="editorRoomName"></span>
         <strong class="editor-panel__scene-name" id="editorSceneName"></strong>
       </div>
-      <button class="editor-button editor-button--icon" id="editorNextScene" type="button" aria-label="Next panorama" title="Next panorama">&rarr;</button>
+      <button class="editor-button editor-button--icon" id="editorNextScene" type="button" aria-label="Next 360 photo" title="Next 360 photo">&rarr;</button>
     </div>
     <div class="editor-panel__content">
       <section class="editor-stage-panel" data-stage-panel="start">
-        <div class="editor-step-heading"><span>Start</span><h2>Create or open a tour</h2></div>
+        <div class="editor-step-heading"><span>Start</span><h2>Start a tour</h2></div>
         <div class="editor-current-project" id="editorCurrentProject" hidden>
           <div><strong id="editorCurrentProjectTitle"></strong><span id="editorCurrentProjectMeta"></span></div>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorOpenWorkspace" type="button">Continue current project</button>
         </div>
-        <div class="editor-start-block">
-          <strong>New project</strong>
-          <label class="editor-field editor-field--stacked">
-            <span>Project title</span>
-            <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 3D Tour" />
-          </label>
-          <button class="editor-button editor-button--primary editor-button--wide" id="editorCreateWorkspace" type="button">Create new project</button>
-        </div>
-        <div class="editor-start-block">
-          <strong>Open editable project</strong>
-          <label class="editor-file-picker">
-            <span id="editorProjectBackupName">Choose .rdtour file</span>
-            <input id="editorProjectBackup" type="file" accept=".rdtour,application/zip" />
-          </label>
-          <button class="editor-button editor-button--wide" id="editorRestoreProject" type="button" disabled>Open project backup</button>
-        </div>
+        <details class="editor-disclosure" id="editorProjectOptions">
+          <summary id="editorProjectOptionsLabel">Create or open another tour</summary>
+          <div class="editor-start-block">
+            <strong>New tour</strong>
+            <label class="editor-field editor-field--stacked">
+              <span>Tour name</span>
+              <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 360 Tour" />
+            </label>
+            <button class="editor-button editor-button--primary editor-button--wide" id="editorCreateWorkspace" type="button">Create tour</button>
+          </div>
+          <details class="editor-disclosure editor-disclosure--compact">
+            <summary>Open saved work</summary>
+            <div class="editor-start-block">
+              <label class="editor-file-picker">
+                <span id="editorProjectBackupName">Choose saved tour</span>
+                <input id="editorProjectBackup" type="file" accept=".rdtour,application/zip" />
+              </label>
+              <button class="editor-button editor-button--wide" id="editorRestoreProject" type="button" disabled>Open saved tour</button>
+            </div>
+          </details>
+        </details>
       </section>
       <section class="editor-stage-panel" data-stage-panel="upload">
-        <div class="editor-step-heading"><span>Step 1</span><h2>Upload panoramas</h2></div>
+        <div class="editor-step-heading"><span>Step 1</span><h2>Add 360 photos</h2></div>
         <label class="editor-upload-zone">
-          <strong>Add stitched Insta360 panoramas</strong>
-          <span>Original 2:1 JPG files. Paired DNG files stay in your camera archive.</span>
+          <strong>Choose 360 JPG photos</strong>
+          <span>Use the stitched photos exported by your 360 camera.</span>
           <input id="editorImportFiles" type="file" accept="image/jpeg,.jpg,.jpeg" multiple />
         </label>
         <p class="editor-empty" id="editorProjectEmpty"></p>
-        <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded panoramas"></div>
+        <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded 360 photos"></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="rooms">
-        <div class="editor-step-heading"><span>Step 2</span><h2>Organize rooms</h2></div>
+        <div class="editor-step-heading"><span>Step 2</span><h2>Name rooms and views</h2></div>
         <div class="editor-section-label"><strong>Rooms</strong></div>
         <div class="editor-room-list" id="editorRoomList" aria-label="Project rooms"></div>
-        <div class="editor-add-room">
-          <label class="editor-field editor-field--stacked">
-            <span>Room name</span>
-            <input id="editorNewRoomName" type="text" maxlength="80" autocomplete="off" value="Room 2" />
-          </label>
-          <button class="editor-button" id="editorAddRoom" type="button">Add room</button>
-        </div>
-        <div class="editor-section-label"><strong>Panoramas</strong><span id="editorAssignmentStatus"></span></div>
-        <div class="editor-project-order" id="editorProjectOrder" aria-label="Panorama room assignments"></div>
+        <details class="editor-disclosure editor-disclosure--compact">
+          <summary>Add another room</summary>
+          <div class="editor-add-room">
+            <label class="editor-field editor-field--stacked">
+              <span>Room name</span>
+              <input id="editorNewRoomName" type="text" maxlength="80" autocomplete="off" value="Room 2" />
+            </label>
+            <button class="editor-button editor-button--wide" id="editorAddRoom" type="button">Add room</button>
+          </div>
+        </details>
+        <div class="editor-section-label"><strong>Photos</strong><span id="editorAssignmentStatus"></span></div>
+        <div class="editor-project-order" id="editorProjectOrder" aria-label="360 photo room assignments"></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="light">
-        <div class="editor-step-heading"><span>Step 3</span><h2>Color and light</h2></div>
-        <div class="editor-image__controls" id="editorImageControls"></div>
-        <div class="editor-local-header">
-          <strong>Local areas</strong>
-          <button class="editor-button" id="editorAddAdjustment" type="button">Add area</button>
-        </div>
-        <div class="editor-adjustment-list" id="editorAdjustmentList"></div>
-        <div class="editor-adjustment-controls" id="editorAdjustmentControls"></div>
+        <div class="editor-step-heading"><span>Step 3</span><h2>Choose the look</h2></div>
+        <div class="editor-presets" id="editorImagePresets" aria-label="Picture style"></div>
+        <details class="editor-disclosure editor-disclosure--compact">
+          <summary>Fine tune picture</summary>
+          <div class="editor-image__controls" id="editorImageControls"></div>
+          <div class="editor-local-header">
+            <strong>Light areas</strong>
+            <button class="editor-button" id="editorAddAdjustment" type="button">Add light area</button>
+          </div>
+          <div class="editor-adjustment-list" id="editorAdjustmentList"></div>
+          <div class="editor-adjustment-controls" id="editorAdjustmentControls"></div>
+        </details>
       </section>
       <section class="editor-stage-panel" data-stage-panel="links">
-        <div class="editor-step-heading"><span>Step 4</span><h2>Transitions</h2></div>
+        <div class="editor-step-heading"><span>Step 4</span><h2>Add ways to move</h2></div>
         <div class="editor-hotspot-list" id="editorHotspotList"></div>
         <div class="editor-panel__actions">
-          <button class="editor-button editor-button--primary" id="editorPlace" type="button">Place selected point</button>
+          <button class="editor-button" id="editorPlace" type="button">Move selected point</button>
           <button class="editor-button" id="editorRemoveLink" type="button">Remove</button>
         </div>
-        <div class="editor-new-link">
-          <label class="editor-field editor-field--stacked"><span>Destination</span><select id="editorLinkTarget" aria-label="Transition destination"></select></label>
-          <label class="editor-field editor-field--stacked"><span>Marker type</span><select id="editorLinkKind" aria-label="Transition marker type"><option value="doorway">Walk through</option><option value="viewpoint">Other camera viewpoint</option></select></label>
-          <label class="editor-field editor-field--stacked"><span>Label</span><input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" /></label>
-          <button class="editor-button editor-button--wide" id="editorAddLink" type="button">Add transition</button>
+        <div class="editor-new-link" id="editorNewLink">
+          <label class="editor-field editor-field--stacked"><span>Move to</span><select id="editorLinkTarget" aria-label="Move to"></select></label>
+          <details class="editor-disclosure editor-disclosure--compact">
+            <summary>Link options</summary>
+            <label class="editor-field editor-field--stacked"><span>Movement type</span><select id="editorLinkKind" aria-label="Movement type"><option value="doorway">Walk to another room</option><option value="viewpoint">Move inside this room</option></select></label>
+            <label class="editor-field editor-field--stacked"><span>Button name</span><input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" /></label>
+          </details>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorAddLink" type="button">Add and place</button>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
-        <div class="editor-step-heading"><span>Step 5</span><h2>Arrival views</h2></div>
+        <div class="editor-step-heading"><span>Step 5</span><h2>Choose first views</h2></div>
         <div class="editor-default-view">
-          <div><strong>Default viewpoint</strong><span id="editorDefaultView"></span></div>
-          <button class="editor-button editor-button--wide" id="editorSaveSceneView" type="button">Use current view as default</button>
+          <div><strong>Room opening view</strong><span id="editorDefaultView"></span></div>
+          <button class="editor-button editor-button--wide" id="editorSaveSceneView" type="button">Use as room opening</button>
         </div>
         <div class="editor-hotspot-list" id="editorArrivalList"></div>
         <p class="editor-empty" id="editorArrivalHelp"></p>
         <div class="editor-panel__actions">
-          <button class="editor-button editor-button--primary" id="editorEditArrival" type="button">Set arrival view</button>
-          <button class="editor-button editor-button--primary" id="editorSaveArrival" type="button">Save arrival view</button>
+          <button class="editor-button editor-button--primary" id="editorEditArrival" type="button">Choose destination view</button>
+          <button class="editor-button editor-button--primary" id="editorSaveArrival" type="button">Use as destination view</button>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="export">
-        <div class="editor-step-heading"><span>Step 6</span><h2>Review and export</h2></div>
+        <div class="editor-step-heading"><span>Step 6</span><h2>Check and publish</h2></div>
         <div class="editor-export-summary" id="editorExportSummary"></div>
         <div class="editor-readiness" id="editorReadiness" role="status"></div>
-        <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open review preview</a>
-        <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Prepare final files</button>
+        <details class="editor-disclosure editor-disclosure--compact" id="editorPreviewOptions">
+          <summary id="editorPreviewOptionsLabel">Check the tour first</summary>
+          <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open tour preview</a>
+        </details>
+        <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build the tour</button>
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
           <div class="editor-publish-card">
-            <strong>1. Test the finished tour</strong>
-            <a class="editor-button editor-button--wide" id="editorEmbedTestLink" target="_blank" rel="noopener">Open website embed test</a>
+            <strong>Your tour is ready</strong>
+            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadSingle" download="raindigit-360-tour.html">Download website file</a>
           </div>
-          <div class="editor-publish-card">
-            <strong>2. Download the two delivery files</strong>
-            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadSingle" download="raindigit-360-tour.html">Download tour website (.html)</a>
-            <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable backup (.rdtour)</button>
-          </div>
-          <div class="editor-publish-card">
-            <strong>3. Install on a website</strong>
-            <span>Upload the HTML file, enter its public URL, then paste the generated iframe into the page.</span>
-            <label class="editor-field editor-field--stacked">
-              <span>Published tour URL</span>
-              <input id="editorInstallUrl" type="url" value="./raindigit-360-tour.html" autocomplete="off" />
-            </label>
-            <textarea class="editor-embed-code" id="editorEmbedCode" readonly aria-label="Website embed code"></textarea>
-            <button class="editor-button editor-button--wide" id="editorCopyEmbed" type="button">Copy embed code</button>
-          </div>
+          <details class="editor-disclosure editor-disclosure--compact">
+            <summary>Test on a website</summary>
+            <a class="editor-button editor-button--wide" id="editorEmbedTestLink" target="_blank" rel="noopener">Open sample website</a>
+          </details>
+          <details class="editor-disclosure editor-disclosure--compact">
+            <summary>Add it to a website</summary>
+            <div class="editor-publish-card">
+              <span>Upload the downloaded file, then enter its web address.</span>
+              <label class="editor-field editor-field--stacked">
+                <span>Tour web address</span>
+                <input id="editorInstallUrl" type="url" value="./raindigit-360-tour.html" autocomplete="off" />
+              </label>
+              <textarea class="editor-embed-code" id="editorEmbedCode" readonly aria-label="Website code"></textarea>
+              <button class="editor-button editor-button--wide" id="editorCopyEmbed" type="button">Copy website code</button>
+            </div>
+          </details>
           <details class="editor-advanced">
-            <summary>Advanced hosting</summary>
+            <summary>Backups and advanced files</summary>
+            <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable backup</button>
             <a class="editor-button editor-button--wide" id="editorDownloadZip" download="raindigit-360-tour.zip">Download folder package (.zip)</a>
           </details>
         </div>
@@ -191,7 +211,7 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectOptions", "ProjectOptionsLabel", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
 
@@ -285,13 +305,13 @@
     });
     const index = stageOrder.indexOf(state.activeStage);
     elements.ProgressLabel.textContent = stageLabels[state.activeStage];
-    elements.ProgressCount.textContent = `${index + 1} of ${stageOrder.length}`;
-    elements.ProgressFill.style.width = `${(index + 1) / stageOrder.length * 100}%`;
+    elements.ProgressCount.textContent = state.activeStage === "start" ? "Ready" : `${index} of ${stageOrder.length - 1}`;
+    elements.ProgressFill.style.width = `${index / (stageOrder.length - 1) * 100}%`;
     elements.Home.hidden = state.activeStage === "start";
     elements.Back.hidden = ["start", "upload"].includes(state.activeStage);
     elements.Continue.hidden = ["start", "export"].includes(state.activeStage);
     elements.Continue.disabled = state.activeStage === "upload" && !state.workspaceProject?.scenes?.length;
-    elements.Continue.textContent = state.activeStage === "arrival" ? "Review" : "Continue";
+    elements.Continue.textContent = state.activeStage === "arrival" ? "Check tour" : "Continue";
   }
 
   function moveWorkspaceScene(index, direction) {
@@ -305,12 +325,13 @@
   function renderStartPanel() {
     const project = state.workspaceProject;
     elements.CurrentProject.hidden = !project;
+    elements.ProjectOptions.open = !project;
+    elements.ProjectOptionsLabel.textContent = project ? "Create or open another tour" : "Create or open a tour";
     if (project) {
-      elements.ProjectTitle.value = project.title;
       elements.CurrentProjectTitle.textContent = project.title;
       const rooms = new Set(project.scenes.filter((scene) => scene.space !== "room-unassigned").map((scene) => scene.space)).size;
-      elements.CurrentProjectMeta.textContent = `${project.scenes.length} panorama${project.scenes.length === 1 ? "" : "s"} · ${rooms} room${rooms === 1 ? "" : "s"}`;
-      elements.OpenWorkspace.textContent = project.scenes.length ? "Continue current project" : "Continue setup";
+      elements.CurrentProjectMeta.textContent = `${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"} · ${rooms} room${rooms === 1 ? "" : "s"}`;
+      elements.OpenWorkspace.textContent = project.scenes.length ? "Continue this tour" : "Add photos";
     }
   }
 
@@ -320,7 +341,7 @@
     elements.ProjectEmpty.hidden = Boolean(project?.scenes?.length);
     elements.ProjectEmpty.textContent = state.importing
       ? `Preparing ${state.importProgress.current} of ${state.importProgress.total}`
-      : project ? "No panoramas uploaded yet." : "Create a project first.";
+      : project ? "No 360 photos yet." : "Create a tour first.";
     elements.UploadList.replaceChildren();
     if (!project) return;
     for (const scene of project.scenes) {
@@ -333,13 +354,13 @@
       const title = document.createElement("strong");
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
-      dimensions.textContent = "2:1 panorama ready";
+      dimensions.textContent = "360 photo ready";
       details.append(title, dimensions);
       const remove = document.createElement("button");
       remove.className = "editor-button editor-button--icon editor-button--danger";
       remove.type = "button";
       remove.textContent = "×";
-      remove.title = "Remove panorama";
+      remove.title = "Remove 360 photo";
       remove.setAttribute("aria-label", `Remove ${scene.title}`);
       remove.addEventListener("click", () => removeWorkspaceScene(scene.id, scene.title, "upload"));
       row.append(thumb, details, remove);
@@ -387,7 +408,7 @@
       return;
     }
     if (project.scenes.some((scene) => scene.space === roomId)) {
-      setStatus(`Move panoramas out of ${room.label} first`);
+      setStatus(`Move the photos out of ${room.label} first`);
       return;
     }
     project.rooms = rooms.filter((candidate) => candidate.id !== roomId);
@@ -408,7 +429,7 @@
       const remove = row.querySelector("[data-remove-room]");
       if (remove) {
         remove.disabled = count > 0 || projectRooms(project).length === 1;
-        remove.title = count > 0 ? "Move its panoramas before removing" : "Remove empty room";
+        remove.title = count > 0 ? "Move its photos before removing" : "Remove empty room";
       }
     });
   }
@@ -468,17 +489,8 @@
         title.maxLength = 80;
         title.setAttribute("aria-label", "Viewpoint name");
         title.addEventListener("input", () => { scene.title = title.value; setStatus("Viewpoint changed"); });
-        const subtitle = document.createElement("input");
-        subtitle.value = scene.subtitle || "";
-        subtitle.maxLength = 120;
-        subtitle.placeholder = "View description";
-        subtitle.setAttribute("aria-label", "Viewpoint description");
-        subtitle.addEventListener("input", () => { scene.subtitle = subtitle.value; setStatus("Viewpoint changed"); });
-        fields.append(title, subtitle);
-        const controls = document.createElement("div");
-        controls.className = "editor-project-scene__controls";
         const roomSelect = document.createElement("select");
-        roomSelect.setAttribute("aria-label", `Move ${scene.title} to room`);
+        roomSelect.setAttribute("aria-label", `Room for ${scene.title}`);
         for (const candidate of rooms) {
           const option = document.createElement("option");
           option.value = candidate.id;
@@ -493,6 +505,20 @@
           setStatus(`${scene.title} assigned to ${targetRoom.label}`);
           updateRoomSummary();
         });
+        fields.append(title, roomSelect);
+
+        const options = document.createElement("details");
+        options.className = "editor-scene-options";
+        const summary = document.createElement("summary");
+        summary.textContent = "More options";
+        const subtitle = document.createElement("input");
+        subtitle.value = scene.subtitle || "";
+        subtitle.maxLength = 120;
+        subtitle.placeholder = "Short description";
+        subtitle.setAttribute("aria-label", "View description");
+        subtitle.addEventListener("input", () => { scene.subtitle = subtitle.value; setStatus("View changed"); });
+        const controls = document.createElement("div");
+        controls.className = "editor-project-scene__controls";
         const index = project.scenes.indexOf(scene);
         const up = document.createElement("button");
         up.className = "editor-button editor-button--icon";
@@ -524,8 +550,9 @@
         remove.title = "Remove viewpoint";
         remove.setAttribute("aria-label", `Remove ${scene.title}`);
         remove.addEventListener("click", () => removeWorkspaceScene(scene.id, scene.title, "rooms"));
-        controls.append(roomSelect, up, down, start, remove);
-        row.append(thumb, fields, controls);
+        controls.append(up, down, start, remove);
+        options.append(summary, subtitle, controls);
+        row.append(thumb, fields, options);
         elements.ProjectOrder.appendChild(row);
     }
     updateRoomSummary();
@@ -552,7 +579,7 @@
       body: JSON.stringify({ action: "create", title: elements.ProjectTitle.value, replace })
     });
     if (response.status === 409 && !replace) {
-      if (window.confirm("Replace the existing local project? Its imported workspace and draft will be removed. Camera originals and the Killarney source tour remain unchanged.")) return createWorkspace(true);
+      if (window.confirm("Replace the current tour? Its local edits and imported copies will be removed. Original camera photos stay safe.")) return createWorkspace(true);
       return null;
     }
     if (!response.ok) throw new Error((await response.json()).error || `Could not create project (${response.status})`);
@@ -565,17 +592,17 @@
 
   async function saveWorkspaceStructure(nextStage = null) {
     const project = state.workspaceProject;
-    if (!project?.scenes?.length) throw new Error("Import at least one panorama first.");
+    if (!project?.scenes?.length) throw new Error("Add at least one 360 photo first.");
     const rooms = projectRooms(project).filter((room) => room.label.trim());
     if (!rooms.length) throw new Error("Create at least one room.");
     const roomIds = new Set(rooms.map((room) => room.id));
-    if (project.scenes.some((scene) => !roomIds.has(scene.space))) throw new Error("Assign every panorama to a room.");
+    if (project.scenes.some((scene) => !roomIds.has(scene.space))) throw new Error("Choose a room for every photo.");
     const response = await fetch(studioUrl("workspace-project", false), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         action: "structure",
-        title: elements.ProjectTitle.value,
+        title: project.title,
         rooms,
         firstScene: project.firstScene,
         sceneIds: project.scenes.map((scene) => scene.id),
@@ -641,7 +668,7 @@
         state.workspaceProject = body.project;
         imported += 1;
       }
-      setStatus(`${imported} panorama${imported === 1 ? "" : "s"} imported`);
+      setStatus(`${imported} photo${imported === 1 ? "" : "s"} added`);
       window.sessionStorage.setItem(stageStorageKey, "upload");
       window.location.assign(workspaceEditorUrl());
     } catch (error) {
@@ -668,7 +695,7 @@
     if (!scene.hotspots.length) {
       const empty = document.createElement("p");
       empty.className = "editor-empty";
-      empty.textContent = "No transitions in this panorama.";
+      empty.textContent = "No movement buttons in this view.";
       container.appendChild(empty);
       return;
     }
@@ -680,8 +707,8 @@
         ? "Place point"
         : targetStage === "arrival" && hotspot.arrivalConfirmed === false
           ? "Set arrival"
-          : `${roundCoordinate(hotspot.pitch)} / ${roundCoordinate(hotspot.yaw)}`;
-      button.innerHTML = `<span class="editor-hotspot__type">${hotspot.kind === "viewpoint" ? "V" : "W"}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords"></span>`;
+          : "Ready";
+      button.innerHTML = `<span class="editor-hotspot__type">${hotspot.kind === "viewpoint" ? "◎" : "↗"}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords"></span>`;
       button.querySelector(".editor-hotspot__label").textContent = hotspot.label;
       button.querySelector(".editor-hotspot__coords").textContent = pending;
       button.addEventListener("click", () => setSelected(scene.id, hotspotIndex, targetStage));
@@ -692,8 +719,9 @@
   function renderHotspotList(scene) {
     renderHotspotButtons(elements.HotspotList, scene, "links");
     elements.Place.disabled = !selectedHotspot();
+    elements.Place.hidden = !selectedHotspot();
     elements.Place.classList.toggle("is-active", state.placement?.type === "hotspot");
-    elements.Place.textContent = state.placement?.type === "hotspot" ? "Click panorama to place" : "Place selected point";
+    elements.Place.textContent = state.placement?.type === "hotspot" ? "Click the photo" : "Move selected point";
     const selectedIndex = state.selected?.sceneId === scene.id ? state.selected.hotspotIndex : -1;
     elements.RemoveLink.hidden = selectedIndex < api.getBaseHotspotCount(scene.id);
     renderLinkCreator(scene);
@@ -705,7 +733,7 @@
 
   function suggestedLinkLabel() {
     const targetScene = api.sceneById[elements.LinkTarget.value];
-    if (elements.LinkKind.value === "viewpoint") return `View ${targetScene?.title || "destination"}`;
+    if (elements.LinkKind.value === "viewpoint") return `Go to ${targetScene?.title || "destination"}`;
     return `Walk to ${targetScene?.spaceLabel || targetScene?.title || "destination"}`;
   }
 
@@ -718,6 +746,7 @@
       option.textContent = `${candidate.spaceLabel || candidate.title} - ${candidate.title}`;
       elements.LinkTarget.appendChild(option);
     });
+    elements.NewLink.hidden = elements.LinkTarget.options.length === 0;
     if ([...elements.LinkTarget.options].some((option) => option.value === selectedTarget)) elements.LinkTarget.value = selectedTarget;
     if (state.linkDraftSceneId !== scene.id) {
       state.linkDraftSceneId = scene.id;
@@ -730,12 +759,11 @@
   }
 
   function renderArrivalPanel(scene) {
-    const view = api.getSceneView(scene.id);
-    elements.DefaultView.textContent = `${roundCoordinate(view.pitch)}° / ${roundCoordinate(view.yaw)}° / ${roundCoordinate(view.hfov)}°`;
+    elements.DefaultView.textContent = "Saved";
     renderHotspotButtons(elements.ArrivalList, scene, "arrival");
     const selected = selectedHotspot();
     if (!selected) {
-      elements.ArrivalHelp.textContent = "Select a transition above.";
+      elements.ArrivalHelp.textContent = "Select a movement above.";
       elements.EditArrival.disabled = true;
       elements.SaveArrival.hidden = true;
       return;
@@ -787,6 +815,29 @@
       row.append(input, output);
       label.append(name, row);
       elements.ImageControls.appendChild(label);
+    });
+  }
+
+  function renderImagePresets(sceneId) {
+    const presets = [
+      { label: "Natural", values: { brightness: 100, contrast: 100, saturation: 100, warmth: 0 } },
+      { label: "Bright", values: { brightness: 106, contrast: 102, saturation: 103, warmth: 1 } },
+      { label: "Warm", values: { brightness: 103, contrast: 101, saturation: 104, warmth: 5 } }
+    ];
+    const current = api.getSceneAdjustment(sceneId);
+    elements.ImagePresets.replaceChildren();
+    presets.forEach((preset) => {
+      const button = document.createElement("button");
+      button.className = `editor-preset${Object.entries(preset.values).every(([key, value]) => current[key] === value) ? " is-active" : ""}`;
+      button.type = "button";
+      button.textContent = preset.label;
+      button.addEventListener("click", () => {
+        api.setSceneAdjustment(sceneId, preset.values);
+        setStatus(`${preset.label} look selected`);
+        renderImagePresets(sceneId);
+        renderImageControls(sceneId);
+      });
+      elements.ImagePresets.appendChild(button);
     });
   }
 
@@ -858,10 +909,10 @@
     const place = document.createElement("button");
     place.className = `editor-button${state.placement?.type === "adjustment" ? " is-active" : ""}`;
     place.type = "button";
-    place.textContent = state.placement?.type === "adjustment" ? "Click panorama to place" : "Place area";
+    place.textContent = state.placement?.type === "adjustment" ? "Click the photo" : "Place area";
     place.addEventListener("click", () => {
       state.placement = state.placement?.type === "adjustment" ? null : { type: "adjustment", id: selected.id };
-      setStatus(state.placement ? "Click the panorama to position the area" : "Area placement cancelled");
+      setStatus(state.placement ? "Click the photo to position the area" : "Area placement cancelled");
       renderLocalAdjustments(sceneId);
     });
     const remove = document.createElement("button");
@@ -893,27 +944,29 @@
       const adjustment = api.getSceneAdjustment(scene.id);
       return adjustment.brightness !== 100 || adjustment.contrast !== 100 || adjustment.saturation !== 100 || adjustment.warmth !== 0 || api.getLocalAdjustments(scene.id).length > 0;
     }).length;
-    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Transitions</span></div><div><strong>${adjusted}</strong><span>Color edits</span></div>`;
+    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Moves</span></div><div><strong>${adjusted}</strong><span>Picture changes</span></div>`;
     const readiness = releaseReadiness();
     elements.Readiness.classList.toggle("is-ready", readiness.ready);
     elements.Readiness.textContent = readiness.ready
       ? "Ready to publish"
-      : `${readiness.pendingPositions} transition point${readiness.pendingPositions === 1 ? "" : "s"} and ${readiness.pendingArrivals} arrival view${readiness.pendingArrivals === 1 ? "" : "s"} still need review.`;
+      : `Finish ${readiness.pendingPositions} point${readiness.pendingPositions === 1 ? "" : "s"} and ${readiness.pendingArrivals} destination view${readiness.pendingArrivals === 1 ? "" : "s"}.`;
     const previewUrl = `${window.location.origin}${window.location.pathname}?preview=1${workspaceMode ? "&workspace=1" : ""}`;
     elements.PreviewLink.href = state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
-    elements.PreviewLink.textContent = state.release.ready ? "Open final tour" : "Open review preview";
+    elements.PreviewOptionsLabel.textContent = state.release.ready ? "View or test the tour" : "Check the tour first";
+    elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
     elements.Build.disabled = !workspaceMode || state.building || !readiness.ready;
-    elements.Build.textContent = state.building ? "Preparing files..." : "Prepare final files";
+    elements.Build.hidden = state.release.ready;
+    elements.Build.textContent = state.building ? "Building tour..." : "Build the tour";
     elements.ReleaseActions.hidden = !state.release.ready;
     elements.EmbedTestLink.href = `${endpoint}/release-embed-test.html`;
     elements.DownloadSingle.href = studioUrl("release-single-download");
     elements.DownloadZip.href = studioUrl("release-download");
     updateEmbedCode();
     elements.ReleaseStatus.textContent = !workspaceMode
-      ? "Create a workspace project before export."
+      ? "Create a tour before publishing."
       : state.release.ready
         ? `Website file ready${state.release.singleBytes ? ` - ${(state.release.singleBytes / 1024 / 1024).toFixed(1)} MB` : ""}`
-        : "No current package built.";
+        : "The tour has not been built yet.";
   }
 
   function releaseReadiness() {
@@ -937,7 +990,7 @@
       elements.EmbedCode.select();
       document.execCommand("copy");
     }
-    setStatus("Embed code copied");
+    setStatus("Website code copied");
   }
 
   function syncSelectedMarker() {
@@ -955,6 +1008,7 @@
     renderSceneFields(scene);
     renderHotspotList(scene);
     renderArrivalPanel(scene);
+    renderImagePresets(scene.id);
     renderImageControls(scene.id);
     renderLocalAdjustments(scene.id);
     renderExportPanel();
@@ -982,7 +1036,7 @@
       if (!selected) return;
       selected.hotspot.positionConfirmed = true;
       api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) });
-      setStatus(`Transition positioned at ${roundCoordinate(pitch)} / ${roundCoordinate(yaw)}`);
+      setStatus("Movement point placed");
     }
     if (state.placement?.type === "adjustment") {
       const scene = currentScene();
@@ -1062,7 +1116,7 @@
   async function continueWizard() {
     if (state.activeStage === "upload") {
       if (!state.workspaceProject?.scenes?.length) {
-        setStatus("Upload at least one panorama first");
+        setStatus("Add at least one 360 photo first");
         return;
       }
       ensureInitialRoom();
@@ -1079,11 +1133,11 @@
     }
     const readiness = releaseReadiness();
     if (state.activeStage === "links" && readiness.pendingPositions > 0) {
-      setStatus(`Place ${readiness.pendingPositions} transition point${readiness.pendingPositions === 1 ? "" : "s"} before continuing`);
+      setStatus(`Place ${readiness.pendingPositions} movement point${readiness.pendingPositions === 1 ? "" : "s"} before continuing`);
       return;
     }
     if (state.activeStage === "arrival" && readiness.pendingArrivals > 0) {
-      setStatus(`Save ${readiness.pendingArrivals} arrival view${readiness.pendingArrivals === 1 ? "" : "s"} before review`);
+      setStatus(`Choose ${readiness.pendingArrivals} destination view${readiness.pendingArrivals === 1 ? "" : "s"} before continuing`);
       return;
     }
     if (await saveDraft()) setStage(stageOffset(1));
@@ -1095,7 +1149,7 @@
     state.arrival = { ...state.selected };
     state.placement = null;
     api.viewer.loadScene(selected.hotspot.target);
-    setStatus("Rotate to the arrival view, then save it");
+    setStatus("Turn to the best view, then use what you see");
   }
 
   function saveArrivalView() {
@@ -1109,7 +1163,7 @@
       hfov: roundCoordinate(api.viewer.getHfov())
     });
     state.arrival = null;
-    setStatus("Arrival view updated");
+    setStatus("Destination view saved");
     if (api.viewer.getScene() !== originSceneId) api.viewer.loadScene(originSceneId);
     else render();
   }
@@ -1129,14 +1183,14 @@
     if (!workspaceMode || state.building) return;
     if (!await saveDraft()) return;
     state.building = true;
-    setStatus("Building release package...");
+    setStatus("Building tour...");
     renderExportPanel();
     try {
       const response = await fetch(studioUrl("build-release"), { method: "POST" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || `Build failed (${response.status})`);
       state.release = body;
-      setStatus("Release package ready");
+      setStatus("Tour ready");
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -1204,7 +1258,7 @@
   });
   elements.ProjectBackup.addEventListener("change", () => {
     const file = elements.ProjectBackup.files[0];
-    elements.ProjectBackupName.textContent = file?.name || "Choose .rdtour file";
+    elements.ProjectBackupName.textContent = file?.name || "Choose saved tour";
     elements.RestoreProject.disabled = !file;
   });
   elements.RestoreProject.addEventListener("click", () => restoreProject(false));
@@ -1264,7 +1318,7 @@
     }]);
     state.selected = { sceneId: scene.id, hotspotIndex: api.getBaseHotspotCount(scene.id) + additions.length };
     state.placement = { type: "hotspot" };
-    setStatus("Click panorama to place transition");
+    setStatus("Click the photo where this movement should appear");
     render();
   });
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
@@ -1347,12 +1401,12 @@
     const scene = currentScene();
     state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
     setStatus(!state.workspaceProject
-      ? "Ready to create a project"
+      ? "Ready to create a tour"
       : state.workspaceProject.scenes.length === 0
-        ? "Project ready. Upload panoramas."
+        ? "Tour ready. Add photos."
         : state.activeStage === "upload"
-          ? `${state.workspaceProject.scenes.length} panorama${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
-          : state.savedAt ? "Saved project loaded" : "Project ready");
+          ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
+          : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
     refreshReleaseStatus();
   }).catch((error) => {

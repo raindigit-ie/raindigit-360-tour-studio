@@ -295,7 +295,7 @@ async function writeWorkspaceProject(project) {
 
 async function createProjectBackup() {
   const project = await readWorkspaceProject();
-  if (!project || project.scenes.length === 0) throw new Error("Import at least one panorama before downloading a project backup.");
+  if (!project || project.scenes.length === 0) throw new Error("Add at least one 360 photo before downloading a saved tour.");
   try {
     await stat(workspaceDraftPath);
   } catch (error) {
@@ -439,7 +439,7 @@ const server = createServer(async (request, response) => {
       }
       const project = await readWorkspaceProject();
       if (!project || project.scenes.length === 0) {
-        replyJson(response, 404, { error: "Create a workspace and import at least one panorama first." });
+        replyJson(response, 404, { error: "Create a tour and add at least one 360 photo first." });
         return;
       }
       response.writeHead(200, responseHeaders("application/javascript; charset=utf-8"));
@@ -498,7 +498,7 @@ const server = createServer(async (request, response) => {
         }
         const incomingById = new Map(body.scenes.map((scene) => [scene?.id, scene]));
         if (incomingById.size !== existing.scenes.length || existing.scenes.some((scene) => !incomingById.has(scene.id))) {
-          replyJson(response, 400, { error: "Workspace structure must contain every panorama exactly once." });
+          replyJson(response, 400, { error: "Every 360 photo must appear once." });
           return;
         }
         const title = typeof body.title === "string" ? body.title.trim().slice(0, 100) : existing.title;
@@ -525,14 +525,14 @@ const server = createServer(async (request, response) => {
           const space = typeof incoming.space === "string" && /^[a-z0-9-]{1,60}$/i.test(incoming.space) ? incoming.space : "";
           const spaceLabel = typeof incoming.spaceLabel === "string" ? incoming.spaceLabel.trim().slice(0, 80) : "";
           if (!sceneTitle || !space || !spaceLabel || !roomIds.has(space)) {
-            replyJson(response, 400, { error: `Panorama ${original.id} needs a room, title and room label.` });
+            replyJson(response, 400, { error: `Photo ${original.id} needs a room and a name.` });
             return;
           }
           nextScenes.push({ ...original, title: sceneTitle, subtitle, space, spaceLabel });
         }
         const order = Array.isArray(body.sceneIds) ? body.sceneIds : nextScenes.map((scene) => scene.id);
         if (order.length !== nextScenes.length || new Set(order).size !== nextScenes.length || order.some((id) => !incomingById.has(id))) {
-          replyJson(response, 400, { error: "Panorama order must contain every workspace panorama exactly once." });
+          replyJson(response, 400, { error: "Every 360 photo must appear once." });
           return;
         }
         existing.title = title;
@@ -581,24 +581,24 @@ const server = createServer(async (request, response) => {
     if (!readOnly && url.pathname === `${routeEndpoint}/workspace-import` && request.method === "POST") {
       const project = await readWorkspaceProject();
       if (!project) {
-        replyJson(response, 409, { error: "Create a local workspace before importing panoramas." });
+        replyJson(response, 409, { error: "Create a tour before adding photos." });
         return;
       }
       const fileName = cleanHeader(request.headers["x-tour-file-name"]).replace(/[\\/]/g, "");
       if (!fileName || !/\.jpe?g$/i.test(fileName)) {
-        replyJson(response, 400, { error: "Only JPEG equirectangular panoramas are accepted." });
+        replyJson(response, 400, { error: "Choose a JPG photo exported by your 360 camera." });
         return;
       }
       const source = await readBody(request, maxUploadBytes);
       const dimensions = jpegDimensions(source);
       const ratio = dimensions ? dimensions.width / dimensions.height : 0;
       if (!dimensions || dimensions.width < 1600 || Math.abs(ratio - 2) > 0.02) {
-        replyJson(response, 400, { error: "The image must be a stitched 2:1 equirectangular JPEG panorama." });
+        replyJson(response, 400, { error: "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
         return;
       }
       const sourceHash = createHash("sha256").update(source).digest("hex");
       if (project.scenes.some((scene) => scene.sourceHash === sourceHash)) {
-        replyJson(response, 409, { error: "This panorama is already in the local workspace." });
+        replyJson(response, 409, { error: "This photo is already in the tour." });
         return;
       }
       const id = nextSceneId(project.scenes);
@@ -623,8 +623,8 @@ const server = createServer(async (request, response) => {
       }
       const scene = {
         id,
-        title: fileNameToTitle(fileName),
-        subtitle: "Imported panorama",
+        title: `View ${project.scenes.length + 1}`,
+        subtitle: "360 photo",
         space,
         spaceLabel,
         thumb,
@@ -648,7 +648,7 @@ const server = createServer(async (request, response) => {
       }
       const project = await readWorkspaceProject();
       if (!project || project.scenes.length === 0) {
-        replyJson(response, 409, { error: "Import at least one panorama before building a release." });
+        replyJson(response, 409, { error: "Add at least one 360 photo before building the tour." });
         return;
       }
       const builder = join(projectRoot, "scripts", "build-tour-release.mjs");

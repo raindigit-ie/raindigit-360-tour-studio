@@ -60,16 +60,15 @@ npm run studio
 
 Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
-1. **Start**: continue, create or restore an editable `.rdtour` project.
-2. **Upload**: add all stitched 2:1 JPG panoramas without room decisions.
-3. **Rooms**: manage a short room list, assign stable panorama cards, name and order viewpoints, then choose the opening view. Counts update immediately and empty rooms can be removed.
-4. **Color**: apply whole-panorama corrections or smooth local light/color areas.
-5. **Transitions**: create doorway or same-room viewpoint links, then deliberately place each marker.
-6. **Arrival**: compose the first view that a visitor sees after every directed transition.
-7. **Export**: review, test the real one-file website inside an iframe, create the
-   customer HTML, copy ready embed code and download the editable project backup.
+1. **Start**: continue the current tour or create a new one. Opening saved work stays collapsed until needed.
+2. **Photos**: add all ready 2:1 JPG photos without making room decisions.
+3. **Rooms**: name rooms and views, then assign each stable photo card. Additional rooms and per-photo options stay collapsed until needed.
+4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
+5. **Movement**: choose a destination, add its button and place it on the photo. Button type and label are optional advanced controls.
+6. **First views**: choose the useful first frame shown after each movement.
+7. **Publish**: check readiness, build and download one self-contained website file. Preview, website-install code, editable backup and folder package are separate collapsed options.
 
-Each **Continue** validates and saves the current step. The Export screen opens a
+Each **Continue** validates and saves the current step. The Publish screen opens a
 read-only same-origin preview, normally `http://127.0.0.1:8767/?preview=1&workspace=1`.
 The separate preview container remains available at `http://127.0.0.1:8768/?preview=1&workspace=1`.
 
@@ -79,12 +78,12 @@ Create the customer package only after review approval:
 npm run build:release
 ```
 
-The studio blocks export when a newly added transition has not been explicitly
-positioned or its arrival view has not been saved. This prevents a technically
+The studio blocks publishing when a newly added movement has not been explicitly
+positioned or its destination view has not been saved. This prevents a technically
 valid but unfinished navigation graph from reaching a customer.
 
 The release build creates `release/`, `dist/raindigit-360-tour.html` and the advanced
-`dist/raindigit-360-tour.zip`. The HTML is the simplest one-file handoff; the ZIP contains an
+`dist/raindigit-360-tour.zip`. The HTML is the normal one-file customer handoff; the ZIP contains an
 `INSTALL.txt` file with a ready iframe example. Generated output is not versioned;
 they are generated from the private workspace. See [the product workflow](docs/product-workflow.md)
 and [client handoff](docs/client-handoff.md) for the exact operator and website-installation paths.
@@ -99,10 +98,11 @@ The studio binds only to localhost and mounts the local project directory. The
 release service serves only the built static output at `http://127.0.0.1:8080`.
 
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
-studio journey covers create, upload,
-rooms, color, transition, arrival, preview, both downloads, local release,
-editable-project restore, direct offline opening of the downloaded HTML, iframe
-installation and the mobile Rooms layout.
+studio journey covers create, upload, rooms, look, movement, first views, preview,
+both downloads, local release, editable-tour restore, direct offline opening of
+the downloaded HTML, iframe installation and every wizard screen at mobile width.
+It also enforces a novice-default action budget and checks that technical terms do
+not leak into the visible task surface.
 
 ## Boundaries
 

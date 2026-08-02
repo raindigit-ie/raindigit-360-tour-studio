@@ -10,14 +10,23 @@
 
 The studio is local-first. It keeps source material and the editable workspace on the operator's machine. The release builder creates a separate static directory for a customer host. Do not treat the public directory as an editing project.
 
+## Novice-First Interface Contract
+
+- One screen has one user goal and at most one visually primary action.
+- The normal path uses everyday terms: **photos**, **rooms**, **look**, **movement**, **first views**, and **publish**.
+- Technical formats, professional image controls, link metadata, install code, backups and folder hosting start collapsed.
+- The interface never exposes coordinates, schema names or camera-engine terms in the default task surface.
+- A user can always go **Back** or return to **Tours**. Continue validates the current screen and explains one unresolved action in plain language.
+- The same contract is tested at desktop and 390x844 mobile widths. A disclosure may add capability, but it must not compete with the screen's main action while closed.
+
 ## Seven Screens
 
 1. **Start**
-   - Continue the current project, create a clearly named new project or open a `.rdtour` editable backup.
+   - Continue the current tour or create a clearly named new tour. Keep **Open saved work** collapsed.
    - Project replacement requires an explicit confirmation. Camera originals remain outside the workspace.
 
-2. **Upload**
-   - Import only stitched 2:1 equirectangular JPEG panoramas. The importer rejects non-JPEG files, non-2:1 images, undersized images and exact duplicate bytes.
+2. **Photos**
+   - Import ready 2:1 JPG photos. The importer rejects wrong files, undersized images and exact duplicate bytes with plain-language recovery instructions.
    - Upload all viewpoints first. Do not ask for room structure on this screen.
    - It produces private normalized browser derivatives and thumbnails while stripping metadata. The source files remain outside the release flow.
 
@@ -26,30 +35,29 @@ The studio is local-first. It keeps source material and the editable workspace o
    - Keep room management and panorama assignment as separate lists. Assign each stable panorama card to a room, rename rooms and viewpoints, reorder viewpoints and choose the opening camera position.
    - Update room counts immediately without moving a panorama card under the pointer. Allow an accidental empty room to be removed.
 
-4. **Color**
-   - Use restrained whole-panorama brightness, contrast, saturation and warm/cool corrections.
+4. **Look**
+   - Show Natural, Bright and Warm as the normal choice. Keep brightness, contrast, saturation and warm/cool controls under **Fine tune picture**.
    - Add any number of local circle/ellipse or square/rectangle light/color areas. Every area must fade to zero at its boundary so it cannot introduce a visible seam.
    - Inspect each correction at the panorama seam and at the edges of the corrected area.
 
-5. **Transitions**
+5. **Movement**
    - Create a link only where a visitor can move: a physical doorway/passage or another camera viewpoint.
-   - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. The suggested label names the target viewpoint or room accordingly.
+   - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. Keep marker type and custom name under **Link options**.
    - Select its type and destination, then use the explicit placement mode to put its marker. Rotating the panorama alone never moves a marker.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
    - A newly added transition remains incomplete until placement mode records an explicit point. The wizard must not advance while any transition says **Place point**.
 
-6. **Arrival**
+6. **First views**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
    - After saving the target composition, return to the transition's source panorama so the operator does not lose context.
-   - The wizard must not open Export while any new transition still says **Set arrival**.
+   - The wizard must not open Publish while any new movement still says **Set arrival**.
 
-7. **Export**
-   - Review the room, viewpoint, transition and color-edit counts, then open the same-origin read-only preview supplied by the studio.
-   - Build the static package only after the preview is accepted and the readiness gate is green.
-   - Open **Website embed test**. It embeds the actual self-contained HTML delivery, not a separate development build.
-   - Download `raindigit-360-tour.html` as the one-file customer installation and `raindigit-tour-project.rdtour` as the editable project backup.
-   - Enter the uploaded HTML URL and copy the generated iframe. Keep the folder ZIP under **Advanced hosting**.
+7. **Publish**
+   - Review the room, view, movement and picture-change counts and require a green readiness gate.
+   - Build the static package, then show **Download website file** as the only primary result.
+   - Keep preview/testing, website-install code, editable backup and folder ZIP in separate collapsed disclosures.
+   - `raindigit-360-tour.html` is the normal one-file customer installation. The editable backup is an operator asset, not part of the default customer handoff.
 
 ## Review Gate
 
@@ -61,7 +69,7 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 ## Build And Embed
 
-Use **Prepare final files** on the Export screen, or run `npm run build:release` after approval. The build validates the scene graph and panorama dimensions, rasterises approved look changes into public derivatives, generates thumbnails and writes:
+Use **Build the tour** on the Publish screen, or run `npm run build:release` after approval. The build validates the scene graph and image dimensions, rasterises approved look changes into public derivatives, generates thumbnails and writes:
 
 - `release/` - static deployable folder;
 - `dist/raindigit-360-tour.html` - self-contained tour with no adjacent runtime or media files;
