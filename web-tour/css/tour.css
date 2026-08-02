@@ -79,8 +79,9 @@ button {
 }
 
 .tour-brand__mark {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
+  padding: 2px;
   border-radius: 3px;
   object-fit: contain;
   background: #080806;
@@ -501,11 +502,11 @@ body.is-editor-open .toolbar {
   .topbar {
     top: 8px;
     left: 8px;
-    height: 42px;
+    height: 46px;
   }
 
-  .tour-brand { height: 34px; }
-  .tour-brand__mark { width: 28px; height: 28px; }
+  .tour-brand { height: 38px; }
+  .tour-brand__mark { width: 32px; height: 32px; }
   .tour-brand__text { display: none; }
   .icon-button { width: 34px; height: 34px; }
   .icon-button--rooms {

@@ -218,6 +218,7 @@ async function main() {
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");
     const embedRelease = await readFile(embedHtml, "utf8");
     assert(embedRelease.includes("Loading 360 tour...") && embedRelease.includes("requestIdleCallback") && embedRelease.includes("srcdoc"), "The paste-in HTML must preload and lazy-start the self-contained tour.");
+    assert(embedRelease.includes("raindigit-tour-fullscreen-fallback") && embedRelease.includes("webkitallowfullscreen") && embedRelease.includes("mozallowfullscreen"), "The paste-in HTML must handle mobile iframe fullscreen fallback.");
     const embedRuntime = embedRelease.match(/data:text\/javascript;base64,([A-Za-z0-9+/=]+)/)?.[1];
     assert(embedRuntime && Buffer.from(embedRuntime, "base64").toString("utf8").includes('"firstScene":"scene-002"'), "The paste-in HTML must preserve the first visible viewpoint.");
     assert(!embedRelease.includes("\n"), "The paste-in HTML must stay on one line for copy/paste.");
