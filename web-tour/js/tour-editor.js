@@ -18,9 +18,10 @@
   };
   const stageStorageKey = "raindigit-tour-studio-stage";
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
+  const hasSessionStage = stageOrder.includes(restoredStage) && restoredStage !== "start";
   const roundCoordinate = (value) => Math.round(value * 10) / 10;
   const state = {
-    activeStage: stageOrder.includes(restoredStage) ? restoredStage : "start",
+    activeStage: hasSessionStage ? restoredStage : "start",
     selected: null,
     selectedAdjustmentId: null,
     placement: null,
@@ -44,6 +45,7 @@
     arrivalQueueTotal: 0,
     arrivalLoading: false,
     arrivalSaving: false,
+    initializing: true,
     viewportSettling: false,
     viewerSettled: false,
     statusMessage: "Loading project"
@@ -528,6 +530,7 @@
     }
     studioLog("stage-change", { from: previousStage, to: stage }, true);
     render();
+    scheduleUiStateSave(`stage-${stage}`);
   }
 
   function stageOffset(offset) {
@@ -657,6 +660,7 @@
     state.placement = null;
     if (api.viewer.getScene() === task.sceneId) applyPendingFocus();
     else api.viewer.loadScene(task.sceneId);
+    scheduleUiStateSave(`stage-${stage}`);
   }
 
   function renderStages() {
@@ -1788,7 +1792,13 @@
       sceneMetadata: Object.fromEntries(api.scenes.map((scene) => [scene.id, { title: scene.title, subtitle: scene.subtitle || "" }])),
       sceneViews: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getSceneView(scene.id)])),
       sceneAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getSceneAdjustment(scene.id)])),
-      localAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getLocalAdjustments(scene.id)]))
+      localAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getLocalAdjustments(scene.id)])),
+      uiState: {
+        stage: state.activeStage,
+        selected: state.selected ? { ...state.selected } : null,
+        linkStep: state.linkStep,
+        lookSceneIndex: state.lookSceneIndex
+      }
     };
   }
 
@@ -1807,6 +1817,20 @@
     Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => api.setSceneView(sceneId, view));
     Object.entries(draft.sceneAdjustments || {}).forEach(([sceneId, adjustment]) => api.setSceneAdjustment(sceneId, adjustment));
     Object.entries(draft.localAdjustments || {}).forEach(([sceneId, adjustments]) => api.setLocalAdjustments(sceneId, adjustments));
+    if (!hasSessionStage && workspaceMode && stageOrder.includes(draft.uiState?.stage)) {
+      state.activeStage = draft.uiState.stage;
+      if (draft.uiState?.linkStep === "place" || draft.uiState?.linkStep === "review" || draft.uiState?.linkStep === "choose") {
+        state.linkStep = draft.uiState.linkStep;
+      }
+      if (Number.isInteger(draft.uiState?.lookSceneIndex)) {
+        state.lookSceneIndex = Math.max(0, Math.min(api.scenes.length - 1, draft.uiState.lookSceneIndex));
+      }
+      if (draft.uiState?.selected && typeof draft.uiState.selected.sceneId === "string" && Number.isInteger(draft.uiState.selected.hotspotIndex)) {
+        const scene = api.sceneById[draft.uiState.selected.sceneId];
+        if (scene?.hotspots[draft.uiState.selected.hotspotIndex]) state.selected = { ...draft.uiState.selected };
+      }
+      studioLog("ui-state-restored", { stage: state.activeStage, selected: state.selected }, true);
+    }
     state.savedAt = draft.updatedAt || null;
   }
 
@@ -1850,6 +1874,11 @@
       draftSaveTimer = 0;
       queueDraftSave(reason);
     }, delay);
+  }
+
+  function scheduleUiStateSave(reason) {
+    if (state.initializing || !workspaceMode || !state.workspaceProject?.scenes?.length || state.activeStage === "start") return;
+    scheduleDraftSave(reason, 120);
   }
 
   function openSceneAt(index) {
@@ -2410,6 +2439,7 @@
       resetArrivalQueue();
       focusNextArrivalTask("Open the destination and choose its first view");
     }
+    state.initializing = false;
     setStatus(state.activeStage === "start"
       ? "Choose how to begin"
       : !state.workspaceProject

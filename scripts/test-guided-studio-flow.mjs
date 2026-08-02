@@ -383,6 +383,21 @@ async function main() {
     assert(stageAfterMobileContinue.stage === "arrival", `Mobile continue did not advance: ${JSON.stringify(stageAfterMobileContinue)}`);
 
     await assertOneTask(page, "Choose what people see first");
+    await page.waitForFunction(async () => {
+      const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
+      const draft = await response.json();
+      return draft.uiState?.stage === "arrival";
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
+      return document.body.dataset.editorStage === "arrival" &&
+        snapshot?.selected &&
+        snapshot.activeSceneId === snapshot.selected.sceneId &&
+        snapshot.viewerLoaded;
+    });
+    await assertOneTask(page, "Choose what people see first");
+    await page.getByRole("button", { name: "Open destination" }).waitFor();
     await page.screenshot({ path: join(outputDir, "03-first-view-mobile.png"), fullPage: true });
     const visitedArrivalTasks = new Set();
     for (let index = 0; index < pendingBeforeArrival; index += 1) {

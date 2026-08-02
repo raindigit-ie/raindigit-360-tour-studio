@@ -178,7 +178,21 @@ function validateDraft(value) {
     typeof value.addedHotspots === "object" && !Array.isArray(value.addedHotspots) &&
     Object.entries(value.addedHotspots).every(([sceneId, hotspots]) => /^scene-[a-z0-9-]+$/i.test(sceneId) && Array.isArray(hotspots) && hotspots.length <= 60 && hotspots.every(isValidAddedHotspot))
   );
-  return validCoordinates && validAdjustments && validMetadata && validSceneViews && validLocalAdjustments && validAddedHotspots;
+  const validUiState = value.uiState === undefined || (
+    value.uiState && typeof value.uiState === "object" && !Array.isArray(value.uiState) &&
+    ["upload", "rooms", "light", "links", "arrival", "export"].includes(value.uiState.stage) &&
+    (value.uiState.linkStep === undefined || ["choose", "place", "review"].includes(value.uiState.linkStep)) &&
+    (value.uiState.lookSceneIndex === undefined || Number.isInteger(value.uiState.lookSceneIndex)) &&
+    (
+      value.uiState.selected === undefined || value.uiState.selected === null || (
+        value.uiState.selected && typeof value.uiState.selected === "object" && !Array.isArray(value.uiState.selected) &&
+        /^scene-[a-z0-9-]+$/i.test(value.uiState.selected.sceneId) &&
+        Number.isInteger(value.uiState.selected.hotspotIndex) &&
+        value.uiState.selected.hotspotIndex >= 0
+      )
+    )
+  );
+  return validCoordinates && validAdjustments && validMetadata && validSceneViews && validLocalAdjustments && validAddedHotspots && validUiState;
 }
 
 function validateWorkspaceProject(value) {
