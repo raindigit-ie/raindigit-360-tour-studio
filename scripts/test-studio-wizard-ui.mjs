@@ -105,6 +105,26 @@ async function markerProjection(page, editorId) {
   }, editorId);
 }
 
+async function navigationInventory(page, sceneId) {
+  return page.evaluate((id) => {
+    const api = window.__TOUR_EDITOR_API;
+    const model = api.sceneById[id].hotspots.map((_, index) => `${id}::${index}`);
+    const activeConfig = api.viewer.getScene() === id
+      ? (api.viewer.getConfig().hotSpots || []).filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::")).map((hotspot) => hotspot.id)
+      : [];
+    const dom = Array.from(document.querySelectorAll("[data-editor-hotspot-id]")).map((element) => element.dataset.editorHotspotId);
+    return { model, activeConfig, dom };
+  }, sceneId);
+}
+
+async function moveToNextScene(page, direction) {
+  const before = (await viewerPose(page)).sceneId;
+  await page.locator(direction > 0 ? "#editorNextScene" : "#editorPreviousScene").click();
+  await page.waitForFunction((sceneId) => window.__TOUR_EDITOR_API.viewer.getScene() !== sceneId, before);
+  await page.waitForFunction(() => window.__TOUR_EDITOR_API.viewer.isLoaded());
+  await page.waitForTimeout(100);
+}
+
 async function runMagick(arguments_) {
   for (const binary of ["magick", "convert"]) {
     try {
@@ -163,10 +183,12 @@ async function main() {
 
     await page.goto(`${baseUrl}/?edit=1`);
     await assertSimpleStage(page, "Start a tour");
-    assert(await page.getByText("Open saved work", { exact: true }).isVisible(), "Saved work must be available without cluttering the start screen.");
-    assert(!await page.getByLabel("Choose saved tour").isVisible(), "Saved-work controls must start collapsed.");
+    assert(await page.getByText("New tour", { exact: true }).isVisible(), "The start screen must offer a new tour.");
+    assert(await page.getByText("Open a tour", { exact: true }).isVisible(), "The start screen must offer an explicit project-file restore.");
+    assert(await page.locator("#editorProjectBackup").isVisible(), "The project-file picker must be available on the start screen.");
+    assert(!await page.getByText("Continue current project", { exact: true }).isVisible(), "The start screen must not expose an implicit previous project.");
     await page.getByLabel("Tour name").fill("Studio UI Journey");
-    await page.getByRole("button", { name: "Create tour" }).click();
+    await page.getByRole("button", { name: "Create new tour" }).click();
     await assertSimpleStage(page, "Add 360 photos");
 
     await page.locator("#editorImportFiles").setInputFiles(fixtures);
@@ -243,7 +265,7 @@ async function main() {
     const firstAfterSecondDrag = (await addedHotspots(page, sourceSceneId))[0];
     assert(JSON.stringify(firstBeforeSecondPlacement) === JSON.stringify(firstAfterSecondDrag), `Moving the second point changed the first point: ${JSON.stringify({ firstBeforeSecondPlacement, firstAfterSecondDrag })}`);
     await page.getByRole("button", { name: "Rotate view" }).click();
-    for (let index = 0; index < 3; index += 1) await page.locator("#editorNextScene").click();
+    for (let index = 0; index < 3; index += 1) await moveToNextScene(page, 1);
     assert((await viewerPose(page)).sceneId !== sourceSceneId, "The test must leave the source view before checking incomplete work routing.");
     await page.getByRole("button", { name: "Continue" }).click();
     await page.waitForFunction((id) => window.__TOUR_EDITOR_API.viewer.getScene() === id, sourceSceneId);
@@ -253,6 +275,27 @@ async function main() {
     const bothPlaced = await addedHotspots(page, sourceSceneId);
     assert(bothPlaced.length === 2 && bothPlaced.every((hotspot) => hotspot.positionConfirmed), `Both movements must keep independent confirmed positions: ${JSON.stringify(bothPlaced)}`);
     assert(bothPlaced[0].pitch !== bothPlaced[1].pitch || bothPlaced[0].yaw !== bothPlaced[1].yaw, "Two movements must not collapse to one coordinate.");
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      for (let index = 0; index < 4; index += 1) await moveToNextScene(page, 1);
+      const forwardInventory = await navigationInventory(page, sourceSceneId);
+      assert(JSON.stringify(forwardInventory.model) === JSON.stringify([`${sourceSceneId}::0`, `${sourceSceneId}::1`]), `Forward navigation changed the hotspot model: ${JSON.stringify(forwardInventory)}`);
+      assert(JSON.stringify(forwardInventory.activeConfig.sort()) === JSON.stringify(forwardInventory.model), `Forward navigation lost active Pannellum hotspots: ${JSON.stringify(forwardInventory)}`);
+      assert(JSON.stringify(forwardInventory.dom.sort()) === JSON.stringify(forwardInventory.model), `Forward navigation lost DOM hotspots: ${JSON.stringify(forwardInventory)}`);
+      for (let index = 0; index < 4; index += 1) await moveToNextScene(page, -1);
+      const backwardInventory = await navigationInventory(page, sourceSceneId);
+      assert(JSON.stringify(backwardInventory.model) === JSON.stringify([`${sourceSceneId}::0`, `${sourceSceneId}::1`]), `Backward navigation changed the hotspot model: ${JSON.stringify(backwardInventory)}`);
+      assert(JSON.stringify(backwardInventory.activeConfig.sort()) === JSON.stringify(backwardInventory.model), `Backward navigation lost active Pannellum hotspots: ${JSON.stringify(backwardInventory)}`);
+      assert(JSON.stringify(backwardInventory.dom.sort()) === JSON.stringify(backwardInventory.model), `Backward navigation lost DOM hotspots: ${JSON.stringify(backwardInventory)}`);
+    }
+    await page.evaluate(() => window.__RAINDIGIT_STUDIO_DEBUG__.flush());
+    const persistedDraft = await fetch(`${baseUrl}/__tour-editor/overrides?workspace=1`).then((response) => response.json());
+    assert(persistedDraft.addedHotspots[sourceSceneId]?.length === 2, `Autosave lost movement points after cyclic navigation: ${JSON.stringify(persistedDraft.addedHotspots[sourceSceneId])}`);
+    const studioLog = await fetch(`${baseUrl}/__tour-editor/studio-log`).then((response) => response.json());
+    const loggedEvents = studioLog.entries.map((entry) => entry.event);
+    for (const event of ["movement-added", "movement-placed", "scene-change-requested", "scene-change-complete", "draft-save-success", "runtime-hotspots-rebuild-complete"]) {
+      assert(loggedEvents.includes(event), `Studio diagnostics did not record ${event}.`);
+    }
+    assert(!JSON.stringify(studioLog).includes("data:image"), "Studio diagnostics must not retain embedded image data.");
     await page.getByRole("button", { name: "Continue" }).click();
     await assertSimpleStage(page, "Choose first views");
 
@@ -316,6 +359,8 @@ async function main() {
     ]);
     await projectDownload.saveAs(backupPath);
     assert((await stat(backupPath)).size > 10_000, "The editable project download is unexpectedly small.");
+    const backupEntries = (await execFileAsync("unzip", ["-Z1", backupPath])).stdout.split(/\r?\n/).filter(Boolean);
+    assert(!backupEntries.some((entry) => entry.includes("studio-debug")), `The editable project must exclude diagnostics: ${backupEntries.join(", ")}`);
 
     const releaseHref = await page.getByRole("link", { name: "Open finished tour" }).getAttribute("href");
     const release = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -326,11 +371,10 @@ async function main() {
 
     await page.getByRole("button", { name: "Tours" }).click();
     await page.getByRole("heading", { name: "Start a tour" }).waitFor();
-    await page.getByText("Create or open another tour", { exact: true }).click();
-    await page.getByText("Open saved work", { exact: true }).click();
+    assert(!await page.getByText("Continue this tour", { exact: true }).isVisible(), "Returning to Start must not list the local project.");
     await page.locator("#editorProjectBackup").setInputFiles(backupPath);
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Open saved tour" }).click();
+    await page.getByRole("button", { name: "Open project" }).click();
     await page.getByRole("heading", { name: "Add 360 photos" }).waitFor({ timeout: 30_000 });
     await page.locator(".editor-upload-item").first().waitFor({ timeout: 30_000 });
     assert(await page.locator(".editor-upload-item").count() === 4, "Restoring the editable project must recover all four photos.");

@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -17,6 +17,7 @@ const draftPath = process.env.INSTA360_TOUR_DRAFT_PATH ? resolve(process.env.INS
 const workspaceRoot = process.env.INSTA360_TOUR_WORKSPACE ? resolve(process.env.INSTA360_TOUR_WORKSPACE) : defaultWorkspaceRoot;
 const workspaceProjectPath = join(workspaceRoot, "tour-project.json");
 const workspaceDraftPath = join(workspaceRoot, "draft.json");
+const studioLogPath = join(workspaceRoot, "studio-debug.ndjson");
 const artifactRoot = process.env.INSTA360_TOUR_ARTIFACTS ? resolve(process.env.INSTA360_TOUR_ARTIFACTS) : join(projectRoot, "dist");
 const releaseRoot = process.env.INSTA360_TOUR_RELEASE ? resolve(process.env.INSTA360_TOUR_RELEASE) : join(projectRoot, "release");
 const releaseZipPath = join(artifactRoot, "raindigit-360-tour.zip");
@@ -30,6 +31,7 @@ const endpoint = previewMode ? "/__tour-preview" : "/__tour-editor";
 const previewEndpoint = "/__tour-preview";
 const maxUploadBytes = 128 * 1024 * 1024;
 const maxProjectBytes = 512 * 1024 * 1024;
+const maxStudioLogBytes = 5 * 1024 * 1024;
 
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Use a valid local port between 1024 and 65535.");
@@ -270,6 +272,58 @@ async function writeJsonAtomic(path, value) {
   await rename(temporaryPath, path);
 }
 
+function sanitiseLogValue(value, key = "", depth = 0) {
+  if (depth > 7) return "[depth limit]";
+  if (typeof value === "string") {
+    if (/token|password|secret|authorization|cookie/i.test(key)) return "[redacted]";
+    if (/^(?:data|blob):/i.test(value)) return `[${value.split(":", 1)[0]} URL omitted]`;
+    return value.length > 2000 ? `${value.slice(0, 2000)}...[truncated]` : value;
+  }
+  if (Array.isArray(value)) return value.slice(0, 200).map((item) => sanitiseLogValue(item, key, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).slice(0, 200).map(([childKey, childValue]) => [childKey, sanitiseLogValue(childValue, childKey, depth + 1)]));
+  }
+  return value;
+}
+
+async function rotateStudioLog() {
+  try {
+    if ((await stat(studioLogPath)).size < maxStudioLogBytes) return;
+    await rm(`${studioLogPath}.1`, { force: true });
+    await rename(studioLogPath, `${studioLogPath}.1`);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+async function appendStudioLogs(entries) {
+  await mkdir(workspaceRoot, { recursive: true });
+  await rotateStudioLog();
+  const receivedAt = new Date().toISOString();
+  const lines = entries.slice(0, 100).map((entry) => JSON.stringify({
+    receivedAt,
+    ...sanitiseLogValue(entry)
+  }));
+  if (lines.length) await appendFile(studioLogPath, `${lines.join("\n")}\n`, "utf8");
+  return lines.length;
+}
+
+async function readStudioLogTail() {
+  try {
+    const contents = await readFile(studioLogPath, "utf8");
+    return contents.trim().split(/\r?\n/).filter(Boolean).slice(-500).map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return { event: "invalid-log-line", raw: line.slice(0, 500) };
+      }
+    });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
 async function readWorkspaceProject() {
   try {
     const value = JSON.parse(await readFile(workspaceProjectPath, "utf8"));
@@ -423,9 +477,24 @@ const server = createServer(async (request, response) => {
         editor: readOnly ? "raindigit-tour-draft-preview" : "raindigit-tour-editor",
         writable: !readOnly,
         draftPath: activeDraftPath(url),
+        studioLogPath,
         workspace,
         workspaceAvailable: Boolean(await readWorkspaceProject())
       });
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/studio-log` && request.method === "GET") {
+      replyJson(response, 200, { entries: await readStudioLogTail() });
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/studio-log` && request.method === "POST") {
+      const body = await readJsonBody(request);
+      const entries = Array.isArray(body?.entries) ? body.entries : [];
+      if (!entries.length) {
+        replyJson(response, 400, { error: "At least one studio log entry is required." });
+        return;
+      }
+      replyJson(response, 202, { accepted: await appendStudioLogs(entries) });
       return;
     }
     if (url.pathname === `${routeEndpoint}/overrides` && request.method === "GET") {
@@ -761,6 +830,23 @@ const server = createServer(async (request, response) => {
     await serveFile(response, webRoot, relativePath);
   } catch (error) {
     const statusCode = error.code === "ENOENT" ? 404 : error.code === "ETOOLARGE" ? 413 : 500;
+    if (!previewMode && statusCode >= 500) {
+      try {
+        await appendStudioLogs([{
+          time: new Date().toISOString(),
+          sessionId: "server",
+          event: "server-request-error",
+          details: {
+            method: request.method,
+            pathname: url.pathname,
+            message: error.message,
+            stack: error.stack || ""
+          }
+        }]);
+      } catch (logError) {
+        console.warn(`Could not write studio diagnostics: ${logError.message}`);
+      }
+    }
     replyJson(response, statusCode, { error: statusCode === 404 ? "Not found" : error.message });
   }
 });

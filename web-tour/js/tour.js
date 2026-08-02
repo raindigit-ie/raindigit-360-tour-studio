@@ -15,6 +15,28 @@ const baseHotspotCounts = Object.fromEntries(scenes.map((scene) => [scene.id, sc
 const addedHotspots = Object.fromEntries(scenes.map((scene) => [scene.id, []]));
 const hotspotRebuildRevisions = Object.fromEntries(scenes.map((scene) => [scene.id, 0]));
 
+function emitTourDebug(event, details = {}) {
+  document.dispatchEvent(new CustomEvent("raindigit:tour-debug", {
+    detail: { event, details }
+  }));
+}
+
+function navigationHotspotInventory(sceneId) {
+  const scene = sceneById[sceneId];
+  const configured = configScenes[sceneId]?.hotSpots || [];
+  const activeSceneId = viewer?.getScene?.() || null;
+  return {
+    sceneId,
+    activeSceneId,
+    loaded: Boolean(viewer?.isLoaded?.()),
+    modelIds: (scene?.hotspots || []).map((_, index) => hotspotId(sceneId, index)),
+    configuredIds: configured.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::")).map((hotspot) => hotspot.id),
+    domIds: activeSceneId === sceneId
+      ? Array.from(document.querySelectorAll("[data-editor-hotspot-id]")).map((element) => element.dataset.editorHotspotId)
+      : []
+  };
+}
+
 function normaliseSceneAdjustment(adjustment = {}) {
   const clamp = (value, minimum, maximum, fallback) => {
     const numericValue = Number(value);
@@ -335,19 +357,28 @@ function rebuildSceneHotspots(sceneId) {
   const existingNavigationIds = sceneConfig.hotSpots
     .filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"))
     .map((hotspot) => hotspot.id);
+  emitTourDebug("runtime-hotspots-rebuild-start", navigationHotspotInventory(sceneId));
   if (viewer.getScene() === sceneId && !viewer.isLoaded()) {
     const localOverlays = sceneConfig.hotSpots.filter((hotspot) => hotspot.id?.startsWith("local-adjustment::"));
     sceneConfig.hotSpots.splice(0, sceneConfig.hotSpots.length, ...scene.hotspots.map((hotspot, hotspotIndex) => toPannellumHotspot(scene, hotspot, hotspotIndex)), ...localOverlays);
+    emitTourDebug("runtime-hotspots-rebuild-config-only", navigationHotspotInventory(sceneId));
     return;
   }
   existingNavigationIds.forEach((id) => removeLiveNavigationHotspot(sceneId, id));
   scene.hotspots.forEach((hotspot, hotspotIndex) => addLiveNavigationHotspot(sceneId, toPannellumHotspot(scene, hotspot, hotspotIndex)));
+  emitTourDebug("runtime-hotspots-rebuild-complete", navigationHotspotInventory(sceneId));
 }
 
 function setAddedHotspots(sceneId, hotspots) {
   const scene = sceneById[sceneId];
   if (!scene || !Array.isArray(hotspots)) return false;
   const normalised = hotspots.map((hotspot) => normaliseAddedHotspot(sceneId, hotspot)).filter(Boolean);
+  emitTourDebug("runtime-added-hotspots-set-start", {
+    sceneId,
+    incomingCount: hotspots.length,
+    acceptedCount: normalised.length,
+    before: navigationHotspotInventory(sceneId)
+  });
   addedHotspots[sceneId] = normalised;
   scene.hotspots.splice(getBaseHotspotCount(sceneId));
   scene.hotspots.push(...normalised.map((hotspot) => ({ ...hotspot })));
@@ -357,6 +388,7 @@ function setAddedHotspots(sceneId, hotspots) {
   window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
     if (hotspotRebuildRevisions[sceneId] === revision) rebuildSceneHotspots(sceneId);
   }));
+  emitTourDebug("runtime-added-hotspots-set-complete", navigationHotspotInventory(sceneId));
   return true;
 }
 
@@ -383,6 +415,12 @@ function updateHotspotCoordinates(sceneId, hotspotIndex, coordinates) {
 
   removeLiveNavigationHotspot(sceneId, id);
   addLiveNavigationHotspot(sceneId, toPannellumHotspot(scene, hotspot, hotspotIndex));
+  emitTourDebug("runtime-hotspot-coordinate-updated", {
+    id,
+    pitch: hotspot.pitch,
+    yaw: hotspot.yaw,
+    inventory: navigationHotspotInventory(sceneId)
+  });
   return true;
 }
 
@@ -401,6 +439,13 @@ function updateHotspotArrival(sceneId, hotspotIndex, arrival) {
   }
   removeLiveNavigationHotspot(sceneId, hotspotId(sceneId, hotspotIndex));
   addLiveNavigationHotspot(sceneId, toPannellumHotspot(scene, hotspot, hotspotIndex));
+  emitTourDebug("runtime-hotspot-arrival-updated", {
+    id: hotspotId(sceneId, hotspotIndex),
+    targetPitch: hotspot.targetPitch,
+    targetYaw: hotspot.targetYaw,
+    targetHfov: hotspot.targetHfov,
+    inventory: navigationHotspotInventory(sceneId)
+  });
   return true;
 }
 
@@ -601,6 +646,7 @@ fullscreenButton.addEventListener("click", () => {
 viewer.on("scenechange", (sceneId) => {
   setActiveScene(sceneId);
   applySceneAdjustment(sceneId);
+  emitTourDebug("runtime-scene-change", navigationHotspotInventory(sceneId));
 });
 viewer.on("load", () => {
   if (!initialViewApplied) {
@@ -611,6 +657,7 @@ viewer.on("load", () => {
   setActiveScene(viewer.getScene());
   applySceneAdjustment(viewer.getScene());
   window.requestAnimationFrame(removeOrphanHotspotElements);
+  window.requestAnimationFrame(() => emitTourDebug("runtime-scene-loaded", navigationHotspotInventory(viewer.getScene())));
 });
 setActiveScene(initialScene);
   if (isLocalDraftPreview) setNavigatorOpen(true);

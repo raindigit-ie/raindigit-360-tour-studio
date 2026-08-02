@@ -22,7 +22,8 @@ The studio is local-first. It keeps source material and the editable workspace o
 ## Seven Screens
 
 1. **Start**
-   - Continue the current tour or create a clearly named new tour. Keep **Open saved work** collapsed.
+   - Offer exactly two explicit paths: create a clearly named new tour, or open an editable `.rdtour` project file selected by the operator.
+   - Do not list, suggest or silently reopen the previous local workspace on this screen.
    - Project replacement requires an explicit confirmation. Camera originals remain outside the workspace.
 
 2. **Photos**
@@ -47,6 +48,8 @@ The studio is local-first. It keeps source material and the editable workspace o
    - After placement, rotating the panorama must move the marker's screen projection while its saved spherical coordinate remains unchanged. A marker that stays screen-fixed, disappears from the active scene configuration or leaves a stale DOM copy fails review.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
    - A newly added transition remains incomplete until placement mode records an explicit point. If Continue finds unfinished work on another photo, it opens that source photo, selects the point and enters placement mode automatically.
+   - Save immediately after adding, placing or removing a movement. Before either scene arrow changes the photo, wait for the queued save and reject overlapping arrow actions.
+   - Test at least two points by cycling through every scene forwards and backwards twice. After each cycle, the stable point IDs must match in the scene model, active Pannellum configuration, rendered DOM and persisted draft.
 
 6. **First views**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
@@ -94,3 +97,15 @@ Deploy the contents of `release/` to a customer-controlled host, then embed it w
 ```
 
 The public release must contain no draft, project manifest, source originals, editor or save route.
+
+## Local Diagnostics
+
+Studio mode keeps `studio-debug.ndjson` inside the local workspace. It records
+stage changes, selections, placements, saves, scene changes, viewer load events,
+runtime hotspot rebuilds, errors and a compact marker inventory. The inventory
+compares the scene model, Pannellum configuration and rendered marker DOM, which
+makes a reported disappearing-point bug traceable without reproducing it by eye.
+
+The server rotates the journal at 5 MB and keeps one previous file. Secret-like
+fields are redacted and data/blob URLs are omitted. Diagnostics are operator-only:
+neither `.rdtour` backups nor customer releases include the journal.

@@ -60,7 +60,7 @@ npm run studio
 
 Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
-1. **Start**: continue the current tour or create a new one. Opening saved work stays collapsed until needed.
+1. **Start**: create a new tour or explicitly open an editable `.rdtour` project file. The studio does not list or silently reopen a previous local workspace.
 2. **Photos**: add all ready 2:1 JPG photos without making room decisions.
 3. **Rooms**: name rooms and views, then assign each stable photo card. Additional rooms and per-photo options stay collapsed until needed.
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
@@ -68,7 +68,10 @@ Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 6. **First views**: choose the useful first frame shown after each movement.
 7. **Publish**: check readiness, build and download one self-contained website file. Preview, website-install code, editable backup and folder package are separate collapsed options.
 
-Each **Continue** validates and saves the current step. The Publish screen opens a
+Every movement placement, removal, arrival view and picture adjustment is saved
+automatically. Scene arrows wait for that save and ignore overlapping clicks, so
+cycling between photos cannot replace a newer point with stale state. Each
+**Continue** also validates and saves the current step. The Publish screen opens a
 read-only same-origin preview, normally `http://127.0.0.1:8767/?preview=1&workspace=1`.
 The separate preview container remains available at `http://127.0.0.1:8768/?preview=1&workspace=1`.
 
@@ -103,6 +106,12 @@ both downloads, local release, editable-tour restore, direct offline opening of
 the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points keep independent coordinates, placement drags do not rotate the camera, an anchored marker follows the panorama projection without changing yaw/pitch, and unfinished work is reopened automatically.
 It also enforces a novice-default action budget and checks that technical terms do
 not leak into the visible task surface.
+
+Studio mode writes bounded local diagnostics to
+`studio-workspace/studio-debug.ndjson`. Each event records the stage, scene,
+selected marker, viewer pose and marker IDs in the data model, Pannellum config and
+DOM. The log rotates at 5 MB, redacts secret-like fields, omits embedded image data
+and is excluded from editable backups and public releases.
 
 ## Boundaries
 

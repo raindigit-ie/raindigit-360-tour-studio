@@ -31,6 +31,7 @@
     restoring: false,
     importProgress: { current: 0, total: 0 },
     building: false,
+    sceneMoving: false,
     linkDraftSceneId: null,
     pendingFocus: null,
     release: { ready: false }
@@ -66,31 +67,24 @@
     <div class="editor-panel__content">
       <section class="editor-stage-panel" data-stage-panel="start">
         <div class="editor-step-heading"><span>Start</span><h2>Start a tour</h2></div>
-        <div class="editor-current-project" id="editorCurrentProject" hidden>
-          <div><strong id="editorCurrentProjectTitle"></strong><span id="editorCurrentProjectMeta"></span></div>
-          <button class="editor-button editor-button--primary editor-button--wide" id="editorOpenWorkspace" type="button">Continue current project</button>
-        </div>
-        <details class="editor-disclosure" id="editorProjectOptions">
-          <summary id="editorProjectOptionsLabel">Create or open another tour</summary>
-          <div class="editor-start-block">
+        <div class="editor-start-options">
+          <section class="editor-start-block">
             <strong>New tour</strong>
             <label class="editor-field editor-field--stacked">
               <span>Tour name</span>
               <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 360 Tour" />
             </label>
-            <button class="editor-button editor-button--primary editor-button--wide" id="editorCreateWorkspace" type="button">Create tour</button>
-          </div>
-          <details class="editor-disclosure editor-disclosure--compact">
-            <summary>Open saved work</summary>
-            <div class="editor-start-block">
-              <label class="editor-file-picker">
-                <span id="editorProjectBackupName">Choose saved tour</span>
-                <input id="editorProjectBackup" type="file" accept=".rdtour,application/zip" />
-              </label>
-              <button class="editor-button editor-button--wide" id="editorRestoreProject" type="button" disabled>Open saved tour</button>
-            </div>
-          </details>
-        </details>
+            <button class="editor-button editor-button--primary editor-button--wide" id="editorCreateWorkspace" type="button">Create new tour</button>
+          </section>
+          <section class="editor-start-block">
+            <strong>Open a tour</strong>
+            <label class="editor-file-picker">
+              <span id="editorProjectBackupName">Choose an editable project file</span>
+              <input id="editorProjectBackup" type="file" accept=".rdtour,application/zip" />
+            </label>
+            <button class="editor-button editor-button--wide" id="editorRestoreProject" type="button" disabled>Open project</button>
+          </section>
+        </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="upload">
         <div class="editor-step-heading"><span>Step 1</span><h2>Add 360 photos</h2></div>
@@ -215,7 +209,7 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectOptions", "ProjectOptionsLabel", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "PlacementModes", "Rotate", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "PlacementModes", "Rotate", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
   const placementSurface = document.createElement("div");
@@ -226,6 +220,12 @@
   viewerElement.appendChild(placementSurface);
   let placementPointerStart = null;
   let suppressPlacementClick = false;
+  let draftSavePromise = Promise.resolve(true);
+  let draftSaveTimer = 0;
+  const studioSessionId = window.crypto?.randomUUID?.() || `studio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  let studioLogSequence = 0;
+  let studioLogBuffer = [];
+  let studioLogTimer = 0;
 
   const editorToggle = document.createElement("button");
   editorToggle.className = "icon-button";
@@ -235,8 +235,72 @@
   editorToggle.innerHTML = "&#9678;";
   document.querySelector(".toolbar").appendChild(editorToggle);
 
+  function studioInventory() {
+    const activeSceneId = api.viewer.getScene();
+    const activeConfig = api.viewer.getConfig()?.hotSpots || [];
+    return {
+      activeSceneId,
+      viewerLoaded: Boolean(api.viewer.isLoaded()),
+      pose: {
+        pitch: roundCoordinate(api.viewer.getPitch()),
+        yaw: roundCoordinate(api.viewer.getYaw()),
+        hfov: roundCoordinate(api.viewer.getHfov())
+      },
+      selected: state.selected ? { ...state.selected } : null,
+      placement: state.placement ? { ...state.placement } : null,
+      arrival: state.arrival ? { ...state.arrival } : null,
+      scenes: api.scenes.map((scene) => ({
+        id: scene.id,
+        modelIds: scene.hotspots.map((_, index) => api.hotspotId(scene.id, index)),
+        addedCount: api.getAddedHotspots(scene.id).length
+      })),
+      activeConfigIds: activeConfig.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::")).map((hotspot) => hotspot.id),
+      activeDomIds: Array.from(viewerElement.querySelectorAll("[data-editor-hotspot-id]")).map((element) => element.dataset.editorHotspotId)
+    };
+  }
+
+  async function flushStudioLogs() {
+    window.clearTimeout(studioLogTimer);
+    studioLogTimer = 0;
+    if (!studioLogBuffer.length) return true;
+    const entries = studioLogBuffer.splice(0, 100);
+    try {
+      const response = await fetch(studioUrl("studio-log", false), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ entries })
+      });
+      if (!response.ok) throw new Error(`Studio log failed (${response.status})`);
+      if (studioLogBuffer.length) studioLogTimer = window.setTimeout(flushStudioLogs, 120);
+      return true;
+    } catch (error) {
+      studioLogBuffer = [...entries, ...studioLogBuffer].slice(-300);
+      console.warn(error.message);
+      return false;
+    }
+  }
+
+  function studioLog(event, details = {}, includeInventory = false) {
+    const entry = {
+      time: new Date().toISOString(),
+      sessionId: studioSessionId,
+      sequence: ++studioLogSequence,
+      event,
+      stage: state.activeStage,
+      workspaceMode,
+      details,
+      ...(includeInventory ? { inventory: studioInventory() } : {})
+    };
+    console.debug("[RainDigit Studio]", event, details);
+    studioLogBuffer.push(entry);
+    if (studioLogBuffer.length > 300) studioLogBuffer.shift();
+    window.clearTimeout(studioLogTimer);
+    studioLogTimer = window.setTimeout(flushStudioLogs, 180);
+  }
+
   function setStatus(message) {
     elements.Status.textContent = message;
+    studioLog("status", { message });
   }
 
   function studioUrl(path, workspace = workspaceMode) {
@@ -290,10 +354,12 @@
 
   function setStage(stage) {
     if (!stageOrder.includes(stage)) return;
+    const previousStage = state.activeStage;
     state.activeStage = stage;
     state.placement = null;
     state.pendingFocus = null;
     if (stage !== "arrival") state.arrival = null;
+    studioLog("stage-change", { from: previousStage, to: stage }, true);
     render();
   }
 
@@ -306,6 +372,7 @@
     state.selected = { sceneId, hotspotIndex };
     state.placement = null;
     state.arrival = null;
+    studioLog("movement-selected", { sceneId, hotspotIndex, requestedStage: stage }, true);
     setStage(stage);
   }
 
@@ -365,16 +432,7 @@
   }
 
   function renderStartPanel() {
-    const project = state.workspaceProject;
-    elements.CurrentProject.hidden = !project;
-    elements.ProjectOptions.open = !project;
-    elements.ProjectOptionsLabel.textContent = project ? "Create or open another tour" : "Create or open a tour";
-    if (project) {
-      elements.CurrentProjectTitle.textContent = project.title;
-      const rooms = new Set(project.scenes.filter((scene) => scene.space !== "room-unassigned").map((scene) => scene.space)).size;
-      elements.CurrentProjectMeta.textContent = `${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"} · ${rooms} room${rooms === 1 ? "" : "s"}`;
-      elements.OpenWorkspace.textContent = project.scenes.length ? "Continue this tour" : "Add photos";
-    }
+    elements.ProjectTitle.value ||= "Untitled 360 Tour";
   }
 
   function renderUploadPanel() {
@@ -857,7 +915,8 @@
       input.addEventListener("input", () => {
         api.setSceneAdjustment(sceneId, { ...api.getSceneAdjustment(sceneId), [field.key]: Number(input.value) });
         output.textContent = `${input.value}${field.unit}`;
-        setStatus("Color changes not saved");
+        setStatus("Saving picture changes...");
+        scheduleDraftSave(`picture-${field.key}`);
       });
       row.append(input, output);
       label.append(name, row);
@@ -883,6 +942,7 @@
         setStatus(`${preset.label} look selected`);
         renderImagePresets(sceneId);
         renderImageControls(sceneId);
+        queueDraftSave(`picture-preset-${preset.label.toLowerCase()}`);
       });
       elements.ImagePresets.appendChild(button);
     });
@@ -893,8 +953,9 @@
     const adjustment = selectedAdjustment();
     if (!scene || !adjustment) return;
     api.setLocalAdjustments(scene.id, api.getLocalAdjustments(scene.id).map((item) => item.id === adjustment.id ? { ...item, ...change } : item));
-    setStatus("Local area not saved");
+    setStatus("Saving local area...");
     renderLocalAdjustments(scene.id);
+    scheduleDraftSave("light-area-changed");
   }
 
   function createRangeControl(labelText, key, minimum, maximum, unit = "") {
@@ -972,6 +1033,7 @@
       state.placement = null;
       setStatus("Local area removed");
       renderLocalAdjustments(sceneId);
+      queueDraftSave("light-area-removed");
     });
     actions.append(place, remove);
     elements.AdjustmentControls.append(
@@ -1066,15 +1128,44 @@
     document.body.classList.toggle("is-editor-placing", placing);
   }
 
-  function moveScene(direction) {
-    const currentIndex = api.scenes.findIndex((scene) => scene.id === api.viewer.getScene());
-    const nextIndex = (currentIndex + direction + api.scenes.length) % api.scenes.length;
-    state.arrival = null;
-    state.placement = null;
-    api.viewer.loadScene(api.scenes[nextIndex].id);
+  async function moveScene(direction) {
+    if (state.sceneMoving || api.scenes.length < 2) {
+      studioLog("scene-change-ignored", { direction, reason: state.sceneMoving ? "already-moving" : "single-scene" }, true);
+      return;
+    }
+    state.sceneMoving = true;
+    const sourceSceneId = api.viewer.getScene();
+    studioLog("scene-change-requested", { direction, sourceSceneId }, true);
+    try {
+      if (!await queueDraftSave("before-scene-change")) return;
+      const currentIndex = api.scenes.findIndex((scene) => scene.id === api.viewer.getScene());
+      const nextIndex = (currentIndex + direction + api.scenes.length) % api.scenes.length;
+      const targetSceneId = api.scenes[nextIndex].id;
+      state.arrival = null;
+      state.placement = null;
+      await new Promise((resolve) => {
+        let timeoutId = 0;
+        const onSceneChange = (sceneId) => {
+          if (sceneId !== targetSceneId) return;
+          api.viewer.off("scenechange", onSceneChange);
+          window.clearTimeout(timeoutId);
+          resolve();
+        };
+        timeoutId = window.setTimeout(() => {
+          api.viewer.off("scenechange", onSceneChange);
+          resolve();
+        }, 5000);
+        api.viewer.on("scenechange", onSceneChange);
+        api.viewer.loadScene(targetSceneId);
+      });
+      studioLog("scene-change-complete", { direction, sourceSceneId, targetSceneId }, true);
+    } finally {
+      state.sceneMoving = false;
+    }
   }
 
   function applyPlacement(event) {
+    const placementType = state.placement?.type;
     const [pitch, yaw] = api.viewer.mouseEventToCoords(event);
     if (state.placement?.type === "hotspot") {
       const selected = selectedHotspot();
@@ -1082,6 +1173,11 @@
       selected.hotspot.positionConfirmed = true;
       api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) });
       setStatus("Movement point placed");
+      studioLog("movement-placed", {
+        id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+        pitch: roundCoordinate(pitch),
+        yaw: roundCoordinate(yaw)
+      }, true);
     }
     if (state.placement?.type === "adjustment") {
       const scene = currentScene();
@@ -1092,6 +1188,7 @@
     }
     state.placement = null;
     render();
+    queueDraftSave(placementType === "adjustment" ? "adjustment-placed" : "movement-placed");
   }
 
   function createDraft() {
@@ -1137,8 +1234,10 @@
     state.savedAt = draft.updatedAt || null;
   }
 
-  async function saveDraft() {
+  async function saveDraft(reason = "manual") {
     const draft = createDraft();
+    const hotspotCounts = Object.fromEntries(api.scenes.map((scene) => [scene.id, scene.hotspots.length]));
+    studioLog("draft-save-start", { reason, updatedAt: draft.updatedAt, hotspotCounts }, true);
     setStatus("Saving locally...");
     try {
       const response = await fetch(studioUrl("save"), {
@@ -1151,11 +1250,30 @@
       state.release = { ready: false };
       setStatus("Saved locally");
       renderExportPanel();
+      studioLog("draft-save-success", { reason, updatedAt: draft.updatedAt, hotspotCounts }, true);
       return true;
     } catch (error) {
       setStatus(error.message);
+      studioLog("draft-save-failed", { reason, message: error.message, hotspotCounts }, true);
       return false;
     }
+  }
+
+  function queueDraftSave(reason) {
+    if (draftSaveTimer) {
+      window.clearTimeout(draftSaveTimer);
+      draftSaveTimer = 0;
+    }
+    draftSavePromise = draftSavePromise.catch(() => false).then(() => saveDraft(reason));
+    return draftSavePromise;
+  }
+
+  function scheduleDraftSave(reason, delay = 350) {
+    window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = window.setTimeout(() => {
+      draftSaveTimer = 0;
+      queueDraftSave(reason);
+    }, delay);
   }
 
   async function continueWizard() {
@@ -1187,7 +1305,7 @@
       setStatus("Choose the destination view for the selected movement");
       return;
     }
-    if (await saveDraft()) setStage(stageOffset(1));
+    if (await queueDraftSave("continue")) setStage(stageOffset(1));
   }
 
   function beginArrivalEdit() {
@@ -1209,6 +1327,7 @@
       yaw: roundCoordinate(api.viewer.getYaw()),
       hfov: roundCoordinate(api.viewer.getHfov())
     });
+    queueDraftSave("arrival-view-saved");
     state.arrival = null;
     const nextPending = findPendingHotspot("arrivalConfirmed");
     if (nextPending) {
@@ -1235,7 +1354,7 @@
 
   async function buildRelease() {
     if (!workspaceMode || state.building) return;
-    if (!await saveDraft()) return;
+    if (!await queueDraftSave("before-build")) return;
     state.building = true;
     setStatus("Building tour...");
     renderExportPanel();
@@ -1304,16 +1423,14 @@
   }
 
   elements.CreateWorkspace.addEventListener("click", async () => {
+    studioLog("project-create-requested", { title: elements.ProjectTitle.value });
     try { await createWorkspace(false); } catch (error) { setStatus(error.message); }
-  });
-  elements.OpenWorkspace.addEventListener("click", () => {
-    window.sessionStorage.setItem(stageStorageKey, "upload");
-    window.location.assign(state.workspaceProject?.scenes?.length ? workspaceEditorUrl() : `${window.location.pathname}?edit=1`);
   });
   elements.ProjectBackup.addEventListener("change", () => {
     const file = elements.ProjectBackup.files[0];
-    elements.ProjectBackupName.textContent = file?.name || "Choose saved tour";
+    elements.ProjectBackupName.textContent = file?.name || "Choose an editable project file";
     elements.RestoreProject.disabled = !file;
+    studioLog("project-file-selected", file ? { name: file.name, size: file.size, type: file.type } : { cleared: true });
   });
   elements.RestoreProject.addEventListener("click", () => restoreProject(false));
   elements.ImportFiles.addEventListener("change", importPanoramas);
@@ -1349,10 +1466,13 @@
     const selected = state.selected;
     if (!scene || !selected || selected.sceneId !== scene.id || selected.hotspotIndex < api.getBaseHotspotCount(scene.id)) return;
     const localIndex = selected.hotspotIndex - api.getBaseHotspotCount(scene.id);
+    const removedId = api.hotspotId(scene.id, selected.hotspotIndex);
     api.setAddedHotspots(scene.id, api.getAddedHotspots(scene.id).filter((_, index) => index !== localIndex));
     state.selected = scene.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
     setStatus("Transition removed");
     render();
+    studioLog("movement-removed", { id: removedId, sceneId: scene.id }, true);
+    queueDraftSave("movement-removed");
   });
   elements.LinkTarget.addEventListener("change", () => {
     elements.LinkKind.value = suggestedLinkKind();
@@ -1380,6 +1500,13 @@
     state.placement = { type: "hotspot" };
     setStatus("Click the photo where this movement should appear");
     render();
+    studioLog("movement-added", {
+      id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+      sourceSceneId: scene.id,
+      targetSceneId: targetScene.id,
+      kind: elements.LinkKind.value
+    }, true);
+    queueDraftSave("movement-added");
   });
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
   elements.SaveArrival.addEventListener("click", saveArrivalView);
@@ -1392,6 +1519,7 @@
     });
     setStatus("Default viewpoint not saved");
     renderArrivalPanel(scene);
+    queueDraftSave("room-opening-view-saved");
   });
   elements.AddAdjustment.addEventListener("click", () => {
     const scene = currentScene();
@@ -1401,6 +1529,7 @@
     state.selectedAdjustmentId = next.id;
     setStatus("Local area not saved");
     renderLocalAdjustments(scene.id);
+    queueDraftSave("light-area-added");
   });
 
   viewerElement.addEventListener("pointerdown", (event) => {
@@ -1458,7 +1587,48 @@
     if (!state.arrival) state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
     state.placement = null;
     render();
+    studioLog("editor-scene-change", { sceneId: scene?.id || null }, true);
   });
+
+  api.viewer.on("load", () => {
+    studioLog("editor-scene-loaded", { sceneId: api.viewer.getScene() }, true);
+  });
+
+  document.addEventListener("raindigit:tour-debug", (event) => {
+    const detail = event.detail || {};
+    studioLog(detail.event || "runtime-event", detail.details || {});
+  });
+
+  window.addEventListener("error", (event) => {
+    studioLog("window-error", {
+      message: event.message,
+      file: event.filename,
+      line: event.lineno,
+      column: event.colno,
+      stack: event.error?.stack || ""
+    }, true);
+    flushStudioLogs();
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    studioLog("unhandled-rejection", {
+      message: event.reason?.message || String(event.reason),
+      stack: event.reason?.stack || ""
+    }, true);
+    flushStudioLogs();
+  });
+
+  window.addEventListener("pagehide", () => {
+    if (!studioLogBuffer.length || typeof navigator.sendBeacon !== "function") return;
+    const entries = studioLogBuffer.splice(0, studioLogBuffer.length);
+    navigator.sendBeacon(studioUrl("studio-log", false), new Blob([JSON.stringify({ entries })], { type: "application/json" }));
+  });
+
+  window.__RAINDIGIT_STUDIO_DEBUG__ = {
+    sessionId: studioSessionId,
+    snapshot: studioInventory,
+    flush: flushStudioLogs
+  };
 
   function waitForViewerPaint() {
     return new Promise((resolve) => {
@@ -1484,14 +1654,21 @@
     applyDraft(draft);
     const scene = currentScene();
     state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
-    setStatus(!state.workspaceProject
-      ? "Ready to create a tour"
+    setStatus(state.activeStage === "start"
+      ? "Choose how to begin"
+      : !state.workspaceProject
+        ? "Ready to create a tour"
       : state.workspaceProject.scenes.length === 0
         ? "Tour ready. Add photos."
         : state.activeStage === "upload"
           ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
           : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
+    studioLog("studio-ready", {
+      savedAt: state.savedAt,
+      workspaceAvailable: Boolean(state.workspaceProject),
+      projectTitle: state.workspaceProject?.title || null
+    }, true);
     refreshReleaseStatus();
   }).catch((error) => {
     panel.remove();
