@@ -5,8 +5,10 @@ services:
       target: studio
     working_dir: /workspace
     command: ["node", "scripts/tour-editor-server.mjs", "--port", "8767"]
+    environment:
+      TOUR_SERVER_HOST: 0.0.0.0
     ports:
-      - "8767:8767"
+      - "127.0.0.1:8767:8767"
     volumes:
       - .:/workspace
 
@@ -16,8 +18,10 @@ services:
       target: studio
     working_dir: /workspace
     command: ["node", "scripts/tour-editor-server.mjs", "--preview", "--port", "8768"]
+    environment:
+      TOUR_SERVER_HOST: 0.0.0.0
     ports:
-      - "8768:8768"
+      - "127.0.0.1:8768:8768"
     volumes:
       - .:/workspace
 
@@ -27,4 +31,4 @@ services:
       context: .
       target: release
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"

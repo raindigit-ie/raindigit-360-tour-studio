@@ -8,7 +8,11 @@
     "preview": "node scripts/tour-editor-server.mjs --preview --port 8768",
     "check": "node --check scripts/tour-editor-server.mjs && node --check scripts/build-tour-release.mjs && node --check web-tour/js/tour-bootstrap.js && node --check web-tour/js/tour.js && node --check web-tour/js/tour-editor.js && node --check web-tour/js/tour-preview.js",
     "build:release": "node scripts/build-tour-release.mjs --workspace studio-workspace --output release --zip dist/raindigit-360-tour.zip --replace",
-    "test:product": "node scripts/test-product-flow.mjs"
+    "test:product": "node scripts/test-product-flow.mjs",
+    "test:release-browser": "playwright test tests/release-mobile.spec.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
   },
   "engines": {
     "node": ">=22"

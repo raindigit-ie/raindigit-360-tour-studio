@@ -4,8 +4,8 @@
   const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
   const query = new URLSearchParams(window.location.search);
   const local = localHosts.has(window.location.hostname);
-  const editing = local && query.get("edit") === "1" && window.location.port === "8767";
-  const previewing = local && query.get("preview") === "1" && window.location.port === "8768";
+  const editing = local && query.get("edit") === "1";
+  const previewing = local && query.get("preview") === "1";
   const endpoint = editing ? "__tour-editor" : previewing ? "__tour-preview" : null;
   const workspace = endpoint && query.get("workspace") === "1";
 

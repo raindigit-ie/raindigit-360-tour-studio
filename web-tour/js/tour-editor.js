@@ -19,6 +19,7 @@
     savedAt: null,
     workspaceProject: null,
     importing: false,
+    importProgress: { current: 0, total: 0 },
     building: false,
     release: { ready: false }
   };
@@ -106,6 +107,10 @@
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
         <div class="editor-step-heading"><span>Step 4</span><h2>Arrival views</h2></div>
+        <div class="editor-default-view">
+          <div><strong>Default viewpoint</strong><span id="editorDefaultView"></span></div>
+          <button class="editor-button editor-button--wide" id="editorSaveSceneView" type="button">Use current view as default</button>
+        </div>
         <div class="editor-hotspot-list" id="editorArrivalList"></div>
         <p class="editor-empty" id="editorArrivalHelp"></p>
         <div class="editor-panel__actions">
@@ -136,7 +141,7 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ImportBlock", "ImportRoom", "NewRoomField", "NewRoomName", "ImportFiles", "Import", "ProjectEmpty", "ProjectOrder", "SaveStructure", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "PreviewLink", "Build", "ReleaseActions", "ReleasePreview", "Download", "ReleaseStatus", "Back", "Status", "Save", "Continue"
+    "SceneName", "RoomName", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ImportBlock", "ImportRoom", "NewRoomField", "NewRoomName", "ImportFiles", "Import", "ProjectEmpty", "ProjectOrder", "SaveStructure", "HotspotList", "ArrivalList", "Place", "RemoveLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "PreviewLink", "Build", "ReleaseActions", "ReleasePreview", "Download", "ReleaseStatus", "Back", "Status", "Save", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
 
@@ -227,6 +232,7 @@
     elements.Back.hidden = index === 0;
     elements.Continue.hidden = index === stageOrder.length - 1;
     elements.Save.hidden = state.activeStage === "project" || state.activeStage === "export";
+    elements.Continue.disabled = state.activeStage === "project" && !state.workspaceProject?.scenes?.length;
     elements.Continue.textContent = state.activeStage === "arrival" ? "Review" : "Continue";
   }
 
@@ -257,12 +263,16 @@
 
   function renderProjectPanel() {
     const project = state.workspaceProject;
+    document.body.classList.toggle("is-workspace-ready", Boolean(workspaceMode && project?.scenes?.length));
     elements.CreateWorkspace.textContent = project ? "Replace project" : "Create project";
+    elements.CreateWorkspace.classList.toggle("editor-button--primary", !project);
     elements.OpenWorkspace.hidden = !project?.scenes?.length || workspaceMode;
     elements.ImportBlock.hidden = !project;
     elements.ImportFiles.disabled = !project || state.importing;
     elements.Import.disabled = !project || state.importing || elements.ImportFiles.files.length === 0;
-    elements.Import.textContent = state.importing ? "Importing..." : "Import into room";
+    elements.Import.textContent = state.importing
+      ? `Preparing ${state.importProgress.current}/${state.importProgress.total}`
+      : "Import into room";
     elements.SaveStructure.hidden = !project?.scenes?.length || !workspaceMode;
     elements.ProjectEmpty.hidden = Boolean(project?.scenes?.length);
     elements.ProjectEmpty.textContent = project ? "No panoramas imported yet." : "Create a project to begin.";
@@ -351,7 +361,14 @@
         start.title = "Use as opening view";
         start.setAttribute("aria-label", `Use ${scene.title} as opening view`);
         start.addEventListener("click", () => { project.firstScene = scene.id; renderProjectPanel(); });
-        controls.append(roomSelect, up, down, start);
+        const remove = document.createElement("button");
+        remove.className = "editor-button editor-button--icon editor-button--danger";
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.title = "Remove viewpoint";
+        remove.setAttribute("aria-label", `Remove ${scene.title}`);
+        remove.addEventListener("click", () => removeWorkspaceScene(scene.id, scene.title));
+        controls.append(roomSelect, up, down, start, remove);
         row.append(thumb, fields, controls);
         section.appendChild(row);
       }
@@ -378,7 +395,7 @@
     }
     if (!response.ok) throw new Error((await response.json()).error || `Could not create project (${response.status})`);
     state.workspaceProject = await response.json();
-    setStatus("Project ready");
+    setStatus("Project created. Add the first room.");
     renderProjectPanel();
     return state.workspaceProject;
   }
@@ -409,6 +426,24 @@
     }
   }
 
+  async function removeWorkspaceScene(sceneId, title) {
+    if (!window.confirm(`Remove ${title} from this project? The original upload will not be deleted.`)) return;
+    setStatus(`Removing ${title}`);
+    const response = await fetch(studioUrl("workspace-project", false), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "remove", sceneId })
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setStatus(body.error || `Could not remove viewpoint (${response.status})`);
+      return;
+    }
+    state.workspaceProject = body;
+    window.sessionStorage.setItem(stageStorageKey, "project");
+    window.location.assign(body.scenes.length ? workspaceEditorUrl() : `${window.location.pathname}?edit=1`);
+  }
+
   async function importPanoramas() {
     const files = [...elements.ImportFiles.files];
     if (!files.length || !state.workspaceProject) return;
@@ -420,11 +455,14 @@
     }
     const roomId = existingRoom?.id || `room-${Date.now().toString(36)}`;
     state.importing = true;
+    state.importProgress = { current: 0, total: files.length };
     renderProjectPanel();
     let imported = 0;
     try {
-      for (const file of files) {
-        setStatus(`Importing ${file.name}`);
+      for (const [index, file] of files.entries()) {
+        state.importProgress.current = index + 1;
+        renderProjectPanel();
+        setStatus(`Preparing ${index + 1} of ${files.length}: ${file.name}`);
         const response = await fetch(studioUrl("workspace-import", true), {
           method: "POST",
           headers: {
@@ -447,6 +485,7 @@
       setStatus(imported ? `${imported} imported; ${error.message}` : error.message);
       await refreshWorkspaceProject();
       state.importing = false;
+      state.importProgress = { current: 0, total: 0 };
       elements.ImportFiles.value = "";
       renderProjectPanel();
     }
@@ -511,6 +550,8 @@
   }
 
   function renderArrivalPanel(scene) {
+    const view = api.getSceneView(scene.id);
+    elements.DefaultView.textContent = `${roundCoordinate(view.pitch)}° / ${roundCoordinate(view.yaw)}° / ${roundCoordinate(view.hfov)}°`;
     renderHotspotButtons(elements.ArrivalList, scene, "arrival");
     const selected = selectedHotspot();
     if (!selected) {
@@ -754,6 +795,7 @@
       overrides,
       addedHotspots: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getAddedHotspots(scene.id)])),
       sceneMetadata: Object.fromEntries(api.scenes.map((scene) => [scene.id, { title: scene.title, subtitle: scene.subtitle || "" }])),
+      sceneViews: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getSceneView(scene.id)])),
       sceneAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getSceneAdjustment(scene.id)])),
       localAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getLocalAdjustments(scene.id)]))
     };
@@ -771,6 +813,7 @@
       }
     });
     Object.entries(draft.sceneMetadata || {}).forEach(([sceneId, metadata]) => api.setSceneMetadata(sceneId, metadata));
+    Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => api.setSceneView(sceneId, view));
     Object.entries(draft.sceneAdjustments || {}).forEach(([sceneId, adjustment]) => api.setSceneAdjustment(sceneId, adjustment));
     Object.entries(draft.localAdjustments || {}).forEach(([sceneId, adjustments]) => api.setLocalAdjustments(sceneId, adjustments));
     state.savedAt = draft.updatedAt || null;
@@ -930,6 +973,16 @@
   });
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
   elements.SaveArrival.addEventListener("click", saveArrivalView);
+  elements.SaveSceneView.addEventListener("click", () => {
+    const scene = currentScene();
+    api.setSceneView(scene.id, {
+      pitch: roundCoordinate(api.viewer.getPitch()),
+      yaw: roundCoordinate(api.viewer.getYaw()),
+      hfov: roundCoordinate(api.viewer.getHfov())
+    });
+    setStatus("Default viewpoint not saved");
+    renderArrivalPanel(scene);
+  });
   elements.AddAdjustment.addEventListener("click", () => {
     const scene = currentScene();
     const existing = api.getLocalAdjustments(scene.id);
@@ -973,15 +1026,35 @@
     render();
   });
 
+  function waitForViewerPaint() {
+    return new Promise((resolve) => {
+      const afterPaint = () => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+      if (api.viewer.isLoaded()) {
+        afterPaint();
+        return;
+      }
+      const onLoad = () => {
+        api.viewer.off("load", onLoad);
+        afterPaint();
+      };
+      api.viewer.on("load", onLoad);
+    });
+  }
+
   Promise.all([
     fetch(studioUrl("status")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Local editor server unavailable"))),
     refreshWorkspaceProject(),
     fetch(studioUrl("overrides")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft")))
-  ]).then(([, , draft]) => {
+  ]).then(async ([, , draft]) => {
+    await waitForViewerPaint();
     applyDraft(draft);
     const scene = currentScene();
     state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
-    setStatus(state.savedAt ? "Saved draft loaded" : "Project ready");
+    setStatus(!state.workspaceProject
+      ? "Ready to create a project"
+      : state.workspaceProject.scenes.length === 0
+        ? "Project ready. Add the first room."
+        : state.savedAt ? "Saved project loaded" : "Project ready");
     render();
     refreshReleaseStatus();
   }).catch((error) => {

@@ -1141,6 +1141,27 @@ body.is-editor-open .tour-shell {
   display: none !important;
 }
 
+body[data-editor-stage="project"]:not(.is-workspace-ready) .tour-shell {
+  visibility: hidden;
+}
+
+body[data-editor-stage="project"]:not(.is-workspace-ready) .editor-panel {
+  inset: 0;
+  width: 100%;
+  height: 100svh;
+  border-left: 0;
+}
+
+body[data-editor-stage="project"]:not(.is-workspace-ready) .editor-panel__content,
+body[data-editor-stage="project"]:not(.is-workspace-ready) .editor-panel__footer {
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
+  display: none;
+}
+
 .editor-import {
   margin-top: 14px;
   padding-top: 12px;
@@ -1228,7 +1249,7 @@ body.is-editor-open .tour-shell {
 .editor-project-scene__controls {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 28px 28px;
+  grid-template-columns: minmax(0, 1fr) 28px 28px 28px 28px;
   gap: 5px;
 }
 
@@ -1237,6 +1258,29 @@ body.is-editor-open .tour-shell {
   min-height: 28px;
   font-size: 13px;
 }
+
+.editor-button--danger:hover,
+.editor-button--danger:focus-visible {
+  border-color: #df7b6d;
+  color: #fff;
+  background: rgba(184, 64, 48, 0.28);
+}
+
+.editor-default-view {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 249, 236, 0.13);
+}
+
+.editor-default-view > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.editor-default-view strong { color: #fff9ec; }
 
 .editor-new-link {
   margin-top: 14px;

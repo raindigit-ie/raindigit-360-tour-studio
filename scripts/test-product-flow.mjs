@@ -20,6 +20,18 @@ async function requestJson(url, options = {}, expected = 200) {
   return body;
 }
 
+async function runMagick(arguments_) {
+  for (const binary of ["magick", "convert"]) {
+    try {
+      return await execFileAsync(binary, arguments_);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+  }
+  throw new Error("ImageMagick is not installed (expected magick or convert).");
+}
+
 async function waitForServer(baseUrl) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
@@ -76,11 +88,19 @@ async function main() {
       ["hall.jpg", "#3c283f", "#8bc6b1"]
     ];
     for (const [name, start, end] of fixtures) {
-      await execFileAsync("magick", ["-size", "2000x1000", `gradient:${start}-${end}`, "-quality", "92", join(root, name)]);
+      await runMagick(["-size", "2000x1000", `gradient:${start}-${end}`, "-quality", "92", join(root, name)]);
     }
 
     await importPanorama(baseUrl, join(root, fixtures[0][0]), "room-kitchen", "Kitchen");
     await importPanorama(baseUrl, join(root, fixtures[1][0]), "room-kitchen", "Kitchen");
+    const firstThird = await importPanorama(baseUrl, join(root, fixtures[2][0]), "room-hall", "Hall");
+    const removed = await requestJson(`${baseUrl}/__tour-editor/workspace-project`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "remove", sceneId: firstThird.project.scenes[2].id })
+    });
+    assert(removed.scenes.length === 2, "Removing a viewpoint must preserve the rest of the project.");
+    await stat(join(root, fixtures[2][0]));
     const third = await importPanorama(baseUrl, join(root, fixtures[2][0]), "room-hall", "Hall");
     await importPanorama(baseUrl, join(root, fixtures[0][0]), "room-kitchen", "Kitchen", 409);
 
@@ -121,6 +141,11 @@ async function main() {
         "scene-003": []
       },
       sceneMetadata: Object.fromEntries(structured.scenes.map((scene) => [scene.id, { title: scene.title, subtitle: scene.subtitle }])),
+      sceneViews: {
+        "scene-001": { pitch: -12, yaw: 35, hfov: 88 },
+        "scene-002": { pitch: -8, yaw: -60, hfov: 92 },
+        "scene-003": { pitch: -4, yaw: 90, hfov: 82 }
+      },
       sceneAdjustments: {
         "scene-001": { brightness: 106, contrast: 104, saturation: 108, warmth: 3 },
         "scene-002": { brightness: 100, contrast: 100, saturation: 100, warmth: 0 },
@@ -148,6 +173,8 @@ async function main() {
     assert(listing.includes("INSTALL.txt"), "The package must contain installation instructions.");
     assert(listing.includes("index.html") && listing.includes("js/tour-config.js"), "The package must contain a deployable tour.");
     assert(!/draft\.json|tour-editor|tour-preview|studio-workspace/i.test(listing), "Editor or draft data leaked into the release archive.");
+    const releaseConfig = await readFile(join(output, "js", "tour-config.js"), "utf8");
+    assert(releaseConfig.includes('"pitch":-8') && releaseConfig.includes('"yaw":-60') && releaseConfig.includes('"hfov":92'), "Saved default viewpoints must be baked into the release.");
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
 
@@ -165,6 +192,7 @@ async function main() {
       overrides: {},
       addedHotspots: { "scene-001": [] },
       sceneMetadata: { "scene-001": { title: "Studio overview", subtitle: "Single viewpoint" } },
+      sceneViews: { "scene-001": { pitch: -6, yaw: 20, hfov: 90 } },
       sceneAdjustments: { "scene-001": { brightness: 100, contrast: 100, saturation: 100, warmth: 0 } },
       localAdjustments: { "scene-001": [] }
     };

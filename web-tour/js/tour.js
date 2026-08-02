@@ -5,16 +5,15 @@ const viewParams = new URLSearchParams(window.location.search);
 const requestedScene = viewParams.get("scene");
 const initialScene = sceneById[requestedScene] ? requestedScene : firstScene;
 const isLocalEditorRequest = viewParams.get("edit") === "1" &&
-  ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname) &&
-  window.location.port === "8767";
+  ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
 const isLocalDraftPreview = viewParams.get("preview") === "1" &&
-  ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname) &&
-  window.location.port === "8768";
+  ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
 const defaultSceneAdjustment = Object.freeze({ brightness: 100, contrast: 100, saturation: 100, warmth: 0 });
 const sceneAdjustments = Object.fromEntries(scenes.map((scene) => [scene.id, { ...defaultSceneAdjustment }]));
 const localAdjustments = Object.fromEntries(scenes.map((scene) => [scene.id, []]));
 const baseHotspotCounts = Object.fromEntries(scenes.map((scene) => [scene.id, scene.hotspots.length]));
 const addedHotspots = Object.fromEntries(scenes.map((scene) => [scene.id, []]));
+const hotspotRebuildRevisions = Object.fromEntries(scenes.map((scene) => [scene.id, 0]));
 
 function normaliseSceneAdjustment(adjustment = {}) {
   const clamp = (value, minimum, maximum, fallback) => {
@@ -191,12 +190,12 @@ const viewer = pannellum.viewer("panorama", {
 
 function applySceneAdjustment(sceneId) {
   const adjustment = sceneAdjustments[sceneId] || defaultSceneAdjustment;
-  const renderer = viewer.getContainer().querySelector(".pnlm-render-container");
-  if (!renderer) return;
+  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");
+  if (!canvas) return;
 
   const warmTint = Math.max(0, adjustment.warmth) / 100;
   const coolHueShift = Math.min(18, Math.max(0, -adjustment.warmth) * 0.9);
-  renderer.style.filter = `brightness(${adjustment.brightness}%) contrast(${adjustment.contrast}%) saturate(${adjustment.saturation}%) sepia(${warmTint.toFixed(2)}) hue-rotate(${-coolHueShift.toFixed(1)}deg)`;
+  canvas.style.filter = `brightness(${adjustment.brightness}%) contrast(${adjustment.contrast}%) saturate(${adjustment.saturation}%) sepia(${warmTint.toFixed(2)}) hue-rotate(${-coolHueShift.toFixed(1)}deg)`;
 }
 
 function getSceneAdjustment(sceneId) {
@@ -217,11 +216,14 @@ function getLocalAdjustments(sceneId) {
 function syncLocalAdjustments(sceneId, previousIds = []) {
   const sceneConfig = configScenes[sceneId];
   if (!sceneConfig) return;
-  sceneConfig.hotSpots = sceneConfig.hotSpots.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"));
   const adjustments = localAdjustments[sceneId] || [];
-  adjustments.forEach((adjustment) => sceneConfig.hotSpots.push(toPannellumLocalAdjustment(sceneId, adjustment)));
-
+  if (viewer.getScene() === sceneId && !viewer.isLoaded()) {
+    const navigation = sceneConfig.hotSpots.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"));
+    sceneConfig.hotSpots = navigation.concat(adjustments.map((adjustment) => toPannellumLocalAdjustment(sceneId, adjustment)));
+    return;
+  }
   [...new Set([...previousIds, ...viewerElementLocalAdjustments(sceneId)])].forEach((id) => removeLiveNavigationHotspot(sceneId, id));
+  sceneConfig.hotSpots = sceneConfig.hotSpots.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"));
   adjustments.forEach((adjustment) => addLiveNavigationHotspot(sceneId, toPannellumLocalAdjustment(sceneId, adjustment)));
 }
 
@@ -261,6 +263,26 @@ function setSceneMetadata(sceneId, metadata = {}) {
   return true;
 }
 
+function getSceneView(sceneId) {
+  const scene = sceneById[sceneId];
+  return scene ? { pitch: scene.pitch, yaw: scene.yaw, hfov: scene.hfov } : null;
+}
+
+function setSceneView(sceneId, view = {}) {
+  const scene = sceneById[sceneId];
+  if (!scene || !Number.isFinite(view.pitch) || !Number.isFinite(view.yaw) || !Number.isFinite(view.hfov)) return false;
+  scene.pitch = Math.max(-85, Math.min(85, view.pitch));
+  scene.yaw = Math.max(-180, Math.min(180, view.yaw));
+  scene.hfov = Math.max(58, Math.min(112, view.hfov));
+  configScenes[sceneId].pitch = scene.pitch;
+  configScenes[sceneId].yaw = scene.yaw;
+  configScenes[sceneId].hfov = scene.hfov;
+  if (viewer.isLoaded() && viewer.getScene() === sceneId) {
+    viewer.lookAt(scene.pitch, scene.yaw, scene.hfov, 0);
+  }
+  return true;
+}
+
 function getAddedHotspots(sceneId) {
   const scene = sceneById[sceneId];
   return scene ? scene.hotspots.slice(getBaseHotspotCount(sceneId)).map((hotspot) => ({ ...hotspot })) : [];
@@ -283,6 +305,9 @@ function removeLiveNavigationHotspot(sceneId, id) {
   while (remove()) {
     // Deliberately empty: each pass removes one matching Pannellum instance.
   }
+  viewer.getContainer().querySelectorAll("[data-editor-hotspot-id], [data-local-adjustment-id]").forEach((element) => {
+    if (element.dataset.editorHotspotId === id || element.dataset.localAdjustmentId === id) element.remove();
+  });
 }
 
 function addLiveNavigationHotspot(sceneId, hotspot) {
@@ -295,6 +320,13 @@ function addLiveNavigationHotspot(sceneId, hotspot) {
   else viewer.addHotSpot(hotspot, sceneId);
 }
 
+function removeOrphanHotspotElements() {
+  const activeDivs = new Set((configScenes[viewer.getScene()]?.hotSpots || []).map((hotspot) => hotspot.div).filter(Boolean));
+  viewer.getContainer().querySelectorAll("[data-editor-hotspot-id], [data-local-adjustment-id]").forEach((element) => {
+    if (!activeDivs.has(element)) element.remove();
+  });
+}
+
 function rebuildSceneHotspots(sceneId) {
   const scene = sceneById[sceneId];
   const sceneConfig = configScenes[sceneId];
@@ -302,9 +334,13 @@ function rebuildSceneHotspots(sceneId) {
   const existingNavigationIds = sceneConfig.hotSpots
     .filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"))
     .map((hotspot) => hotspot.id);
-  const localOverlays = sceneConfig.hotSpots.filter((hotspot) => hotspot.id?.startsWith("local-adjustment::"));
-  sceneConfig.hotSpots = scene.hotspots.map((hotspot, hotspotIndex) => toPannellumHotspot(scene, hotspot, hotspotIndex)).concat(localOverlays);
+  if (viewer.getScene() === sceneId && !viewer.isLoaded()) {
+    const localOverlays = sceneConfig.hotSpots.filter((hotspot) => hotspot.id?.startsWith("local-adjustment::"));
+    sceneConfig.hotSpots = scene.hotspots.map((hotspot, hotspotIndex) => toPannellumHotspot(scene, hotspot, hotspotIndex)).concat(localOverlays);
+    return;
+  }
   existingNavigationIds.forEach((id) => removeLiveNavigationHotspot(sceneId, id));
+  sceneConfig.hotSpots = sceneConfig.hotSpots.filter((hotspot) => hotspot.id?.startsWith("local-adjustment::"));
   scene.hotspots.forEach((hotspot, hotspotIndex) => addLiveNavigationHotspot(sceneId, toPannellumHotspot(scene, hotspot, hotspotIndex)));
 }
 
@@ -316,6 +352,11 @@ function setAddedHotspots(sceneId, hotspots) {
   scene.hotspots.splice(getBaseHotspotCount(sceneId));
   scene.hotspots.push(...normalised.map((hotspot) => ({ ...hotspot })));
   rebuildSceneHotspots(sceneId);
+  const revision = hotspotRebuildRevisions[sceneId] + 1;
+  hotspotRebuildRevisions[sceneId] = revision;
+  window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+    if (hotspotRebuildRevisions[sceneId] === revision) rebuildSceneHotspots(sceneId);
+  }));
   return true;
 }
 
@@ -379,6 +420,9 @@ function applyDraft(draft) {
   Object.entries(draft.sceneMetadata || {}).forEach(([sceneId, metadata]) => {
     setSceneMetadata(sceneId, metadata);
   });
+  Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => {
+    setSceneView(sceneId, view);
+  });
   Object.entries(draft.localAdjustments || {}).forEach(([sceneId, adjustments]) => {
     setLocalAdjustments(sceneId, adjustments);
   });
@@ -409,6 +453,8 @@ if (isLocalEditorRequest) {
     getLocalAdjustments,
     setLocalAdjustments,
     setSceneMetadata,
+    getSceneView,
+    setSceneView,
     getAddedHotspots,
     getBaseHotspotCount,
     setAddedHotspots
@@ -564,6 +610,7 @@ viewer.on("load", () => {
   }
   setActiveScene(viewer.getScene());
   applySceneAdjustment(viewer.getScene());
+  window.requestAnimationFrame(removeOrphanHotspotElements);
 });
 setActiveScene(initialScene);
 if (isLocalEditorRequest || isLocalDraftPreview) setNavigatorOpen(true);

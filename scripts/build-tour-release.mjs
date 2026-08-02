@@ -72,6 +72,18 @@ async function run(command, arguments_, options = {}) {
   }
 }
 
+async function runMagick(arguments_) {
+  for (const binary of ["magick", "convert"]) {
+    try {
+      return await execFileAsync(binary, arguments_, { maxBuffer: 1024 * 1024 });
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw new Error(`${binary} failed: ${error.stderr || error.message}`);
+    }
+  }
+  throw new Error("ImageMagick is not installed (expected magick or convert).");
+}
+
 async function readJson(path, fallback) {
   try {
     return JSON.parse(await readFile(path, "utf8"));
@@ -129,15 +141,36 @@ function applyDraft(project, draft) {
     byId[sceneId].title = metadata.title.trim().slice(0, 80);
     byId[sceneId].subtitle = typeof metadata.subtitle === "string" ? metadata.subtitle.slice(0, 120) : "";
   });
+  Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => {
+    if (!byId[sceneId]) return;
+    byId[sceneId].pitch = clamp(view?.pitch, -85, 85, byId[sceneId].pitch);
+    byId[sceneId].yaw = clamp(view?.yaw, -180, 180, byId[sceneId].yaw);
+    byId[sceneId].hfov = clamp(view?.hfov, 58, 112, byId[sceneId].hfov);
+  });
   return project;
 }
 
-function imageCommands(input, output, adjustment, quality) {
+function releaseDimensions(source) {
+  let width = source.width;
+  while (width > 8192) width = Math.floor(width / 2);
+  if (width % 2 !== 0) width -= 1;
+  return { width, height: Math.round(width / 2) };
+}
+
+function imageCommands(input, output, adjustment, quality, dimensions) {
   const brightness = clamp(adjustment?.brightness, 70, 130, 100) - 100;
   const contrast = clamp(adjustment?.contrast, 70, 130, 100) - 100;
   const saturation = clamp(adjustment?.saturation, 0, 160, 100);
   const warmth = clamp(adjustment?.warmth, -20, 20, 0);
-  const commands = [input, "-auto-orient", "-strip", "-brightness-contrast", `${brightness}x${contrast}`, "-modulate", `100,${saturation},100`];
+  const commands = [
+    "-define", `jpeg:size=${dimensions.width}x${dimensions.height}`,
+    input,
+    "-auto-orient",
+    "-resize", `${dimensions.width}x${dimensions.height}>`,
+    "-strip",
+    "-brightness-contrast", `${brightness}x${contrast}`,
+    "-modulate", `100,${saturation},100`
+  ];
   if (warmth !== 0) {
     commands.push("-fill", warmth > 0 ? "#e5ad62" : "#6ea6dd", "-colorize", `${Math.abs(warmth) * 1.1}%`);
   }
@@ -168,7 +201,7 @@ async function applyLocalAreas(input, output, areas, image, temporaryRoot) {
     const nextPath = join(temporaryRoot, `area-${index}.jpg`);
     await writeFile(overlayPath, localOverlaySvg(area, image), "utf8");
     const compose = clamp(area.intensity, -100, 100, 30) >= 0 ? "screen" : "multiply";
-    await run("magick", [current, overlayPath, "-compose", compose, "-composite", nextPath]);
+    await runMagick([current, overlayPath, "-compose", compose, "-composite", nextPath]);
     current = nextPath;
   }
   await rename(current, output);
@@ -183,11 +216,12 @@ async function buildScene(scene, workspace, output, draft, temporaryRoot, qualit
   const source = await readFile(input);
   const dimensions = jpegDimensions(source);
   assert(dimensions && dimensions.width >= 1600 && Math.abs(dimensions.width / dimensions.height - 2) <= 0.02, `${scene.id} is not a valid 2:1 JPEG panorama.`);
+  const outputDimensions = releaseDimensions(dimensions);
   const workImage = join(temporaryRoot, `${scene.id}-base.jpg`);
-  await run("magick", imageCommands(input, workImage, draft.sceneAdjustments?.[scene.id], quality));
+  await runMagick(imageCommands(input, workImage, draft.sceneAdjustments?.[scene.id], quality, outputDimensions));
   const areas = Array.isArray(draft.localAdjustments?.[scene.id]) ? draft.localAdjustments[scene.id] : [];
   const finishedImage = join(temporaryRoot, `${scene.id}-finished.jpg`);
-  if (areas.length > 0) await applyLocalAreas(workImage, finishedImage, areas, dimensions, temporaryRoot);
+  if (areas.length > 0) await applyLocalAreas(workImage, finishedImage, areas, outputDimensions, temporaryRoot);
   else await rename(workImage, finishedImage);
   const panoramaHash = await hashFile(finishedImage);
   const panoramaRelative = `assets/p/${panoramaHash.slice(0, 20)}.jpg`;
@@ -195,7 +229,7 @@ async function buildScene(scene, workspace, output, draft, temporaryRoot, qualit
   await mkdir(dirname(panoramaOutput), { recursive: true });
   await rename(finishedImage, panoramaOutput);
   const thumbnailWork = join(temporaryRoot, `${scene.id}-thumb.jpg`);
-  await run("magick", [panoramaOutput, "-thumbnail", "480x240^", "-gravity", "center", "-extent", "480x240", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "82", thumbnailWork]);
+  await runMagick([panoramaOutput, "-thumbnail", "480x240^", "-gravity", "center", "-extent", "480x240", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "82", thumbnailWork]);
   const thumbnailHash = await hashFile(thumbnailWork);
   const thumbnailRelative = `assets/t/${thumbnailHash.slice(0, 20)}.jpg`;
   const thumbnailOutput = join(output, thumbnailRelative);

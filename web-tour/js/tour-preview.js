@@ -8,13 +8,11 @@
   fetch(`__tour-preview/overrides${workspace ? "?workspace=1" : ""}`, { cache: "no-store" })
     .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Could not load saved draft (${response.status})`)))
     .then((draft) => {
-      if (api.viewer.isLoaded()) {
-        api.applyDraft(draft);
-        return;
-      }
+      const applyAfterPaint = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => api.applyDraft(draft)));
+      if (api.viewer.isLoaded()) return applyAfterPaint();
       const applyWhenLoaded = () => {
         api.viewer.off("load", applyWhenLoaded);
-        api.applyDraft(draft);
+        applyAfterPaint();
       };
       api.viewer.on("load", applyWhenLoaded);
     })

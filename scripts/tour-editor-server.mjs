@@ -19,7 +19,7 @@ const workspaceProjectPath = join(workspaceRoot, "tour-project.json");
 const workspaceDraftPath = join(workspaceRoot, "draft.json");
 const releaseRoot = join(projectRoot, "release");
 const releaseZipPath = join(projectRoot, "dist", "raindigit-360-tour.zip");
-const host = "127.0.0.1";
+const host = process.env.TOUR_SERVER_HOST || "127.0.0.1";
 const previewMode = process.argv.includes("--preview");
 const portArgument = process.argv.indexOf("--port");
 const port = portArgument >= 0 ? Number(process.argv[portArgument + 1]) : previewMode ? 8768 : 8767;
@@ -28,6 +28,10 @@ const maxUploadBytes = 128 * 1024 * 1024;
 
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Use a valid local port between 1024 and 65535.");
+}
+
+if (!["127.0.0.1", "0.0.0.0"].includes(host)) {
+  throw new Error("TOUR_SERVER_HOST must be 127.0.0.1 or 0.0.0.0.");
 }
 
 const contentTypes = {
@@ -98,6 +102,13 @@ function isValidSceneMetadata(value) {
     typeof value.subtitle === "string" && value.subtitle.length <= 120;
 }
 
+function isValidSceneView(value) {
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    Number.isFinite(value.pitch) && value.pitch >= -85 && value.pitch <= 85 &&
+    Number.isFinite(value.yaw) && value.yaw >= -180 && value.yaw <= 180 &&
+    Number.isFinite(value.hfov) && value.hfov >= 58 && value.hfov <= 112;
+}
+
 function isValidLocalAdjustment(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return typeof value.id === "string" && /^[a-z0-9-]{1,40}$/i.test(value.id) &&
@@ -144,6 +155,10 @@ function validateDraft(value) {
     typeof value.sceneMetadata === "object" && !Array.isArray(value.sceneMetadata) &&
     Object.entries(value.sceneMetadata).every(([sceneId, metadata]) => /^scene-[a-z0-9-]+$/i.test(sceneId) && isValidSceneMetadata(metadata))
   );
+  const validSceneViews = value.sceneViews === undefined || (
+    typeof value.sceneViews === "object" && !Array.isArray(value.sceneViews) &&
+    Object.entries(value.sceneViews).every(([sceneId, view]) => /^scene-[a-z0-9-]+$/i.test(sceneId) && isValidSceneView(view))
+  );
   const validLocalAdjustments = value.localAdjustments === undefined || (
     typeof value.localAdjustments === "object" && !Array.isArray(value.localAdjustments) &&
     Object.entries(value.localAdjustments).every(([sceneId, adjustments]) => /^scene-[a-z0-9-]+$/i.test(sceneId) && Array.isArray(adjustments) && adjustments.length <= 30 && adjustments.every(isValidLocalAdjustment))
@@ -152,7 +167,7 @@ function validateDraft(value) {
     typeof value.addedHotspots === "object" && !Array.isArray(value.addedHotspots) &&
     Object.entries(value.addedHotspots).every(([sceneId, hotspots]) => /^scene-[a-z0-9-]+$/i.test(sceneId) && Array.isArray(hotspots) && hotspots.length <= 60 && hotspots.every(isValidAddedHotspot))
   );
-  return validCoordinates && validAdjustments && validMetadata && validLocalAdjustments && validAddedHotspots;
+  return validCoordinates && validAdjustments && validMetadata && validSceneViews && validLocalAdjustments && validAddedHotspots;
 }
 
 function validateWorkspaceProject(value) {
@@ -291,11 +306,16 @@ function jpegDimensions(buffer) {
 }
 
 async function runMagick(args) {
-  try {
-    await execFileAsync("magick", args, { maxBuffer: 1024 * 1024 });
-  } catch (error) {
-    throw new Error(`Image preparation failed: ${error.stderr || error.message}`);
+  for (const binary of ["magick", "convert"]) {
+    try {
+      await execFileAsync(binary, args, { maxBuffer: 1024 * 1024 });
+      return;
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw new Error(`Image preparation failed: ${error.stderr || error.message}`);
+    }
   }
+  throw new Error("Image preparation failed: ImageMagick is not installed.");
 }
 
 function workspaceConfig(project, scope) {
@@ -439,6 +459,38 @@ const server = createServer(async (request, response) => {
         existing.scenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
         existing.firstScene = typeof body.firstScene === "string" && incomingById.has(body.firstScene) ? body.firstScene : existing.scenes[0]?.id || null;
         await writeWorkspaceProject(existing);
+        replyJson(response, 200, existing);
+        return;
+      }
+      if (body?.action === "remove") {
+        const sceneId = typeof body.sceneId === "string" ? body.sceneId : "";
+        const scene = existing?.scenes.find((candidate) => candidate.id === sceneId);
+        if (!existing || !scene) {
+          replyJson(response, 404, { error: "The selected viewpoint no longer exists." });
+          return;
+        }
+        await Promise.all([
+          rm(join(workspaceRoot, scene.panorama), { force: true }),
+          rm(join(workspaceRoot, scene.thumb), { force: true })
+        ]);
+        existing.scenes = existing.scenes
+          .filter((candidate) => candidate.id !== sceneId)
+          .map((candidate) => ({ ...candidate, hotspots: candidate.hotspots.filter((hotspot) => hotspot.target !== sceneId) }));
+        existing.firstScene = existing.firstScene === sceneId ? existing.scenes[0]?.id || null : existing.firstScene;
+        await writeWorkspaceProject(existing);
+
+        const draft = await readDraft(workspaceDraftPath);
+        Object.keys(draft.overrides).filter((key) => key.startsWith(`${sceneId}::`)).forEach((key) => delete draft.overrides[key]);
+        for (const collection of ["sceneMetadata", "sceneViews", "sceneAdjustments", "localAdjustments"]) {
+          if (draft[collection]) delete draft[collection][sceneId];
+        }
+        if (draft.addedHotspots) {
+          delete draft.addedHotspots[sceneId];
+          Object.keys(draft.addedHotspots).forEach((sourceId) => {
+            draft.addedHotspots[sourceId] = draft.addedHotspots[sourceId].filter((hotspot) => hotspot.target !== sceneId);
+          });
+        }
+        await writeJsonAtomic(workspaceDraftPath, draft);
         replyJson(response, 200, existing);
         return;
       }
