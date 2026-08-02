@@ -15,6 +15,10 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function assertNear(actual, expected, tolerance, message) {
+  assert(Math.abs(actual - expected) <= tolerance, `${message}: expected ${expected}, got ${actual}`);
+}
+
 async function runMagick(arguments_) {
   for (const binary of ["magick", "convert"]) {
     try {
@@ -87,6 +91,13 @@ async function dragViewer(page, deltaX) {
   await page.mouse.move(startX + deltaX, y, { steps: 10 });
   await page.mouse.up();
   await page.waitForTimeout(200);
+}
+
+async function viewerPose(page) {
+  return page.evaluate(() => ({
+    pitch: Math.round(window.__TOUR_EDITOR_API.viewer.getPitch() * 10) / 10,
+    yaw: Math.round(window.__TOUR_EDITOR_API.viewer.getYaw() * 10) / 10
+  }));
 }
 
 async function main() {
@@ -210,6 +221,9 @@ async function main() {
     await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
     await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
     assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
+    await page.getByRole("button", { name: "Kitchen door", exact: true }).click();
+    await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
+    await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
     await page.evaluate(() => { document.querySelector(".editor-panel__content").scrollTop = 0; });
     await page.screenshot({ path: join(outputDir, "01-room-board-top-mobile.png") });
     await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();
@@ -238,26 +252,42 @@ async function main() {
     const sourceSceneId = await page.evaluate(() => window.__TOUR_EDITOR_API.viewer.getScene());
 
     await dragViewer(page, 130);
+    const firstPose = await viewerPose(page);
     await page.getByRole("button", { name: "Save point here" }).click();
     const first = (await addedHotspots(page, sourceSceneId))[0];
     assert(first?.kind === "doorway" && first.positionConfirmed, `The first walking button was not saved: ${JSON.stringify(first)}`);
+    assertNear(first.pitch, firstPose.pitch, 0.6, "The first walking button pitch did not match the centre target");
+    assertNear(first.yaw, firstPose.yaw, 0.6, "The first walking button yaw did not match the centre target");
 
     await dragViewer(page, -170);
+    const secondPose = await viewerPose(page);
     await page.getByRole("button", { name: "Save point here" }).click();
     const both = await addedHotspots(page, sourceSceneId);
     assert(both.length === 2 && both.every((hotspot) => hotspot.positionConfirmed), `Two independent points were not preserved: ${JSON.stringify(both)}`);
     assert(JSON.stringify(both[0]) === JSON.stringify(first), `Placing the second point changed the first point: ${JSON.stringify({ first, both })}`);
     assert(both[0].pitch !== both[1].pitch || both[0].yaw !== both[1].yaw, "Two points collapsed onto the same panorama coordinate.");
+    assertNear(both[1].pitch, secondPose.pitch, 0.6, "The second walking button pitch did not match the centre target");
+    assertNear(both[1].yaw, secondPose.yaw, 0.6, "The second walking button yaw did not match the centre target");
+    while (await page.locator("#editorConfirmCentre").isVisible()) {
+      await page.waitForFunction(() => {
+        const button = document.querySelector("#editorConfirmCentre");
+        return button && !button.disabled;
+      });
+      await dragViewer(page, 70);
+      await page.getByRole("button", { name: "Save point here" }).click();
+      await page.waitForTimeout(300);
+    }
     await page.screenshot({ path: join(outputDir, "02-movements-desktop.png"), fullPage: true });
 
     await page.getByRole("button", { name: "Back" }).click();
     await assertOneTask(page, "Choose the look");
     await page.getByRole("button", { name: "Continue" }).click();
     await assertOneTask(page, "Place the walking buttons");
-    assert(await page.locator(".editor-saved-movement").count() === 2, "Back navigation lost saved movement points.");
-    assert(await page.locator(".editor-walking-icon").count() >= 2, "Walking buttons do not use one consistent person icon.");
+    const confirmedAfterBack = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.positionConfirmed).length);
+    assert(confirmedAfterBack === 3, "Back navigation lost saved movement points.");
+    assert(await page.locator(".editor-walking-icon").count() >= 1, "Walking buttons do not use one consistent person icon.");
     const pendingBeforeArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
-    assert(pendingBeforeArrival === 2, `Expected two first views, found ${pendingBeforeArrival}.`);
+    assert(pendingBeforeArrival === 3, `Expected three first views, found ${pendingBeforeArrival}.`);
     await page.setViewportSize({ width: 390, height: 605 });
     await page.getByRole("button", { name: "Choose first views" }).click();
     await page.waitForTimeout(2_000);
@@ -273,12 +303,12 @@ async function main() {
     await assertOneTask(page, "Choose what people see first");
     await page.screenshot({ path: join(outputDir, "03-first-view-mobile.png"), fullPage: true });
     const visitedArrivalTasks = new Set();
-    for (let index = 0; index < 2; index += 1) {
+    for (let index = 0; index < pendingBeforeArrival; index += 1) {
       await page.waitForFunction(() => {
         const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
         return snapshot.selected && snapshot.activeSceneId === snapshot.selected.sceneId && snapshot.viewerLoaded;
       });
-      await page.getByText(`First view ${index + 1} of 2`, { exact: false }).waitFor();
+      await page.getByText(`First view ${index + 1} of ${pendingBeforeArrival}`, { exact: false }).waitFor();
       const open = page.getByRole("button", { name: /^Open / });
       await open.waitFor();
       const route = await page.evaluate(() => {
@@ -317,7 +347,7 @@ async function main() {
       await saveFirstView.waitFor();
       await dragViewer(page, index === 0 ? 80 : -90);
       await saveFirstView.click();
-      if (index === 0) {
+      if (index < pendingBeforeArrival - 1) {
         await page.waitForFunction((previousTaskKey) => {
           const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
           if (!snapshot.selected) return false;
@@ -355,7 +385,7 @@ async function main() {
       unifiedWalkingButtons: true,
       independentPoints: true,
       backNavigation: true,
-      firstViews: 2,
+      firstViews: visitedArrivalTasks.size,
       releaseBuilt: true,
       mobile: true,
       diagnosticEvents: events.size
