@@ -2,7 +2,7 @@
 
 ## Starter
 - Purpose: local RainDigit application for turning stitched 360 panoramas into a reviewed, self-hosted property tour.
-- Contains: the original Killarney tour, a local five-stage studio, a static release builder and Docker delivery files.
+- Contains: the original Killarney tour, a linear local studio, editable project backup, single-file release builder and Docker delivery files.
 - Read full when: importing the next room set, reviewing a tour, producing a customer package or deploying it.
 - Last update: 2026-08-02
 
@@ -22,7 +22,7 @@
 
 ## Processing
 - Original files were copied unchanged into `originals/Camera01`.
-- Web panoramas use the original 11904x5952 resolution, a natural interior grade, high-quality JPEG encoding and no EXIF/GPS metadata.
+- Camera originals remain 11904x5952. Browser derivatives use a natural interior grade, high-quality JPEG encoding, no EXIF/GPS metadata and a maximum release width of 8192 pixels.
 - Scene labels are: Kitchen, Passage, Hall and Living Room.
 - Each physical transition is checked in the browser from its source doorway and on arrival. The route matrix is `qa/route-matrix.md`.
 
@@ -34,15 +34,17 @@ Start the local studio:
 npm run studio
 ```
 
-Open `http://127.0.0.1:8767/?edit=1` and work through the five stages:
+Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
-1. **Rooms**: create a project, group one or more viewpoints into each room, name and order them, then choose the opening viewpoint.
-2. **Color**: apply whole-panorama corrections or smooth local light/color areas.
-3. **Transitions**: create doorway or same-room viewpoint links, then deliberately place each marker.
-4. **Arrival**: compose the first view that a visitor sees after every directed transition.
-5. **Export**: review the result, build the static release, open it and download the ZIP.
+1. **Start**: continue, create or restore an editable `.rdtour` project.
+2. **Upload**: add all stitched 2:1 JPG panoramas without room decisions.
+3. **Rooms**: create rooms, assign stable panorama cards, name and order viewpoints, then choose the opening view.
+4. **Color**: apply whole-panorama corrections or smooth local light/color areas.
+5. **Transitions**: create doorway or same-room viewpoint links, then deliberately place each marker.
+6. **Arrival**: compose the first view that a visitor sees after every directed transition.
+7. **Export**: review and create the single website file plus editable project backup.
 
-One **Save** persists the local draft. Review the product view at
+Each **Continue** validates and saves the current step. Review the product view at
 `http://127.0.0.1:8768/?preview=1`. When working in a newly imported project,
 use the `workspace=1` URL supplied by the studio for both editor and preview.
 
@@ -52,8 +54,9 @@ Create the customer package only after review approval:
 npm run build:release
 ```
 
-This creates `release/` and `dist/raindigit-360-tour.zip`. The ZIP contains an
-`INSTALL.txt` file with a ready iframe example. Neither output is versioned;
+This creates `release/`, `dist/raindigit-360-tour.html` and the advanced
+`dist/raindigit-360-tour.zip`. The HTML is the simplest one-file handoff; the ZIP contains an
+`INSTALL.txt` file with a ready iframe example. Generated output is not versioned;
 they are generated from the private workspace. See [the product workflow](docs/product-workflow.md)
 and [asset-protection model](docs/asset-protection.md) for the exact boundaries.
 

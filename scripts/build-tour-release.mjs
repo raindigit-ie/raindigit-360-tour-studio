@@ -15,6 +15,7 @@ function parseArguments(argv) {
     workspace: join(projectRoot, "studio-workspace"),
     output: join(projectRoot, "release"),
     zip: null,
+    single: null,
     quality: 86,
     replace: false
   };
@@ -23,10 +24,11 @@ function parseArguments(argv) {
     if (argument === "--workspace") options.workspace = resolve(argv[++index] || "");
     else if (argument === "--output") options.output = resolve(argv[++index] || "");
     else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
+    else if (argument === "--single") options.single = resolve(argv[++index] || "");
     else if (argument === "--quality") options.quality = Number(argv[++index]);
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--quality 84..94] [--replace]");
+      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--quality 84..94] [--replace]");
       process.exit(0);
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -249,7 +251,7 @@ async function copyRuntime(output) {
   const releaseRuntime = studioRuntime
     .replace(/const isLocalEditorRequest = viewParams\.get\("edit"\) === "1"[\s\S]*?const defaultSceneAdjustment/, "const defaultSceneAdjustment")
     .replace(/\/\/ Exposed only on explicit QA URLs[\s\S]*?\/\/ The preview can apply a saved local draft, but deliberately exposes no editor UI or write endpoint\.[\s\S]*?}\n\n/, "")
-    .replace("if (isLocalEditorRequest || isLocalDraftPreview) setNavigatorOpen(true);", "setNavigatorOpen(false);");
+    .replace(/if \(isLocal(?:EditorRequest \|\| isLocal)?DraftPreview\) setNavigatorOpen\(true\);/, "setNavigatorOpen(false);");
   assert(!/tour-editor|tour-preview|__TOUR_EDITOR|__TOUR_DRAFT_PREVIEW/.test(releaseRuntime), "Release runtime still references local studio code.");
   await writeFile(join(output, "js", "tour.js"), releaseRuntime, "utf8");
   await cp(join(source, "assets"), join(output, "assets"), { recursive: true });
@@ -270,6 +272,40 @@ async function createZip(output, zipPath) {
   await mkdir(dirname(zipPath), { recursive: true });
   await rm(zipPath, { force: true });
   await run("zip", ["-X", "-r", zipPath, "."], { cwd: output });
+}
+
+function inlineScript(value) {
+  return value.replace(/<\/script/gi, "<\\/script");
+}
+
+async function dataUrl(path, mimeType) {
+  return `data:${mimeType};base64,${(await readFile(path)).toString("base64")}`;
+}
+
+async function createSingleHtml(output, project, singlePath) {
+  const singleProject = structuredClone(project);
+  for (const scene of singleProject.scenes) {
+    scene.panorama = await dataUrl(join(output, scene.panorama), "image/jpeg");
+    scene.thumb = await dataUrl(join(output, scene.thumb), "image/jpeg");
+  }
+  const [template, pannellumCss, tourCss, pannellumJs, tourJs, logo] = await Promise.all([
+    readFile(join(output, "index.html"), "utf8"),
+    readFile(join(output, "css", "pannellum.css"), "utf8"),
+    readFile(join(output, "css", "tour.css"), "utf8"),
+    readFile(join(output, "js", "pannellum.js"), "utf8"),
+    readFile(join(output, "js", "tour.js"), "utf8"),
+    dataUrl(join(output, "assets", "raindigit-mark.svg"), "image/svg+xml")
+  ]);
+  const configJs = `window.TOUR_CONFIG = ${JSON.stringify(singleProject)};`;
+  const html = template
+    .replace(/<link rel="stylesheet" href="css\/pannellum\.css[^"]*" \/>/, `<style>${pannellumCss}</style>`)
+    .replace(/<link rel="stylesheet" href="css\/tour\.css[^"]*" \/>/, `<style>${tourCss}</style>`)
+    .replace('src="assets/raindigit-mark.svg"', `src="${logo}"`)
+    .replace(/<script src="js\/tour-bootstrap\.js[^"]*"><\/script>/, `<script>${inlineScript(configJs)}\n${inlineScript(pannellumJs)}\n${inlineScript(tourJs)}</script>`);
+  assert(!/<(?:link|script)[^>]+(?:href|src)="(?!data:|https?:|#)/i.test(html), "Single-file release still has a local runtime dependency.");
+  await mkdir(dirname(singlePath), { recursive: true });
+  await rm(singlePath, { force: true });
+  await writeFile(singlePath, html, "utf8");
 }
 
 async function main() {
@@ -296,7 +332,8 @@ async function main() {
     await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
     await rm(temporaryRoot, { recursive: true, force: true });
     if (options.zip) await createZip(options.output, options.zip);
-    console.log(JSON.stringify({ output: options.output, zip: options.zip, scenes: project.scenes.length, mediaBytes: totalBytes, quality: options.quality }, null, 2));
+    if (options.single) await createSingleHtml(options.output, project, options.single);
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, scenes: project.scenes.length, mediaBytes: totalBytes, quality: options.quality }, null, 2));
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
     throw error;

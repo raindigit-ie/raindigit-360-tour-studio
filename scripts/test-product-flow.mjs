@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -63,11 +63,13 @@ async function main() {
   const workspace = join(root, "workspace");
   const output = join(root, "release");
   const zip = join(root, "raindigit-360-tour.zip");
+  const singleHtml = join(root, "raindigit-360-tour.html");
+  const artifacts = join(root, "artifacts");
   const port = 18000 + Math.floor(Math.random() * 20000);
   const baseUrl = `http://127.0.0.1:${port}`;
   const server = spawn(process.execPath, [join(projectRoot, "scripts", "tour-editor-server.mjs"), "--port", String(port)], {
     cwd: projectRoot,
-    env: { ...process.env, INSTA360_TOUR_WORKSPACE: workspace },
+    env: { ...process.env, INSTA360_TOUR_WORKSPACE: workspace, INSTA360_TOUR_ARTIFACTS: artifacts, INSTA360_TOUR_RELEASE: join(root, "server-release") },
     stdio: ["ignore", "pipe", "pipe"]
   });
   let serverError = "";
@@ -121,6 +123,7 @@ async function main() {
       body: JSON.stringify({
         action: "structure",
         title: "Product QA Tour",
+        rooms: [{ id: "room-kitchen", label: "Kitchen" }, { id: "room-hall", label: "Hall" }],
         firstScene: "scene-002",
         sceneIds: ["scene-002", "scene-001", "scene-003"],
         scenes: structuredScenes
@@ -167,7 +170,7 @@ async function main() {
     const config = await configResponse.text();
     assert(configResponse.ok && config.includes("room-kitchen") && config.includes("room-hall"), "Workspace preview config must contain both rooms.");
 
-    await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--replace"], { cwd: projectRoot });
+    await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--replace"], { cwd: projectRoot });
     await execFileAsync("unzip", ["-t", zip]);
     const { stdout: listing } = await execFileAsync("unzip", ["-Z1", zip]);
     assert(listing.includes("INSTALL.txt"), "The package must contain installation instructions.");
@@ -177,6 +180,17 @@ async function main() {
     assert(releaseConfig.includes('"pitch":-8') && releaseConfig.includes('"yaw":-60') && releaseConfig.includes('"hfov":92'), "Saved default viewpoints must be baked into the release.");
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
+    const singleRelease = await readFile(singleHtml, "utf8");
+    assert(singleRelease.includes("data:image/jpeg;base64,") && singleRelease.includes("window.TOUR_CONFIG"), "The single HTML must embed its tour and panorama data.");
+    assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");
+
+    const projectDownload = await fetch(`${baseUrl}/__tour-editor/project-download?workspace=1`);
+    assert(projectDownload.ok, "Editable project download must succeed.");
+    const projectBackup = Buffer.from(await projectDownload.arrayBuffer());
+    const backupPath = join(root, "product-qa.rdtour");
+    await writeFile(backupPath, projectBackup);
+    const { stdout: backupListing } = await execFileAsync("unzip", ["-Z1", backupPath]);
+    assert(backupListing.includes("tour-project.json") && backupListing.includes("draft.json") && backupListing.includes("panoramas/scene-001.jpg"), "Editable project must include JSON and media.");
 
     const singleOutput = join(root, "release-single");
     const singleZip = join(root, "raindigit-single-tour.zip");
@@ -206,12 +220,21 @@ async function main() {
     const singleConfig = await readFile(join(singleOutput, "js", "tour-config.js"), "utf8");
     assert((singleConfig.match(/scene-001/g) || []).length >= 1 && !singleConfig.includes("scene-002"), "A one-panorama tour must export without invented destinations.");
 
+    const restored = await requestJson(`${baseUrl}/__tour-editor/project-import`, {
+      method: "POST",
+      headers: { "content-type": "application/zip" },
+      body: projectBackup
+    });
+    assert(restored.project.scenes.length === 3 && restored.project.rooms.length === 2, "Editable project backup must restore rooms, scenes and settings.");
+
     console.log(JSON.stringify({
       passed: true,
       rooms: 2,
       viewpoints: 3,
       transitions: 1,
       singlePanorama: true,
+      editableProjectRoundTrip: true,
+      singleHtml: true,
       archiveBytes: (await stat(zip)).size
     }, null, 2));
   } finally {

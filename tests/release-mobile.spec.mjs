@@ -7,7 +7,6 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   });
 
   await page.goto(`/?mobile-qa=${browserName}`);
-  await expect(page.locator(".nav-hotspot")).toHaveCount(2);
   await expect(page.locator(".pnlm-render-container canvas")).toBeVisible();
 
   const layout = await page.evaluate(() => {

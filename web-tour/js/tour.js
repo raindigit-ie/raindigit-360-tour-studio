@@ -613,4 +613,4 @@ viewer.on("load", () => {
   window.requestAnimationFrame(removeOrphanHotspotElements);
 });
 setActiveScene(initialScene);
-if (isLocalEditorRequest || isLocalDraftPreview) setNavigatorOpen(true);
+  if (isLocalDraftPreview) setNavigatorOpen(true);

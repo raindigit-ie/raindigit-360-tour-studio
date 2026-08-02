@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -17,14 +17,18 @@ const draftPath = process.env.INSTA360_TOUR_DRAFT_PATH ? resolve(process.env.INS
 const workspaceRoot = process.env.INSTA360_TOUR_WORKSPACE ? resolve(process.env.INSTA360_TOUR_WORKSPACE) : defaultWorkspaceRoot;
 const workspaceProjectPath = join(workspaceRoot, "tour-project.json");
 const workspaceDraftPath = join(workspaceRoot, "draft.json");
-const releaseRoot = join(projectRoot, "release");
-const releaseZipPath = join(projectRoot, "dist", "raindigit-360-tour.zip");
+const artifactRoot = process.env.INSTA360_TOUR_ARTIFACTS ? resolve(process.env.INSTA360_TOUR_ARTIFACTS) : join(projectRoot, "dist");
+const releaseRoot = process.env.INSTA360_TOUR_RELEASE ? resolve(process.env.INSTA360_TOUR_RELEASE) : join(projectRoot, "release");
+const releaseZipPath = join(artifactRoot, "raindigit-360-tour.zip");
+const releaseSinglePath = join(artifactRoot, "raindigit-360-tour.html");
+const projectBackupPath = join(artifactRoot, "raindigit-tour-project.rdtour");
 const host = process.env.TOUR_SERVER_HOST || "127.0.0.1";
 const previewMode = process.argv.includes("--preview");
 const portArgument = process.argv.indexOf("--port");
 const port = portArgument >= 0 ? Number(process.argv[portArgument + 1]) : previewMode ? 8768 : 8767;
 const endpoint = previewMode ? "/__tour-preview" : "/__tour-editor";
 const maxUploadBytes = 128 * 1024 * 1024;
+const maxProjectBytes = 512 * 1024 * 1024;
 
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Use a valid local port between 1024 and 65535.");
@@ -39,7 +43,8 @@ const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".jpg": "image/jpeg",
   ".js": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".rdtour": "application/zip",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
   ".zip": "application/zip"
@@ -70,6 +75,7 @@ function emptyWorkspaceProject(title = "Untitled 3D Tour") {
     schema: "raindigit-tour-project/v1",
     title,
     firstScene: null,
+    rooms: [],
     scenes: []
   };
 }
@@ -172,6 +178,11 @@ function validateDraft(value) {
 
 function validateWorkspaceProject(value) {
   if (!value || value.schema !== "raindigit-tour-project/v1" || typeof value.title !== "string" || !Array.isArray(value.scenes)) return false;
+  if (value.rooms !== undefined) {
+    if (!Array.isArray(value.rooms) || value.rooms.length > 100) return false;
+    const roomIds = new Set();
+    if (!value.rooms.every((room) => room && typeof room.id === "string" && /^[a-z0-9-]{1,60}$/i.test(room.id) && !roomIds.has(room.id) && roomIds.add(room.id) && typeof room.label === "string" && room.label.trim().length >= 1 && room.label.length <= 80)) return false;
+  }
   const ids = new Set();
   return value.title.trim().length >= 1 && value.title.length <= 100 && value.scenes.length <= 100 && value.scenes.every((scene) => {
     if (!scene || typeof scene !== "object" || !/^scene-\d{3,}$/i.test(scene.id) || ids.has(scene.id)) return false;
@@ -205,7 +216,7 @@ function roomId(label, preferred = "") {
 
 async function releaseStatus() {
   try {
-    const [archive, manifest] = await Promise.all([stat(releaseZipPath), stat(workspaceProjectPath)]);
+    const [archive, single, manifest] = await Promise.all([stat(releaseZipPath), stat(releaseSinglePath), stat(workspaceProjectPath)]);
     let latestInput = manifest.mtimeMs;
     try {
       latestInput = Math.max(latestInput, (await stat(workspaceDraftPath)).mtimeMs);
@@ -213,8 +224,9 @@ async function releaseStatus() {
       if (error.code !== "ENOENT") throw error;
     }
     return {
-      ready: archive.mtimeMs >= latestInput,
+      ready: archive.mtimeMs >= latestInput && single.mtimeMs >= latestInput,
       bytes: archive.size,
+      singleBytes: single.size,
       updatedAt: archive.mtime.toISOString()
     };
   } catch (error) {
@@ -259,6 +271,13 @@ async function readWorkspaceProject() {
   try {
     const value = JSON.parse(await readFile(workspaceProjectPath, "utf8"));
     if (!validateWorkspaceProject(value)) throw new Error("Workspace project manifest is invalid.");
+    if (!Array.isArray(value.rooms)) {
+      const rooms = new Map();
+      value.scenes.forEach((scene) => {
+        if (scene.space !== "room-unassigned" && !rooms.has(scene.space)) rooms.set(scene.space, { id: scene.space, label: scene.spaceLabel });
+      });
+      value.rooms = [...rooms.values()];
+    }
     return value;
   } catch (error) {
     if (error.code === "ENOENT") return null;
@@ -269,6 +288,51 @@ async function readWorkspaceProject() {
 async function writeWorkspaceProject(project) {
   if (!validateWorkspaceProject(project)) throw new Error("Workspace project manifest is invalid.");
   await writeJsonAtomic(workspaceProjectPath, project);
+}
+
+async function createProjectBackup() {
+  const project = await readWorkspaceProject();
+  if (!project || project.scenes.length === 0) throw new Error("Import at least one panorama before downloading a project backup.");
+  try {
+    await stat(workspaceDraftPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    await writeJsonAtomic(workspaceDraftPath, emptyDraft());
+  }
+  await mkdir(dirname(projectBackupPath), { recursive: true });
+  await rm(projectBackupPath, { force: true });
+  await execFileAsync("zip", ["-X", "-r", projectBackupPath, "tour-project.json", "draft.json", "panoramas", "thumbnails"], { cwd: workspaceRoot, maxBuffer: 1024 * 1024 });
+  return stat(projectBackupPath);
+}
+
+async function restoreProjectBackup(source) {
+  await mkdir(dirname(workspaceRoot), { recursive: true });
+  const temporaryRoot = await mkdtemp(join(dirname(workspaceRoot), ".rdtour-import-"));
+  const archivePath = join(temporaryRoot, "project.rdtour");
+  const extractedRoot = join(temporaryRoot, "workspace");
+  await writeFile(archivePath, source);
+  try {
+    const { stdout } = await execFileAsync("unzip", ["-Z1", archivePath], { maxBuffer: 1024 * 1024 });
+    const entries = stdout.split(/\r?\n/).filter(Boolean);
+    if (!entries.includes("tour-project.json") || !entries.includes("draft.json")) throw new Error("This is not a RainDigit editable project.");
+    if (entries.length > 260 || entries.some((entry) => entry.startsWith("/") || entry.includes("..") || !/^(tour-project\.json|draft\.json|panoramas\/(?:scene-\d{3,}\.jpg)?|thumbnails\/(?:scene-\d{3,}\.jpg)?)$/i.test(entry))) {
+      throw new Error("Project backup contains unsupported files.");
+    }
+    await mkdir(extractedRoot, { recursive: true });
+    await execFileAsync("unzip", ["-q", archivePath, "-d", extractedRoot], { maxBuffer: 1024 * 1024 });
+    const project = JSON.parse(await readFile(join(extractedRoot, "tour-project.json"), "utf8"));
+    const draft = JSON.parse(await readFile(join(extractedRoot, "draft.json"), "utf8"));
+    if (!validateWorkspaceProject(project) || !validateDraft(draft)) throw new Error("Project backup data is invalid.");
+    for (const scene of project.scenes) {
+      const [panorama, thumb] = await Promise.all([stat(join(extractedRoot, scene.panorama)), stat(join(extractedRoot, scene.thumb))]);
+      if (!panorama.isFile() || !thumb.isFile()) throw new Error(`Project media is missing for ${scene.id}.`);
+    }
+    await rm(workspaceRoot, { recursive: true, force: true });
+    await rename(extractedRoot, workspaceRoot);
+    return project;
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }
 
 function nextSceneId(scenes) {
@@ -437,6 +501,17 @@ const server = createServer(async (request, response) => {
           replyJson(response, 400, { error: "A project title is required." });
           return;
         }
+        const rooms = Array.isArray(body.rooms)
+          ? body.rooms.map((room) => ({
+            id: typeof room?.id === "string" ? room.id : "",
+            label: typeof room?.label === "string" ? room.label.trim().slice(0, 80) : ""
+          }))
+          : existing.rooms || [];
+        const roomIds = new Set(rooms.map((room) => room.id));
+        if (!rooms.length || roomIds.size !== rooms.length || rooms.some((room) => !/^[a-z0-9-]{1,60}$/i.test(room.id) || !room.label)) {
+          replyJson(response, 400, { error: "Create at least one valid room." });
+          return;
+        }
         const nextScenes = [];
         for (const original of existing.scenes) {
           const incoming = incomingById.get(original.id);
@@ -444,7 +519,7 @@ const server = createServer(async (request, response) => {
           const subtitle = typeof incoming.subtitle === "string" ? incoming.subtitle.trim().slice(0, 120) : "";
           const space = typeof incoming.space === "string" && /^[a-z0-9-]{1,60}$/i.test(incoming.space) ? incoming.space : "";
           const spaceLabel = typeof incoming.spaceLabel === "string" ? incoming.spaceLabel.trim().slice(0, 80) : "";
-          if (!sceneTitle || !space || !spaceLabel) {
+          if (!sceneTitle || !space || !spaceLabel || !roomIds.has(space)) {
             replyJson(response, 400, { error: `Panorama ${original.id} needs a room, title and room label.` });
             return;
           }
@@ -456,6 +531,7 @@ const server = createServer(async (request, response) => {
           return;
         }
         existing.title = title;
+        existing.rooms = rooms;
         existing.scenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
         existing.firstScene = typeof body.firstScene === "string" && incomingById.has(body.firstScene) ? body.firstScene : existing.scenes[0]?.id || null;
         await writeWorkspaceProject(existing);
@@ -523,9 +599,9 @@ const server = createServer(async (request, response) => {
       const id = nextSceneId(project.scenes);
       const requestedRoomLabel = cleanHeader(request.headers["x-tour-room-label"]).slice(0, 80);
       const requestedRoomId = cleanHeader(request.headers["x-tour-room-id"]);
-      const existingRoom = project.scenes.find((scene) => scene.space === requestedRoomId);
-      const spaceLabel = existingRoom?.spaceLabel || requestedRoomLabel || fileNameToTitle(fileName);
-      const space = existingRoom?.space || roomId(spaceLabel, requestedRoomId);
+      const existingRoom = project.rooms?.find((room) => room.id === requestedRoomId) || project.scenes.find((scene) => scene.space === requestedRoomId);
+      const spaceLabel = existingRoom?.label || existingRoom?.spaceLabel || requestedRoomLabel || fileNameToTitle(fileName);
+      const space = existingRoom?.space || existingRoom?.id || roomId(spaceLabel, requestedRoomId);
       const panorama = `panoramas/${id}.jpg`;
       const thumb = `thumbnails/${id}.jpg`;
       const temporaryInput = join(workspaceRoot, `.upload-${process.pid}-${Date.now()}.jpg`);
@@ -571,7 +647,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
-      await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--replace"], {
+      await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--replace"], {
         cwd: projectRoot,
         maxBuffer: 4 * 1024 * 1024,
         timeout: 10 * 60 * 1000
@@ -595,6 +671,40 @@ const server = createServer(async (request, response) => {
         "content-length": status.bytes
       });
       createReadStream(releaseZipPath).pipe(response);
+      return;
+    }
+    if (!previewMode && url.pathname === `${endpoint}/release-single-download` && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!workspace || !status.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before downloading it." });
+        return;
+      }
+      response.writeHead(200, {
+        ...responseHeaders("text/html; charset=utf-8"),
+        "content-disposition": "attachment; filename=raindigit-360-tour.html",
+        "content-length": status.singleBytes
+      });
+      createReadStream(releaseSinglePath).pipe(response);
+      return;
+    }
+    if (!previewMode && url.pathname === `${endpoint}/project-download` && request.method === "GET") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required." });
+        return;
+      }
+      const details = await createProjectBackup();
+      response.writeHead(200, {
+        ...responseHeaders("application/zip"),
+        "content-disposition": "attachment; filename=raindigit-tour-project.rdtour",
+        "content-length": details.size
+      });
+      createReadStream(projectBackupPath).pipe(response);
+      return;
+    }
+    if (!previewMode && url.pathname === `${endpoint}/project-import` && request.method === "POST") {
+      const source = await readBody(request, maxProjectBytes);
+      const project = await restoreProjectBackup(source);
+      replyJson(response, 200, { restored: true, project });
       return;
     }
     if (!previewMode && url.pathname.startsWith(`${endpoint}/release/`) && request.method === "GET") {
