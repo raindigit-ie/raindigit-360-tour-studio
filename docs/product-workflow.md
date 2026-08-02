@@ -17,7 +17,7 @@ The studio is local-first. It keeps source material and the editable workspace o
 - Technical formats, professional image controls, link metadata, install code, backups and folder hosting start collapsed.
 - The interface never exposes coordinates, schema names or camera-engine terms in the default task surface.
 - A user can always go **Back** or return to **Tours**. Continue validates the current screen and explains one unresolved action in plain language.
-- The same contract is tested at desktop and 390x844 mobile widths. A disclosure may add capability, but it must not compete with the screen's main action while closed.
+- The same contract is tested at desktop and a short 390x605 mobile viewport. The Back/Continue footer must remain fully visible while only the current step content scrolls. A disclosure may add capability, but it must not compete with the screen's main action while closed.
 
 ## Seven Screens
 
@@ -43,14 +43,14 @@ The studio is local-first. It keeps source material and the editable workspace o
 5. **Movement**
    - Create a link only where a visitor can move: a physical doorway/passage or another camera viewpoint.
    - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. Keep marker type and custom name under **Link options**.
-   - Select its type and destination, then use the explicit placement mode to put its marker. Rotating the panorama alone never moves a marker.
+   - Select its type and destination, then use the explicit **Rotate view** / **Place selected** modes. Placement locks the camera; a short click/tap positions the selected marker, while a drag positions nothing. Selecting another marker never turns the camera or changes another marker.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
-   - A newly added transition remains incomplete until placement mode records an explicit point. The wizard must not advance while any transition says **Place point**.
+   - A newly added transition remains incomplete until placement mode records an explicit point. If Continue finds unfinished work on another photo, it opens that source photo, selects the point and enters placement mode automatically.
 
 6. **First views**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
-   - After saving the target composition, return to the transition's source panorama so the operator does not lose context.
+   - After saving the target composition, automatically select the next unsaved destination view. When none remain, return to the transition's source panorama so the operator does not lose context.
    - The wizard must not open Publish while any new movement still says **Set arrival**.
 
 7. **Publish**

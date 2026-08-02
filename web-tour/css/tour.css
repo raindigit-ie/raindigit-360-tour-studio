@@ -1159,6 +1159,7 @@ body.is-editor-open .tour-shell {
   inset: 0 0 0 auto;
   width: min(440px, 100%);
   height: 100svh;
+  height: 100dvh;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   padding: 0;
@@ -1169,6 +1170,12 @@ body.is-editor-open .tour-shell {
   box-shadow: -18px 0 38px rgba(0, 0, 0, 0.34);
   overflow: hidden;
 }
+
+.editor-panel__header { grid-row: 1; }
+.editor-progress { grid-row: 2; }
+.editor-panel__scene { grid-row: 3; }
+.editor-panel__content { grid-row: 4; }
+.editor-panel__footer { grid-row: 5; }
 
 .editor-panel__header {
   min-height: 66px;
@@ -1524,6 +1531,66 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
   border-top: 1px solid rgba(255, 249, 236, 0.13);
 }
 
+.editor-placement-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+  padding: 4px;
+  border: 1px solid rgba(255, 249, 236, 0.14);
+  border-radius: 4px;
+  background: rgba(255, 249, 236, 0.035);
+}
+
+.editor-placement-modes .editor-button {
+  min-width: 0;
+}
+
+.editor-placement-modes .editor-button.is-active {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.editor-placement-surface {
+  position: absolute;
+  z-index: 18;
+  inset: 0;
+  display: block;
+  border: 0;
+  background: transparent;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.editor-placement-surface::before,
+.editor-placement-surface::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 1px;
+  background: rgba(255, 249, 236, 0.72);
+  box-shadow: 0 0 0 1px rgba(18, 16, 12, 0.5);
+  pointer-events: none;
+}
+
+.editor-placement-surface::before {
+  width: 20px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+}
+
+.editor-placement-surface::after {
+  width: 2px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+}
+
+.editor-placement-surface[hidden] {
+  display: none !important;
+}
+
 .editor-image__controls {
   display: grid;
   gap: 10px;
@@ -1678,19 +1745,23 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
   .editor-panel {
     inset: 44svh 0 0;
     width: 100%;
-    height: 56svh;
+    height: auto;
     border-top: 1px solid rgba(214, 175, 92, 0.55);
     border-left: 0;
     box-shadow: 0 -14px 32px rgba(0, 0, 0, 0.34);
   }
 
-  body[data-editor-stage="project"] .editor-panel,
+  body[data-editor-stage="start"] .editor-panel,
+  body[data-editor-stage="upload"] .editor-panel,
+  body[data-editor-stage="rooms"] .editor-panel,
   body[data-editor-stage="export"] .editor-panel {
     inset: 0;
-    height: 100svh;
+    height: auto;
   }
 
-  body[data-editor-stage="project"] .tour-shell,
+  body[data-editor-stage="start"] .tour-shell,
+  body[data-editor-stage="upload"] .tour-shell,
+  body[data-editor-stage="rooms"] .tour-shell,
   body[data-editor-stage="export"] .tour-shell { visibility: hidden; }
 
   .editor-panel__header { min-height: 54px; padding: 8px 10px; }

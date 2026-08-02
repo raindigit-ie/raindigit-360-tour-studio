@@ -7,7 +7,7 @@ For another operator, extract `raindigit-360-tour-studio.zip` first. The kit con
 1. Double-click `Start RainDigit 360 Studio.command`.
 2. Create a tour. Use **Open saved work** only when continuing from an exported editable backup.
 3. Complete the six numbered screens in order. The studio saves at every **Continue**.
-4. On **Movement**, place every new point deliberately. The next screen remains locked until all new points are positioned.
+4. On **Movement**, use **Rotate view** to frame the area, then **Place selected** and click once. The camera is locked while placing. The next screen remains locked until all new points are positioned and automatically opens the first unfinished point.
 5. On **First views**, save the destination view for every new movement. Publish remains locked until all destination views are reviewed.
 6. On **Publish**, build the tour and download `raindigit-360-tour.html`.
 7. Use **Backups and advanced files -> Download editable backup** only for internal continuation or transfer to another operator. It is not required by the website owner.

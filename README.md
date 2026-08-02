@@ -64,7 +64,7 @@ Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 2. **Photos**: add all ready 2:1 JPG photos without making room decisions.
 3. **Rooms**: name rooms and views, then assign each stable photo card. Additional rooms and per-photo options stay collapsed until needed.
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
-5. **Movement**: choose a destination, add its button and place it on the photo. Button type and label are optional advanced controls.
+5. **Movement**: choose a destination, add its button, rotate to the required area, then switch to **Place selected** and click once. Placement locks the camera so existing points cannot be shifted while another point is being set. Button type and label are optional advanced controls.
 6. **First views**: choose the useful first frame shown after each movement.
 7. **Publish**: check readiness, build and download one self-contained website file. Preview, website-install code, editable backup and folder package are separate collapsed options.
 
@@ -100,7 +100,7 @@ release service serves only the built static output at `http://127.0.0.1:8080`.
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
 studio journey covers create, upload, rooms, look, movement, first views, preview,
 both downloads, local release, editable-tour restore, direct offline opening of
-the downloaded HTML, iframe installation and every wizard screen at mobile width.
+the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points keep independent coordinates, placement drags do not rotate the camera and unfinished work is reopened automatically.
 It also enforces a novice-default action budget and checks that technical terms do
 not leak into the visible task surface.
 

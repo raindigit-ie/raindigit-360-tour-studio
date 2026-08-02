@@ -32,6 +32,7 @@
     importProgress: { current: 0, total: 0 },
     building: false,
     linkDraftSceneId: null,
+    pendingFocus: null,
     release: { ready: false }
   };
   window.sessionStorage.removeItem(stageStorageKey);
@@ -135,8 +136,11 @@
       <section class="editor-stage-panel" data-stage-panel="links">
         <div class="editor-step-heading"><span>Step 4</span><h2>Add ways to move</h2></div>
         <div class="editor-hotspot-list" id="editorHotspotList"></div>
+        <div class="editor-placement-modes" id="editorPlacementModes" hidden>
+          <button class="editor-button" id="editorRotate" type="button" aria-pressed="true">Rotate view</button>
+          <button class="editor-button" id="editorPlace" type="button" aria-pressed="false">Place selected</button>
+        </div>
         <div class="editor-panel__actions">
-          <button class="editor-button" id="editorPlace" type="button">Move selected point</button>
           <button class="editor-button" id="editorRemoveLink" type="button">Remove</button>
         </div>
         <div class="editor-new-link" id="editorNewLink">
@@ -211,9 +215,17 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectOptions", "ProjectOptionsLabel", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "CurrentProject", "CurrentProjectTitle", "CurrentProjectMeta", "ProjectOptions", "ProjectOptionsLabel", "ProjectTitle", "CreateWorkspace", "OpenWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "RoomList", "AssignmentStatus", "ProjectOrder", "HotspotList", "ArrivalList", "PlacementModes", "Rotate", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
+  const placementSurface = document.createElement("div");
+  placementSurface.className = "editor-placement-surface";
+  placementSurface.hidden = true;
+  placementSurface.tabIndex = 0;
+  placementSurface.setAttribute("role", "button");
+  viewerElement.appendChild(placementSurface);
+  let placementPointerStart = null;
+  let suppressPlacementClick = false;
 
   const editorToggle = document.createElement("button");
   editorToggle.className = "icon-button";
@@ -280,6 +292,7 @@
     if (!stageOrder.includes(stage)) return;
     state.activeStage = stage;
     state.placement = null;
+    state.pendingFocus = null;
     if (stage !== "arrival") state.arrival = null;
     render();
   }
@@ -294,7 +307,36 @@
     state.placement = null;
     state.arrival = null;
     setStage(stage);
-    focusSelectedMarker();
+  }
+
+  function findPendingHotspot(field) {
+    for (const scene of api.scenes) {
+      const hotspotIndex = scene.hotspots.findIndex((hotspot) => hotspot[field] === false);
+      if (hotspotIndex >= 0) return { sceneId: scene.id, hotspotIndex };
+    }
+    return null;
+  }
+
+  function applyPendingFocus() {
+    const focus = state.pendingFocus;
+    if (!focus || api.viewer.getScene() !== focus.sceneId) return false;
+    state.pendingFocus = null;
+    state.activeStage = focus.stage;
+    state.selected = { sceneId: focus.sceneId, hotspotIndex: focus.hotspotIndex };
+    state.arrival = null;
+    state.placement = focus.place ? { type: "hotspot" } : null;
+    render();
+    return true;
+  }
+
+  function focusHotspotTask(task, stage, place = false) {
+    if (!task) return;
+    state.pendingFocus = { ...task, stage, place };
+    state.activeStage = stage;
+    state.arrival = null;
+    state.placement = null;
+    if (api.viewer.getScene() === task.sceneId) applyPendingFocus();
+    else api.viewer.loadScene(task.sceneId);
   }
 
   function renderStages() {
@@ -718,10 +760,15 @@
 
   function renderHotspotList(scene) {
     renderHotspotButtons(elements.HotspotList, scene, "links");
-    elements.Place.disabled = !selectedHotspot();
-    elements.Place.hidden = !selectedHotspot();
-    elements.Place.classList.toggle("is-active", state.placement?.type === "hotspot");
-    elements.Place.textContent = state.placement?.type === "hotspot" ? "Click the photo" : "Move selected point";
+    const selected = selectedHotspot();
+    const canPlace = Boolean(selected && selected.scene.id === scene.id);
+    const placing = canPlace && state.placement?.type === "hotspot";
+    elements.PlacementModes.hidden = !canPlace;
+    elements.Rotate.classList.toggle("is-active", canPlace && !placing);
+    elements.Place.classList.toggle("is-active", placing);
+    elements.Rotate.setAttribute("aria-pressed", String(canPlace && !placing));
+    elements.Place.setAttribute("aria-pressed", String(placing));
+    elements.Place.disabled = !canPlace;
     const selectedIndex = state.selected?.sceneId === scene.id ? state.selected.hotspotIndex : -1;
     elements.RemoveLink.hidden = selectedIndex < api.getBaseHotspotCount(scene.id);
     renderLinkCreator(scene);
@@ -1013,12 +1060,10 @@
     renderLocalAdjustments(scene.id);
     renderExportPanel();
     syncSelectedMarker();
-  }
-
-  function focusSelectedMarker() {
-    const selected = selectedHotspot();
-    if (!selected || api.viewer.getScene() !== state.selected.sceneId) return;
-    api.viewer.lookAt(Math.max(-85, Math.min(85, selected.hotspot.pitch + 14)), selected.hotspot.yaw, api.viewer.getHfov(), 240);
+    const placing = Boolean(state.placement);
+    placementSurface.hidden = !placing;
+    placementSurface.setAttribute("aria-label", state.placement?.type === "hotspot" ? "Place selected movement" : "Place light area");
+    document.body.classList.toggle("is-editor-placing", placing);
   }
 
   function moveScene(direction) {
@@ -1133,11 +1178,13 @@
     }
     const readiness = releaseReadiness();
     if (state.activeStage === "links" && readiness.pendingPositions > 0) {
-      setStatus(`Place ${readiness.pendingPositions} movement point${readiness.pendingPositions === 1 ? "" : "s"} before continuing`);
+      focusHotspotTask(findPendingHotspot("positionConfirmed"), "links", true);
+      setStatus("Place the selected movement before continuing");
       return;
     }
     if (state.activeStage === "arrival" && readiness.pendingArrivals > 0) {
-      setStatus(`Choose ${readiness.pendingArrivals} destination view${readiness.pendingArrivals === 1 ? "" : "s"} before continuing`);
+      focusHotspotTask(findPendingHotspot("arrivalConfirmed"), "arrival");
+      setStatus("Choose the destination view for the selected movement");
       return;
     }
     if (await saveDraft()) setStage(stageOffset(1));
@@ -1163,9 +1210,16 @@
       hfov: roundCoordinate(api.viewer.getHfov())
     });
     state.arrival = null;
+    const nextPending = findPendingHotspot("arrivalConfirmed");
+    if (nextPending) {
+      focusHotspotTask(nextPending, "arrival");
+      setStatus("Destination view saved. Next movement selected.");
+      return;
+    }
+    state.pendingFocus = { sceneId: originSceneId, hotspotIndex: state.selected.hotspotIndex, stage: "arrival", place: false };
     setStatus("Destination view saved");
     if (api.viewer.getScene() !== originSceneId) api.viewer.loadScene(originSceneId);
-    else render();
+    else applyPendingFocus();
   }
 
   async function refreshReleaseStatus() {
@@ -1279,9 +1333,15 @@
   });
   panel.querySelector("#editorPreviousScene").addEventListener("click", () => moveScene(-1));
   panel.querySelector("#editorNextScene").addEventListener("click", () => moveScene(1));
+  elements.Rotate.addEventListener("click", () => {
+    state.placement = null;
+    setStatus("Rotate view mode");
+    render();
+  });
   elements.Place.addEventListener("click", () => {
     if (!selectedHotspot()) return;
-    state.placement = state.placement?.type === "hotspot" ? null : { type: "hotspot" };
+    state.placement = { type: "hotspot" };
+    setStatus("Place the selected movement on the photo");
     render();
   });
   elements.RemoveLink.addEventListener("click", () => {
@@ -1344,11 +1404,6 @@
   });
 
   viewerElement.addEventListener("pointerdown", (event) => {
-    if (state.placement) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
     const marker = event.target.closest("[data-editor-hotspot-id]");
     if (!marker) return;
     const [sceneId, hotspotIndex] = marker.dataset.editorHotspotId.split("::");
@@ -1357,19 +1412,48 @@
     setSelected(sceneId, Number(hotspotIndex), state.activeStage === "arrival" ? "arrival" : "links");
   }, true);
   viewerElement.addEventListener("click", (event) => {
-    if (state.placement) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      applyPlacement(event);
-      return;
-    }
     if (event.target.closest("[data-editor-hotspot-id]")) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
   }, true);
 
+  placementSurface.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    placementPointerStart = { x: event.clientX, y: event.clientY };
+    suppressPlacementClick = false;
+  });
+  placementSurface.addEventListener("pointermove", (event) => {
+    if (!placementPointerStart) return;
+    if (Math.hypot(event.clientX - placementPointerStart.x, event.clientY - placementPointerStart.y) > 6) suppressPlacementClick = true;
+  });
+  placementSurface.addEventListener("pointerup", () => {
+    placementPointerStart = null;
+  });
+  placementSurface.addEventListener("pointercancel", () => {
+    placementPointerStart = null;
+    suppressPlacementClick = true;
+  });
+  placementSurface.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (suppressPlacementClick) {
+      suppressPlacementClick = false;
+      setStatus("View locked. Click once to place the selected movement.");
+      return;
+    }
+    applyPlacement(event);
+  });
+  placementSurface.addEventListener("keydown", (event) => {
+    if (!["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    const bounds = placementSurface.getBoundingClientRect();
+    applyPlacement({ clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 });
+  });
+
   api.viewer.on("scenechange", () => {
+    if (applyPendingFocus()) return;
     const scene = currentScene();
     if (!state.arrival) state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
     state.placement = null;
