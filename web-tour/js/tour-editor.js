@@ -237,6 +237,7 @@
   const elements = Object.fromEntries([
     "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
+  const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
     close: previewDialog.querySelector("#editorPreviewClose"),
     image: previewDialog.querySelector("#editorPreviewImage"),
@@ -401,6 +402,12 @@
     const scene = api.sceneById[state.selected.sceneId];
     const hotspot = scene?.hotspots[state.selected.hotspotIndex];
     return hotspot ? { scene, hotspot } : null;
+  }
+
+  function rerenderRoomsPanelPreservingScroll() {
+    const top = panelContent.scrollTop;
+    renderRoomsPanel();
+    panelContent.scrollTop = top;
   }
 
   function selectedAdjustment() {
@@ -616,15 +623,19 @@
     state.selected = { sceneId: focus.sceneId, hotspotIndex: focus.hotspotIndex };
     state.arrival = null;
     state.placement = focus.place ? { type: "hotspot" } : null;
+    const selected = selectedHotspot();
+    if (focus.lookAtHotspot && selected?.hotspot.positionConfirmed !== false) {
+      api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
+    }
     render();
     return true;
   }
 
-  function focusHotspotTask(task, stage, place = false) {
+  function focusHotspotTask(task, stage, place = false, lookAtHotspot = false) {
     if (!task) return;
     const taskSceneIndex = api.scenes.findIndex((scene) => scene.id === task.sceneId);
     if (taskSceneIndex >= 0) state.linkSceneIndex = taskSceneIndex;
-    state.pendingFocus = { ...task, stage, place };
+    state.pendingFocus = { ...task, stage, place, lookAtHotspot };
     state.activeStage = stage;
     state.arrival = null;
     state.placement = null;
@@ -644,9 +655,11 @@
     elements.ProgressFill.style.width = `${index / (stageOrder.length - 1) * 100}%`;
     elements.Home.hidden = state.activeStage === "start";
     const readiness = releaseReadiness();
+    const selected = selectedHotspot();
+    const linkReviewReady = state.activeStage === "links" && state.linkStep === "review" && selected?.hotspot.positionConfirmed === true;
     elements.Back.hidden = ["start", "upload"].includes(state.activeStage);
     elements.Continue.hidden = ["start", "export"].includes(state.activeStage)
-      || (state.activeStage === "links" && readiness.pendingPositions > 0)
+      || (state.activeStage === "links" && readiness.pendingPositions > 0 && !linkReviewReady)
       || (state.activeStage === "arrival" && readiness.pendingArrivals > 0);
     const viewerRequired = ["light", "links", "arrival"].includes(state.activeStage);
     const viewerBusy = viewerRequired && (!api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling);
@@ -658,7 +671,7 @@
       : state.activeStage === "light"
         ? state.lookSceneIndex < api.scenes.length - 1 ? "Next photo" : "Continue"
         : state.activeStage === "links"
-          ? "Choose first views"
+          ? readiness.pendingPositions > 0 ? "Next walking button" : "Choose first views"
           : state.activeStage === "arrival" ? "Check tour" : "Continue";
     elements.Continue.classList.toggle("editor-button--primary", true);
     panel.querySelector(".editor-panel__scene").hidden = ["start", "upload", "rooms", "export"].includes(state.activeStage);
@@ -800,7 +813,7 @@
       : [...targets, targetId];
     setStatus(`${source.plannedTargets.length} walking route${source.plannedTargets.length === 1 ? "" : "s"} selected from ${source.title}`);
     studioLog("planned-place-toggled", { sourceSceneId: sourceId, targetSceneId: targetId, selected: source.plannedTargets.includes(targetId) });
-    renderRoomsPanel();
+    rerenderRoomsPanelPreservingScroll();
   }
 
   function renderRoomsPanel() {
@@ -914,7 +927,7 @@
           if (suppressRoomPhotoClick) return;
           state.roomPlanSceneId = scene.id;
           setStatus(`Choose where people can walk from ${scene.title}`);
-          renderRoomsPanel();
+          rerenderRoomsPanelPreservingScroll();
         });
         const preview = card.querySelector(".editor-card-preview");
         preview.dataset.scenePreviewFor = scene.id;
@@ -972,7 +985,7 @@
       title.textContent = scene.title;
       button.addEventListener("click", () => {
         state.roomPlanSceneId = scene.id;
-        renderRoomsPanel();
+        rerenderRoomsPanelPreservingScroll();
       });
       elements.RoomChoices.appendChild(button);
     });
@@ -1213,19 +1226,40 @@
       row.querySelector("small").textContent = hotspot.positionConfirmed ? "Position saved" : "Needs a position";
       row.addEventListener("click", () => {
         state.selected = { sceneId: source.id, hotspotIndex };
-        state.linkStep = "place";
-        setStatus(`Place the walking button for ${target?.title || "this place"}`);
+        state.linkStep = hotspot.positionConfirmed ? "review" : "place";
+        if (hotspot.positionConfirmed) {
+          api.viewer.lookAt(hotspot.pitch, hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
+          setStatus(`Check the walking button for ${target?.title || "this place"}`);
+        } else {
+          setStatus(`Place the walking button for ${target?.title || "this place"}`);
+        }
         render();
       });
       elements.HotspotList.appendChild(row);
     });
     elements.HotspotList.hidden = source.hotspots.length <= 1;
-    elements.PlaceAtCentre.hidden = !selected;
-    elements.ConfirmCentre.disabled = !selected || api.viewer.getScene() !== source.id || !api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling;
+    const showPlacementPanel = Boolean(selected && ["place", "review"].includes(state.linkStep));
+    const viewerReady = Boolean(selected && api.viewer.getScene() === source.id && api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
+    elements.PlaceAtCentre.hidden = !showPlacementPanel;
+    elements.ConfirmCentre.disabled = !viewerReady;
     const target = selected ? api.sceneById[selected.hotspot.target] : null;
-    elements.LinkGuidance.textContent = selected
-      ? `From ${selected.scene.title} to ${target?.title || "the selected place"}.`
-      : "Every walking button has an exact position.";
+    if (selected && state.linkStep === "review") {
+      elements.PlaceAtCentre.querySelector("strong").textContent = "Check the walking button on the photo.";
+      elements.PlaceAtCentre.querySelector("span").textContent = "If it is in the right place, continue. If not, adjust it.";
+      elements.ConfirmCentre.textContent = "Adjust point";
+      elements.ConfirmCentre.classList.remove("editor-button--primary");
+      elements.CancelCentre.textContent = "Change rooms and routes";
+      elements.LinkGuidance.textContent = `Check ${selected.scene.title} to ${target?.title || "the selected place"}.`;
+    } else if (selected) {
+      elements.PlaceAtCentre.querySelector("strong").textContent = "Put the walking button under the door or camera point.";
+      elements.PlaceAtCentre.querySelector("span").textContent = "Drag the 360 photo until the target is under the cross, then save.";
+      elements.ConfirmCentre.textContent = selected.hotspot.positionConfirmed ? "Update point here" : "Save point here";
+      elements.ConfirmCentre.classList.add("editor-button--primary");
+      elements.CancelCentre.textContent = "Change rooms and routes";
+      elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}.`;
+    } else {
+      elements.LinkGuidance.textContent = "Every walking button has an exact position.";
+    }
   }
 
   function renderArrivalPanel(scene) {
@@ -1480,7 +1514,7 @@
 
   function syncSelectedMarker() {
     const activeId = state.selected ? api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex) : "";
-    viewerElement.querySelectorAll(".nav-hotspot").forEach((element) => {
+    viewerElement.querySelectorAll("[data-editor-hotspot-id]").forEach((element) => {
       element.classList.toggle("is-editor-selected", element.dataset.editorHotspotId === activeId);
     });
   }
@@ -1992,18 +2026,18 @@
   panel.querySelector("#editorPreviousScene").addEventListener("click", () => moveScene(-1));
   panel.querySelector("#editorNextScene").addEventListener("click", () => moveScene(1));
   elements.ConfirmCentre.addEventListener("click", () => {
-    if (!saveSelectedHotspotAtViewerCenter()) return;
-    queueDraftSave("movement-centre-confirmed");
-    const nextPending = findPendingHotspot("positionConfirmed");
-    if (nextPending) {
+    const selected = selectedHotspot();
+    if (state.activeStage === "links" && state.linkStep === "review" && selected?.hotspot.positionConfirmed) {
       state.linkStep = "place";
-      focusHotspotTask(nextPending, "links");
-      setStatus("Walking button saved. Place the next one.");
+      api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
+      setStatus("Move the view until the right place is under the cross");
+      render();
       return;
     }
-    state.linkStep = "choose";
-    state.selected = null;
-    setStatus("All walking buttons are placed");
+    if (!saveSelectedHotspotAtViewerCenter()) return;
+    queueDraftSave("movement-centre-confirmed");
+    state.linkStep = "review";
+    setStatus("Point saved. Check it on the photo, then continue.");
     render();
   });
   elements.CancelCentre.addEventListener("click", () => {

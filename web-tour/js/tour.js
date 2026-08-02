@@ -106,19 +106,19 @@ function numericViewParam(name, fallback) {
 }
 
 function createTransitionHotspot(hotspotDiv, args) {
-  hotspotDiv.classList.add("nav-hotspot", "nav-hotspot--doorway");
+  hotspotDiv.classList.add("nav-hotspot-anchor");
   hotspotDiv.dataset.label = args.label;
   if (args.editorId) {
     hotspotDiv.dataset.editorHotspotId = args.editorId;
   }
   hotspotDiv.setAttribute("aria-label", args.label);
-  hotspotDiv.innerHTML = `<svg class="nav-hotspot__person" viewBox="0 0 24 24" aria-hidden="true">
+  hotspotDiv.innerHTML = `<span class="nav-hotspot nav-hotspot--doorway" aria-hidden="true"><svg class="nav-hotspot__person" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="13" cy="4.8" r="1.9" />
         <path d="m11.6 8.3 2.1 3.8 3.2 1.4" />
         <path d="m13.3 12.1-2 3.5-2.7 2.2" />
         <path d="m13.3 12.1 1.5 4.1 2.9 2.1" />
         <path d="m11.8 8.7-3.2 2.4" />
-      </svg>`;
+      </svg></span>`;
 }
 
 function createLocalAdjustmentOverlay(hotspotDiv, args) {

@@ -100,6 +100,13 @@ async function viewerPose(page) {
   }));
 }
 
+async function elementCenter(page, selector) {
+  return page.locator(selector).evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: Math.round((box.left + box.width / 2) * 10) / 10, y: Math.round((box.top + box.height / 2) * 10) / 10 };
+  });
+}
+
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "raindigit-guided-flow-"));
   const port = 22000 + Math.floor(Math.random() * 12000);
@@ -217,7 +224,11 @@ async function main() {
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, "The Room menu did not move the photo back to Hall.");
 
     await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
+    await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();
+    const roomRouteScrollTop = await page.evaluate(() => document.querySelector(".editor-panel__content")?.scrollTop || 0);
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen door" }).click();
+    const roomRouteScrollAfterClick = await page.evaluate(() => document.querySelector(".editor-panel__content")?.scrollTop || 0);
+    assert(roomRouteScrollAfterClick >= roomRouteScrollTop - 24, `Choosing a walking route jumped to the top: ${JSON.stringify({ roomRouteScrollTop, roomRouteScrollAfterClick })}`);
     await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
     await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
     assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
@@ -253,28 +264,54 @@ async function main() {
 
     await dragViewer(page, 130);
     const firstPose = await viewerPose(page);
+    const firstTarget = await elementCenter(page, ".editor-centre-target");
     await page.getByRole("button", { name: "Save point here" }).click();
-    const first = (await addedHotspots(page, sourceSceneId))[0];
+    await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Next walking button" }).waitFor();
+    const firstMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+    assertNear(firstMarker.x, firstTarget.x, 8, "The first walking button did not stay under the centre target after save");
+    assertNear(firstMarker.y, firstTarget.y, 8, "The first walking button did not stay under the centre target after save");
+    let first = (await addedHotspots(page, sourceSceneId))[0];
     assert(first?.kind === "doorway" && first.positionConfirmed, `The first walking button was not saved: ${JSON.stringify(first)}`);
     assertNear(first.pitch, firstPose.pitch, 0.6, "The first walking button pitch did not match the centre target");
     assertNear(first.yaw, firstPose.yaw, 0.6, "The first walking button yaw did not match the centre target");
+    await page.getByRole("button", { name: "Adjust point" }).click();
+    await page.getByRole("button", { name: "Update point here" }).waitFor();
+    const currentMarkerWhileAdjusting = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+    const currentTargetWhileAdjusting = await elementCenter(page, ".editor-centre-target");
+    assertNear(currentMarkerWhileAdjusting.x, currentTargetWhileAdjusting.x, 8, "Editing an existing point did not show the selected marker under the centre target");
+    assertNear(currentMarkerWhileAdjusting.y, currentTargetWhileAdjusting.y, 8, "Editing an existing point did not show the selected marker under the centre target");
+    await page.getByRole("button", { name: "Update point here" }).click();
+    await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
+    first = (await addedHotspots(page, sourceSceneId))[0];
+    await page.getByRole("button", { name: "Next walking button" }).click();
 
     await dragViewer(page, -170);
     const secondPose = await viewerPose(page);
+    const secondTarget = await elementCenter(page, ".editor-centre-target");
     await page.getByRole("button", { name: "Save point here" }).click();
+    await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
+    const secondMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+    assertNear(secondMarker.x, secondTarget.x, 8, "The second walking button did not stay under the centre target after save");
+    assertNear(secondMarker.y, secondTarget.y, 8, "The second walking button did not stay under the centre target after save");
     const both = await addedHotspots(page, sourceSceneId);
     assert(both.length === 2 && both.every((hotspot) => hotspot.positionConfirmed), `Two independent points were not preserved: ${JSON.stringify(both)}`);
     assert(JSON.stringify(both[0]) === JSON.stringify(first), `Placing the second point changed the first point: ${JSON.stringify({ first, both })}`);
     assert(both[0].pitch !== both[1].pitch || both[0].yaw !== both[1].yaw, "Two points collapsed onto the same panorama coordinate.");
     assertNear(both[1].pitch, secondPose.pitch, 0.6, "The second walking button pitch did not match the centre target");
     assertNear(both[1].yaw, secondPose.yaw, 0.6, "The second walking button yaw did not match the centre target");
-    while (await page.locator("#editorConfirmCentre").isVisible()) {
+    await page.getByRole("button", { name: "Next walking button" }).click();
+    while (await page.getByRole("button", { name: "Save point here" }).isVisible().catch(() => false)) {
       await page.waitForFunction(() => {
         const button = document.querySelector("#editorConfirmCentre");
         return button && !button.disabled;
       });
       await dragViewer(page, 70);
       await page.getByRole("button", { name: "Save point here" }).click();
+      await page.getByRole("button", { name: /Next walking button|Choose first views/ }).waitFor();
+      if (await page.getByRole("button", { name: "Next walking button" }).isVisible().catch(() => false)) {
+        await page.getByRole("button", { name: "Next walking button" }).click();
+      }
       await page.waitForTimeout(300);
     }
     await page.screenshot({ path: join(outputDir, "02-movements-desktop.png"), fullPage: true });

@@ -1094,7 +1094,7 @@ body:not(.is-editor-open) .editor-panel { display: none; }
   border-top: 1px solid rgba(255, 249, 236, 0.13);
 }
 
-.nav-hotspot.is-editor-selected {
+.nav-hotspot-anchor.is-editor-selected .nav-hotspot {
   outline: 3px solid #ffefb9;
   outline-offset: 3px;
 }
