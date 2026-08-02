@@ -40,6 +40,7 @@
     linkSceneIndex: 0,
     linkStep: "choose",
     arrivalLoading: false,
+    arrivalSaving: false,
     viewportSettling: false,
     viewerSettled: false,
     statusMessage: "Loading project"
@@ -512,6 +513,17 @@
       if (hotspotIndex >= 0) return { sceneId: scene.id, hotspotIndex };
     }
     return null;
+  }
+
+  function arrivalTasks() {
+    return api.scenes.flatMap((scene) => scene.hotspots.map((hotspot, hotspotIndex) => ({ scene, hotspot, hotspotIndex })));
+  }
+
+  function selectedArrivalTask() {
+    if (!state.selected) return { task: null, index: -1, total: arrivalTasks().length };
+    const tasks = arrivalTasks();
+    const index = tasks.findIndex((task) => task.scene.id === state.selected.sceneId && task.hotspotIndex === state.selected.hotspotIndex);
+    return { task: index >= 0 ? tasks[index] : null, index, total: tasks.length };
   }
 
   function applyPendingFocus() {
@@ -1138,6 +1150,10 @@
     if (state.activeStage !== "arrival") return;
     const viewerReady = Boolean(api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
     const selected = selectedHotspot();
+    const arrivalProgress = selectedArrivalTask();
+    const progressLabel = arrivalProgress.index >= 0
+      ? `First view ${arrivalProgress.index + 1} of ${arrivalProgress.total}`
+      : `First views ${arrivalProgress.total} of ${arrivalProgress.total}`;
     if (!selected) {
       elements.ArrivalHelp.textContent = "Every first view is saved. Continue to check and publish the tour.";
       elements.EditArrival.disabled = true;
@@ -1149,16 +1165,16 @@
     if (state.arrival) {
       const target = api.sceneById[selected.hotspot.target];
       elements.ArrivalHelp.textContent = viewerReady
-        ? `You are now in ${target?.title || "the destination"}. Rotate to the clearest, most useful view, then save it.`
+        ? `${progressLabel}: from ${selected.scene.title} to ${target?.title || "the destination"}. Rotate to the clearest, most useful view, then save it.`
         : `Loading ${target?.title || "the destination"}...`;
       elements.EditArrival.hidden = true;
       elements.SaveArrival.hidden = false;
-      elements.SaveArrival.disabled = !viewerReady;
+      elements.SaveArrival.disabled = !viewerReady || state.arrivalSaving;
       return;
     }
     const target = api.sceneById[selected.hotspot.target];
     elements.ArrivalHelp.textContent = viewerReady
-      ? `Next place: ${scene.title} to ${target?.title || "the destination"}. Open it and choose the first view.`
+      ? `${progressLabel}: from ${selected.scene.title} to ${target?.title || "the destination"}. Open it and choose the first view.`
       : "Loading the source photo...";
     elements.EditArrival.textContent = `Open ${target?.title || "destination"}`;
     elements.EditArrival.hidden = false;
@@ -1739,20 +1755,42 @@
     setStatus("Turn to the best view, then use what you see");
   }
 
-  function saveArrivalView() {
-    if (!state.arrival) return;
+  async function saveArrivalView() {
+    if (!state.arrival || state.arrivalSaving) return;
     const originSceneId = state.arrival.sceneId;
     const selected = selectedHotspot();
+    const savedSelection = state.selected ? { ...state.selected } : null;
+    state.arrivalSaving = true;
+    elements.SaveArrival.disabled = true;
+    setStatus("Saving first view...");
     if (selected) selected.hotspot.arrivalConfirmed = true;
-    api.updateHotspotArrival(originSceneId, state.arrival.hotspotIndex, {
+    const updated = api.updateHotspotArrival(originSceneId, state.arrival.hotspotIndex, {
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
       hfov: roundCoordinate(api.viewer.getHfov())
     });
-    queueDraftSave("arrival-view-saved");
+    if (!updated) {
+      state.arrivalSaving = false;
+      setStatus("Could not save this first view");
+      renderArrivalPanel(currentScene());
+      return;
+    }
     state.arrival = null;
+    if (!await queueDraftSave("arrival-view-saved")) {
+      state.arrivalSaving = false;
+      renderArrivalPanel(currentScene());
+      return;
+    }
+    state.arrivalSaving = false;
     const nextPending = findPendingHotspot("arrivalConfirmed");
     if (nextPending) {
+      if (savedSelection && nextPending.sceneId === savedSelection.sceneId && nextPending.hotspotIndex === savedSelection.hotspotIndex) {
+        studioLog("arrival-repeat-prevented", { sceneId: savedSelection.sceneId, hotspotIndex: savedSelection.hotspotIndex }, true);
+        state.selected = null;
+        setStatus("This first view is already saved. Choose the next one.");
+        renderArrivalPanel(currentScene());
+        return;
+      }
       focusHotspotTask(nextPending, "arrival");
       setStatus("Destination view saved. Next place selected.");
       return;

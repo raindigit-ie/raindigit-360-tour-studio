@@ -272,19 +272,24 @@ async function main() {
 
     await assertOneTask(page, "Choose what people see first");
     await page.screenshot({ path: join(outputDir, "03-first-view-mobile.png"), fullPage: true });
+    const visitedArrivalTasks = new Set();
     for (let index = 0; index < 2; index += 1) {
       await page.waitForFunction(() => {
         const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
         return snapshot.selected && snapshot.activeSceneId === snapshot.selected.sceneId && snapshot.viewerLoaded;
       });
+      await page.getByText(`First view ${index + 1} of 2`, { exact: false }).waitFor();
       const open = page.getByRole("button", { name: /^Open / });
       await open.waitFor();
       const route = await page.evaluate(() => {
         const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
         const selected = snapshot.selected;
         const hotspot = window.__TOUR_EDITOR_API.sceneById[selected.sceneId].hotspots[selected.hotspotIndex];
-        return { source: selected.sceneId, target: hotspot.target };
+        return { source: selected.sceneId, hotspotIndex: selected.hotspotIndex, target: hotspot.target };
       });
+      const taskKey = `${route.source}::${route.hotspotIndex}`;
+      assert(!visitedArrivalTasks.has(taskKey), `First-view flow selected the same movement twice: ${taskKey}`);
+      visitedArrivalTasks.add(taskKey);
       assert(typeof route.target === "string" && route.source !== route.target, `Movement has an invalid destination: ${JSON.stringify(route)}`);
       await open.click();
       try {
@@ -312,6 +317,13 @@ async function main() {
       await saveFirstView.waitFor();
       await dragViewer(page, index === 0 ? 80 : -90);
       await saveFirstView.click();
+      if (index === 0) {
+        await page.waitForFunction((previousTaskKey) => {
+          const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
+          if (!snapshot.selected) return false;
+          return `${snapshot.selected.sceneId}::${snapshot.selected.hotspotIndex}` !== previousTaskKey;
+        }, taskKey);
+      }
     }
 
     await assertOneTask(page, "Check and publish");
