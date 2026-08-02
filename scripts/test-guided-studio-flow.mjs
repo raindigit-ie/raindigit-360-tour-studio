@@ -135,7 +135,7 @@ async function main() {
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.setViewportSize({ width: 390, height: 605 });
-    await assertOneTask(page, "Set up rooms and places");
+    await assertOneTask(page, "Set up rooms and walking routes");
     await page.getByLabel("Number of rooms").fill("2");
     await page.getByRole("button", { name: "Update rooms" }).click();
     const roomNames = page.locator("#editorRoomList input");
@@ -143,6 +143,16 @@ async function main() {
     await roomNames.nth(0).press("Tab");
     await roomNames.nth(1).fill("Hall");
     await roomNames.nth(1).press("Tab");
+    assert(await page.locator('.editor-room-photo[data-scene-id="scene-001"] input').inputValue() === "Kitchen view 1", "The first auto-named photo still looked like a generic View.");
+    assert(await page.locator('.editor-room-photo[data-scene-id="scene-002"] input').inputValue() === "Kitchen view 2", "The second auto-named photo still looked like a generic View.");
+
+    await page.getByRole("button", { name: "Preview Kitchen view 1" }).click();
+    await page.getByRole("dialog", { name: "Kitchen view 1" }).waitFor({ state: "visible" });
+    const previewImage = page.locator("#editorPreviewImage");
+    await page.waitForFunction(() => document.querySelector("#editorPreviewImage")?.complete === true);
+    assert((await previewImage.getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Preview must use the full panorama, not only a thumbnail.");
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Kitchen view 1" }).waitFor({ state: "hidden" });
 
     const photoNames = page.locator(".editor-room-photo input");
     await photoNames.nth(0).fill("Kitchen window");
@@ -169,8 +179,8 @@ async function main() {
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, "The Room menu did not move the photo back to Hall.");
 
     await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
-    await page.getByRole("button", { name: /Kitchen door Kitchen/ }).click();
-    await page.getByRole("button", { name: /Hall entrance Hall/ }).click();
+    await page.locator(".editor-place-choice").filter({ hasText: "Kitchen door" }).click();
+    await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
     await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
     assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
     await page.evaluate(() => { document.querySelector(".editor-panel__content").scrollTop = 0; });
@@ -182,9 +192,15 @@ async function main() {
     await assertOneTask(page, "Choose the look");
     await page.screenshot({ path: join(outputDir, "01-look-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Bright", exact: true }).click();
-    await page.getByRole("button", { name: "Next photo" }).click();
-    await page.getByRole("button", { name: "Next photo" }).click();
-    await page.getByRole("button", { name: "Continue" }).click();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const label = (await page.locator("#editorContinue").textContent()).trim();
+      if (label === "Continue") break;
+      assert(label === "Next photo", `Unexpected look-step action: ${label}`);
+      await page.locator("#editorContinue").click();
+      await page.waitForTimeout(500);
+    }
+    assert((await page.locator("#editorContinue").textContent()).trim() === "Continue", "The look step did not reach the final Continue action.");
+    await page.locator("#editorContinue").click();
 
     await page.setViewportSize({ width: 1280, height: 760 });
     await assertOneTask(page, "Place the walking buttons");

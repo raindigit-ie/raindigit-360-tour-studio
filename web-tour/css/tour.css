@@ -2070,6 +2070,11 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   text-align: left;
 }
 
+.editor-room-photo__media {
+  position: relative;
+  min-width: 0;
+}
+
 .editor-room-photo__select img {
   display: block;
   width: 100%;
@@ -2087,6 +2092,38 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   background: rgba(14, 16, 15, 0.86);
   font-size: 9px;
   font-weight: 800;
+}
+
+.editor-card-preview {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 249, 236, 0.22);
+  border-radius: 4px;
+  color: #fff9ec;
+  background: rgba(14, 16, 15, 0.88);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.editor-card-preview:hover,
+.editor-card-preview:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.editor-card-preview--inline {
+  position: static;
+  align-self: stretch;
+  min-height: 0;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: none;
 }
 
 .editor-photo-strip {
@@ -2126,6 +2163,12 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   gap: 8px;
 }
 
+.editor-place-choice-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
 .editor-place-choice {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 28px;
@@ -2141,6 +2184,11 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   text-align: left;
 }
 
+.editor-place-choice-card .editor-place-choice {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .editor-place-choice img { width: 88px; aspect-ratio: 2 / 1; border-radius: 2px; object-fit: cover; }
 .editor-place-choice > span { display: grid; min-width: 0; gap: 2px; }
 .editor-place-choice strong, .editor-place-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2151,6 +2199,77 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 .editor-place-choice.is-selected i { color: #102018; background: #69c2a3; }
 
 .editor-planned-places p { margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; }
+
+.editor-photo-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 5, 5, 0.82);
+}
+
+.editor-photo-preview[hidden] { display: none; }
+
+.editor-photo-preview__dialog {
+  display: grid;
+  width: min(1120px, 100%);
+  max-height: min(86vh, 820px);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 249, 236, 0.18);
+  border-radius: 6px;
+  color: #fff9ec;
+  background: #111412;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+}
+
+.editor-photo-preview__dialog header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.editor-photo-preview__dialog header div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.editor-photo-preview__dialog header span {
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-photo-preview__dialog header strong {
+  overflow: hidden;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-photo-preview__dialog img {
+  display: block;
+  width: 100%;
+  max-height: min(64vh, 640px);
+  border-radius: 4px;
+  object-fit: contain;
+  background: #060706;
+}
+
+.editor-photo-preview__dialog p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
 
 .editor-walking-icon {
   display: block;
@@ -2171,6 +2290,19 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   .editor-panel__status { min-width: 0; }
   .editor-room-board { grid-auto-columns: minmax(230px, 82vw); }
   .editor-place-choices { grid-template-columns: 1fr; }
+  .editor-place-choice-card { grid-template-columns: minmax(0, 1fr); }
+  .editor-place-choice-card .editor-place-choice {
+    border-radius: 4px 4px 0 0;
+  }
+  .editor-card-preview--inline {
+    min-height: 34px;
+    border-left: 1px solid rgba(255, 249, 236, 0.22);
+    border-top: 0;
+    border-radius: 0 0 4px 4px;
+  }
   .editor-room-count { align-items: stretch; flex-direction: column; }
   .editor-room-count .editor-field { width: 100%; }
+  .editor-photo-preview { padding: 10px; }
+  .editor-photo-preview__dialog { max-height: 92vh; }
+  .editor-photo-preview__dialog img { max-height: 62vh; }
 }

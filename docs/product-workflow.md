@@ -31,19 +31,22 @@ The studio is local-first. It keeps source material and the editable workspace o
    - Upload all viewpoints first. Do not ask for room structure on this screen.
    - It produces private normalized browser derivatives and thumbnails while stripping metadata. The source files remain outside the release flow.
 
-3. **Rooms**
+3. **Rooms and walking routes**
    - Show one visual setup board. The operator sets the number of rooms, names each room and sees every uploaded photo as a large thumbnail card.
+   - Treat each uploaded 360 photo as a camera point, not as a room. Avoid the standalone word `places` in normal copy; use walking routes, camera points and destinations.
+   - When a photo still has an auto title like `View 3`, rename it from its room label (`Kitchen`, or `Kitchen view 2` when several camera points share one room). Preserve any title the operator typed manually.
+   - Provide a large **Preview** action for every source and destination card so the operator can check visible doorways, openings and camera points before planning routes.
    - Support dragging a photo card into a room and an equivalent Room menu for touch, keyboard and recovery. Keep room columns horizontally scrollable rather than compressing thumbnails beyond recognition.
    - Select a source photo, then toggle every destination photo a visitor can reach. Store these planned destinations in the editable project and create one required centre-positioned walking button for each selection.
-   - For multi-photo tours require at least one planned place before continuing. Every photo still needs a name and a room.
+   - For multi-photo tours require at least one planned walking route before continuing. Every photo still needs a name and a room.
 
 4. **Look**
    - Show Natural, Bright and Warm as the normal choice. Keep brightness, contrast, saturation and warm/cool controls under **Fine tune picture**.
    - Add any number of local circle/ellipse or square/rectangle light/color areas. Every area must fade to zero at its boundary so it cannot introduce a visible seam.
    - Inspect each correction at the panorama seam and at the edges of the corrected area.
 
-5. **Places**
-   - Do not ask the operator to classify doorway versus same-room viewpoint. Every planned destination is one place and uses the same walking-person marker.
+5. **Walking buttons**
+   - Do not ask the operator to classify doorway versus same-room viewpoint. Every planned destination is one walking button and uses the same walking-person marker.
    - Open the planned buttons one at a time. Rotate the panorama normally until the real doorway, passage or other camera position is under the fixed centre target, then press **Save point here**. There is no destination picker or rotate/place mode switch on this screen.
    - After placement, rotating the panorama must move the marker's screen projection while its saved spherical coordinate remains unchanged. A marker that stays screen-fixed, disappears from the active scene configuration or leaves a stale DOM copy fails review.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
