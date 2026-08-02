@@ -676,7 +676,7 @@
     elements.Back.hidden = ["start", "upload"].includes(state.activeStage);
     elements.Continue.hidden = ["start", "export"].includes(state.activeStage)
       || (state.activeStage === "links" && readiness.pendingPositions > 0 && !linkReviewReady)
-      || (state.activeStage === "arrival" && readiness.pendingArrivals > 0);
+      || (state.activeStage === "arrival" && readiness.pendingArrivals > 0 && !selected);
     const viewerRequired = ["light", "links", "arrival"].includes(state.activeStage);
     const viewerBusy = viewerRequired && (!api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling);
     elements.Continue.disabled = (state.activeStage === "upload" && !state.workspaceProject?.scenes?.length) || viewerBusy;
@@ -688,7 +688,11 @@
         ? state.lookSceneIndex < api.scenes.length - 1 ? "Next photo" : "Continue"
         : state.activeStage === "links"
           ? readiness.pendingPositions > 0 ? "Next walking button" : "Choose first views"
-          : state.activeStage === "arrival" ? "Check tour" : "Continue";
+          : state.activeStage === "arrival"
+            ? readiness.pendingArrivals > 0
+              ? state.arrival ? "Save first view" : "Open destination"
+              : "Check tour"
+            : "Continue";
     elements.Continue.classList.toggle("editor-button--primary", true);
     panel.querySelector(".editor-panel__scene").hidden = ["start", "upload", "rooms", "export"].includes(state.activeStage);
     panel.querySelector("#editorPreviousScene").hidden = true;
@@ -1294,22 +1298,21 @@
       return;
     }
     elements.EditArrival.disabled = !viewerReady || state.arrivalLoading;
+    elements.EditArrival.hidden = true;
+    elements.SaveArrival.hidden = true;
     if (state.arrival) {
       const target = api.sceneById[selected.hotspot.target];
       elements.ArrivalHelp.textContent = viewerReady
-        ? `${progressLabel}: from ${selected.scene.title} to ${target?.title || "the destination"}. Rotate to the clearest, most useful view, then save it.`
+        ? `${progressLabel}: now showing ${target?.title || "the destination"}. Rotate to the best view, then press Save first view.`
         : `Loading ${target?.title || "the destination"}...`;
-      elements.EditArrival.hidden = true;
-      elements.SaveArrival.hidden = false;
       elements.SaveArrival.disabled = !viewerReady || state.arrivalSaving;
       return;
     }
     const target = api.sceneById[selected.hotspot.target];
     elements.ArrivalHelp.textContent = viewerReady
-      ? `${progressLabel}: from ${selected.scene.title} to ${target?.title || "the destination"}. Open it and choose the first view.`
+      ? `${progressLabel}: from ${selected.scene.title} to ${target?.title || "the destination"}. Press Open destination, then choose what visitors should see first.`
       : "Loading the source photo...";
     elements.EditArrival.textContent = `Open ${target?.title || "destination"}`;
-    elements.EditArrival.hidden = false;
     elements.SaveArrival.hidden = true;
   }
 
@@ -1961,7 +1964,8 @@
     }
     const readiness = releaseReadiness();
     if (state.activeStage === "arrival" && readiness.pendingArrivals > 0) {
-      focusNextArrivalTask("Open the destination and choose its first view");
+      if (state.arrival) await saveArrivalView();
+      else await beginArrivalEdit();
       return;
     }
     if (await queueDraftSave("continue")) setStage(stageOffset(1));
@@ -1972,6 +1976,12 @@
     const selected = selectedHotspot();
     if (!selected) return;
     const selection = { ...state.selected };
+    const target = api.sceneById[selected.hotspot.target];
+    logOperatorStep("open-destination-first-view", {
+      sourceSceneId: selected.scene.id,
+      targetSceneId: selected.hotspot.target,
+      targetTitle: target?.title || "destination"
+    });
     state.arrivalLoading = true;
     setStatus("Opening the destination...");
     renderArrivalPanel(currentScene());
@@ -1992,6 +2002,13 @@
     const originSceneId = state.arrival.sceneId;
     const selected = selectedHotspot();
     const savedSelection = state.selected ? { ...state.selected } : null;
+    logOperatorStep("save-first-view", {
+      sourceSceneId: originSceneId,
+      targetSceneId: selected?.hotspot?.target,
+      targetPitch: roundCoordinate(api.viewer.getPitch()),
+      targetYaw: roundCoordinate(api.viewer.getYaw()),
+      targetHfov: roundCoordinate(api.viewer.getHfov())
+    });
     state.arrivalSaving = true;
     elements.SaveArrival.disabled = true;
     setStatus("Saving first view...");

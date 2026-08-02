@@ -391,8 +391,10 @@ async function main() {
         return snapshot.selected && snapshot.activeSceneId === snapshot.selected.sceneId && snapshot.viewerLoaded;
       });
       await page.getByText(`First view ${index + 1} of ${pendingBeforeArrival}`, { exact: false }).waitFor();
-      const open = page.getByRole("button", { name: /^Open / });
-      await open.waitFor();
+      const openDestination = page.getByRole("button", { name: "Open destination" });
+      await openDestination.waitFor();
+      assert(await page.locator("#editorEditArrival").isHidden(), "Step 5 exposes a second open button instead of one primary action.");
+      assert(await page.locator("#editorSaveArrival").isHidden(), "Step 5 exposes a hidden save button before the destination is open.");
       const route = await page.evaluate(() => {
         const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
         const selected = snapshot.selected;
@@ -403,7 +405,7 @@ async function main() {
       assert(!visitedArrivalTasks.has(taskKey), `First-view flow selected the same movement twice: ${taskKey}`);
       visitedArrivalTasks.add(taskKey);
       assert(typeof route.target === "string" && route.source !== route.target, `Movement has an invalid destination: ${JSON.stringify(route)}`);
-      await open.click();
+      await openDestination.click();
       try {
         await page.waitForFunction((targetId) => window.__TOUR_EDITOR_API.viewer.getScene() === targetId, route.target, { timeout: 20_000 });
       } catch {
@@ -425,8 +427,9 @@ async function main() {
         throw new Error(`Opening the destination did not load it: ${JSON.stringify({ route, diagnostics, consoleErrors, requestFailures })}`);
       }
       await page.waitForFunction(() => window.__TOUR_EDITOR_API.viewer.isLoaded());
-      const saveFirstView = page.getByRole("button", { name: "Save this first view" });
+      const saveFirstView = page.getByRole("button", { name: "Save first view" });
       await saveFirstView.waitFor();
+      assert(await page.locator("#editorSaveArrival").isHidden(), "Step 5 exposes a duplicate save button instead of one primary action.");
       await dragViewer(page, index === 0 ? 80 : -90);
       await saveFirstView.click();
       if (index < pendingBeforeArrival - 1) {

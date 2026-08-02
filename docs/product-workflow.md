@@ -57,7 +57,7 @@ The studio is local-first. It keeps source material and the editable workspace o
 6. **First views**
    - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
-   - Show one directed movement at a time. First press **Open destination**, rotate to the best composition, then press **Save this first view**.
+   - Show one directed movement at a time. The sticky footer is the single primary action: first **Open destination**, then rotate to the best composition, then **Save first view**.
    - After saving, automatically return to the next movement source. Disable Open/Save while a panorama or cross-fade is still loading, and do not open Publish while any first view is unfinished.
 
 7. **Publish**
