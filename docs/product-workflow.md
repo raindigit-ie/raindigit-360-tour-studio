@@ -55,7 +55,8 @@ The studio is local-first. It keeps source material and the editable workspace o
    - Test at least two points by cycling through every scene forwards and backwards twice. After each cycle, the stable point IDs must match in the scene model, active Pannellum configuration, rendered DOM and persisted draft.
 
 6. **First views**
-   - For every directed link, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
+   - For every new target photo, open the target location and compose the best first view: level horizon, legible orientation and a useful subject rather than ceiling or a wall.
+   - If several walking buttons arrive at the same target photo, save that target's first view once and automatically reuse it for the repeated arrivals. Do not ask the operator to walk the same destination loop again.
    - Save yaw, pitch and field of view separately from the marker position. The visitor can continue rotating after arrival.
    - Show one directed movement at a time. The sticky footer is the single primary action: first **Open destination**, then rotate to the best composition, then **Save first view**.
    - After saving, automatically return to the next movement source. Disable Open/Save while a panorama or cross-fade is still loading, and do not open Publish while any first view is unfinished.
@@ -90,8 +91,9 @@ fullscreen-enabled iframe. Both paths are part of the automated product test.
 
 The guided browser regression additionally creates three photos and two rooms,
 groups two photos as separate views of one room, saves two independent points
-from the same source, cycles Back/Next, completes both first views at 390x605,
-builds the customer HTML and verifies the local diagnostic events.
+from the same source, cycles Back/Next, verifies that repeated arrivals to the
+same target photo inherit one saved first view at 390x605, builds the customer
+HTML and verifies the local diagnostic events.
 
 Deploy the contents of `release/` to a customer-controlled host, then embed it with one iframe:
 

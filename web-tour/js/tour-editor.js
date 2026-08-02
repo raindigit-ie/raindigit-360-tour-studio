@@ -558,6 +558,53 @@
     return api.scenes.flatMap((scene) => scene.hotspots.map((hotspot, hotspotIndex) => ({ scene, hotspot, hotspotIndex })));
   }
 
+  function hasArrivalView(hotspot) {
+    return Number.isFinite(hotspot.targetPitch)
+      && Number.isFinite(hotspot.targetYaw)
+      && Number.isFinite(hotspot.targetHfov);
+  }
+
+  function propagateArrivalViewsByTarget() {
+    const confirmedByTarget = new Map();
+    for (const task of arrivalTasks()) {
+      if (task.hotspot.arrivalConfirmed === true && hasArrivalView(task.hotspot) && !confirmedByTarget.has(task.hotspot.target)) {
+        confirmedByTarget.set(task.hotspot.target, {
+          pitch: roundCoordinate(task.hotspot.targetPitch),
+          yaw: roundCoordinate(task.hotspot.targetYaw),
+          hfov: roundCoordinate(task.hotspot.targetHfov),
+          sourceSceneId: task.scene.id,
+          hotspotIndex: task.hotspotIndex
+        });
+      }
+    }
+
+    const updated = [];
+    for (const task of arrivalTasks()) {
+      if (task.hotspot.arrivalConfirmed !== false) continue;
+      const shared = confirmedByTarget.get(task.hotspot.target);
+      if (!shared) continue;
+      task.hotspot.arrivalConfirmed = true;
+      const saved = api.updateHotspotArrival(task.scene.id, task.hotspotIndex, {
+        pitch: shared.pitch,
+        yaw: shared.yaw,
+        hfov: shared.hfov
+      });
+      if (!saved) {
+        task.hotspot.arrivalConfirmed = false;
+        continue;
+      }
+      updated.push({
+        sceneId: task.scene.id,
+        hotspotIndex: task.hotspotIndex,
+        targetSceneId: task.hotspot.target,
+        inheritedFrom: `${shared.sourceSceneId}::${shared.hotspotIndex}`
+      });
+    }
+
+    if (updated.length) studioLog("shared-arrival-views-applied", { updated, count: updated.length }, true);
+    return updated.length;
+  }
+
   function pendingArrivalTasks() {
     return arrivalTasks().filter((task) => task.hotspot.arrivalConfirmed === false);
   }
@@ -2053,8 +2100,9 @@
       renderArrivalPanel(currentScene());
       return;
     }
+    const inheritedCount = propagateArrivalViewsByTarget();
     state.arrival = null;
-    if (!await queueDraftSave("arrival-view-saved")) {
+    if (!await queueDraftSave(inheritedCount ? "arrival-view-saved-with-shared-destinations" : "arrival-view-saved")) {
       state.arrivalSaving = false;
       renderArrivalPanel(currentScene());
       return;
@@ -2432,6 +2480,7 @@
     state.viewerSettled = true;
     applyDraft(draft);
     const plannedPlacesChanged = syncPlannedPlacesToDraft();
+    const sharedArrivalChanged = propagateArrivalViewsByTarget();
     const scene = currentScene();
     if (state.activeStage !== "arrival") {
       state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
@@ -2448,9 +2497,11 @@
         ? "Tour ready. Add photos."
         : state.activeStage === "upload"
           ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
-          : state.savedAt ? "Saved tour loaded" : "Tour ready");
+        : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
-    if (plannedPlacesChanged) queueDraftSave("planned-places-synchronised");
+    if (plannedPlacesChanged || sharedArrivalChanged) {
+      queueDraftSave(sharedArrivalChanged ? "shared-arrival-views-applied" : "planned-places-synchronised");
+    }
     studioLog("studio-ready", {
       savedAt: state.savedAt,
       workspaceAvailable: Boolean(state.workspaceProject),

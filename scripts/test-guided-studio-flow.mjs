@@ -256,6 +256,9 @@ async function main() {
     await page.getByRole("button", { name: "Kitchen door", exact: true }).click();
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
     await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Hall entrance", exact: true }).click();
+    await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
+    await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
     await page.evaluate(() => { document.querySelector(".editor-panel__content").scrollTop = 0; });
     await page.screenshot({ path: join(outputDir, "01-room-board-top-mobile.png") });
     await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();
@@ -366,10 +369,10 @@ async function main() {
     await page.getByRole("button", { name: "Continue" }).click();
     await assertOneTask(page, "Place the walking buttons");
     const confirmedAfterBack = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.positionConfirmed).length);
-    assert(confirmedAfterBack === 3, "Back navigation lost saved movement points.");
+    assert(confirmedAfterBack === 4, "Back navigation lost saved movement points.");
     assert(await page.locator(".editor-walking-icon").count() >= 1, "Walking buttons do not use one consistent person icon.");
     const pendingBeforeArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
-    assert(pendingBeforeArrival === 3, `Expected three first views, found ${pendingBeforeArrival}.`);
+    assert(pendingBeforeArrival === 4, `Expected four first views, found ${pendingBeforeArrival}.`);
     await page.setViewportSize({ width: 390, height: 605 });
     await page.getByRole("button", { name: "Choose first views" }).click();
     await page.waitForTimeout(2_000);
@@ -401,6 +404,8 @@ async function main() {
     await page.screenshot({ path: join(outputDir, "03-first-view-mobile.png"), fullPage: true });
     const visitedArrivalTasks = new Set();
     for (let index = 0; index < pendingBeforeArrival; index += 1) {
+      const currentStage = await page.evaluate(() => document.body.dataset.editorStage);
+      if (currentStage !== "arrival") break;
       await page.waitForFunction(() => {
         const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
         return snapshot.selected && snapshot.activeSceneId === snapshot.selected.sceneId && snapshot.viewerLoaded;
@@ -450,11 +455,15 @@ async function main() {
       if (index < pendingBeforeArrival - 1) {
         await page.waitForFunction((previousTaskKey) => {
           const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
+          if (document.body.dataset.editorStage === "export") return true;
           if (!snapshot.selected) return false;
           return `${snapshot.selected.sceneId}::${snapshot.selected.hotspotIndex}` !== previousTaskKey;
         }, taskKey);
       }
     }
+    assert(visitedArrivalTasks.size === 3, `Repeated destinations should reuse a saved first view instead of asking again: ${visitedArrivalTasks.size}`);
+    const pendingAfterSharedArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
+    assert(pendingAfterSharedArrival === 0, `Shared first views did not complete all routes: ${pendingAfterSharedArrival}`);
 
     await assertOneTask(page, "Check and publish");
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
