@@ -257,6 +257,7 @@
   centreTarget.setAttribute("aria-hidden", "true");
   viewerElement.appendChild(centreTarget);
   let placementPointerStart = null;
+  let hotspotDrag = null;
   let suppressPlacementClick = false;
   let draftSavePromise = Promise.resolve(true);
   let draftSaveTimer = 0;
@@ -383,6 +384,21 @@
     state.statusMessage = message;
     elements.Status.textContent = message;
     studioLog("status", { message });
+  }
+
+  function logOperatorStep(action, details = {}) {
+    studioLog("operator-step", {
+      action,
+      stage: state.activeStage,
+      sceneId: api.viewer.getScene(),
+      selected: state.selected ? { ...state.selected } : null,
+      pose: {
+        pitch: roundCoordinate(api.viewer.getPitch()),
+        yaw: roundCoordinate(api.viewer.getYaw()),
+        hfov: roundCoordinate(api.viewer.getHfov())
+      },
+      ...details
+    }, true);
   }
 
   function studioUrl(path, workspace = workspaceMode) {
@@ -1519,6 +1535,16 @@
     });
   }
 
+  function selectedMarkerScreenCenter() {
+    const element = viewerElement.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+    const box = element?.getBoundingClientRect();
+    if (!box) return null;
+    return {
+      x: roundCoordinate(box.left + box.width / 2),
+      y: roundCoordinate(box.top + box.height / 2)
+    };
+  }
+
   function render() {
     const scene = currentScene();
     if (!scene) return;
@@ -1591,6 +1617,85 @@
       yaw,
       pose: { pitch, yaw, hfov: roundCoordinate(api.viewer.getHfov()) }
     }, true);
+    return true;
+  }
+
+  function moveHotspotToPointer(sceneId, hotspotIndex, event, reason = "movement-dragged") {
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+    const scene = api.sceneById[sceneId];
+    const hotspot = scene?.hotspots[hotspotIndex];
+    if (!hotspot) return false;
+    const [pitch, yaw] = api.viewer.mouseEventToCoords(event);
+    const coordinates = { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) };
+    hotspot.positionConfirmed = true;
+    api.updateHotspotCoordinates(sceneId, hotspotIndex, coordinates);
+    studioLog(reason, {
+      id: api.hotspotId(sceneId, hotspotIndex),
+      ...coordinates,
+      pointer: { x: Math.round(event.clientX), y: Math.round(event.clientY) }
+    }, true);
+    return true;
+  }
+
+  function beginHotspotDrag(event, marker) {
+    if (event.button !== undefined && event.button !== 0) return false;
+    const [sceneId, hotspotIndex] = marker.dataset.editorHotspotId.split("::");
+    const index = Number(hotspotIndex);
+    if (state.activeStage !== "links" || api.viewer.getScene() !== sceneId) {
+      setSelected(sceneId, index, state.activeStage === "arrival" ? "arrival" : "links");
+      return true;
+    }
+    state.selected = { sceneId, hotspotIndex: index };
+    state.linkStep = "review";
+    state.placement = null;
+    hotspotDrag = {
+      pointerId: event.pointerId ?? "mouse",
+      sceneId,
+      hotspotIndex: index,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+    marker.setPointerCapture?.(event.pointerId);
+    logOperatorStep("point-drag-start", { hotspotId: api.hotspotId(sceneId, index) });
+    render();
+    return true;
+  }
+
+  function updateHotspotDrag(event) {
+    if (!hotspotDrag) return false;
+    if (event.pointerId !== undefined && hotspotDrag.pointerId !== event.pointerId) return false;
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+    if (Math.hypot(event.clientX - hotspotDrag.startX, event.clientY - hotspotDrag.startY) > 3) hotspotDrag.moved = true;
+    if (!hotspotDrag.moved) return true;
+    if (moveHotspotToPointer(hotspotDrag.sceneId, hotspotDrag.hotspotIndex, event, "movement-drag-update")) {
+      state.selected = { sceneId: hotspotDrag.sceneId, hotspotIndex: hotspotDrag.hotspotIndex };
+      state.linkStep = "review";
+      setStatus("Point moved. Release to save it.");
+      syncSelectedMarker();
+    }
+    return true;
+  }
+
+  function finishHotspotDrag(event) {
+    if (!hotspotDrag) return false;
+    if (event.pointerId !== undefined && hotspotDrag.pointerId !== event.pointerId) return false;
+    const completed = hotspotDrag;
+    hotspotDrag = null;
+    if (completed.moved) {
+      moveHotspotToPointer(completed.sceneId, completed.hotspotIndex, event, "movement-drag-end-coordinate");
+      logOperatorStep("point-drag-end", { hotspotId: api.hotspotId(completed.sceneId, completed.hotspotIndex) });
+      queueDraftSave("movement-dragged");
+      setStatus("Point moved and saved. Check it, then continue.");
+      render();
+      window.requestAnimationFrame(() => {
+        studioLog("movement-drag-screen-check", {
+          hotspotId: api.hotspotId(completed.sceneId, completed.hotspotIndex),
+          pointer: { x: Math.round(event.clientX), y: Math.round(event.clientY) },
+          marker: selectedMarkerScreenCenter()
+        }, true);
+      });
+    }
     return true;
   }
 
@@ -2010,9 +2115,18 @@
   elements.ImportFiles.addEventListener("change", importPanoramas);
   elements.ApplyRoomCount.addEventListener("click", setRoomCount);
   elements.RoomCount.addEventListener("change", setRoomCount);
-  elements.Home.addEventListener("click", () => setStage("start"));
-  elements.Back.addEventListener("click", backWizard);
-  elements.Continue.addEventListener("click", continueWizard);
+  elements.Home.addEventListener("click", () => {
+    logOperatorStep("home");
+    setStage("start");
+  });
+  elements.Back.addEventListener("click", () => {
+    logOperatorStep("back");
+    backWizard();
+  });
+  elements.Continue.addEventListener("click", () => {
+    logOperatorStep("continue", { label: elements.Continue.textContent.trim() });
+    continueWizard();
+  });
   elements.Build.addEventListener("click", buildRelease);
   elements.DownloadProject.addEventListener("click", downloadEditableProject);
   elements.InstallUrl.addEventListener("input", updateEmbedCode);
@@ -2028,6 +2142,11 @@
   elements.ConfirmCentre.addEventListener("click", () => {
     const selected = selectedHotspot();
     if (state.activeStage === "links" && state.linkStep === "review" && selected?.hotspot.positionConfirmed) {
+      logOperatorStep("adjust-point", {
+        hotspotId: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+        pitch: selected.hotspot.pitch,
+        yaw: selected.hotspot.yaw
+      });
       state.linkStep = "place";
       api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
       setStatus("Move the view until the right place is under the cross");
@@ -2035,6 +2154,10 @@
       return;
     }
     if (!saveSelectedHotspotAtViewerCenter()) return;
+    logOperatorStep("save-point-here", selected ? {
+      hotspotId: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+      target: selected.hotspot.target
+    } : {});
     queueDraftSave("movement-centre-confirmed");
     state.linkStep = "review";
     setStatus("Point saved. Check it on the photo, then continue.");
@@ -2070,13 +2193,43 @@
     queueDraftSave("light-area-added");
   });
 
-  viewerElement.addEventListener("pointerdown", (event) => {
+  function handleHotspotDragStart(event) {
     const marker = event.target.closest("[data-editor-hotspot-id]");
-    if (!marker) return;
-    const [sceneId, hotspotIndex] = marker.dataset.editorHotspotId.split("::");
+    if (!marker || hotspotDrag) return false;
     event.preventDefault();
     event.stopImmediatePropagation();
-    setSelected(sceneId, Number(hotspotIndex), state.activeStage === "arrival" ? "arrival" : "links");
+    beginHotspotDrag(event, marker);
+    return true;
+  }
+
+  viewerElement.addEventListener("pointerdown", handleHotspotDragStart, true);
+  viewerElement.addEventListener("mousedown", handleHotspotDragStart, true);
+  document.addEventListener("pointerdown", handleHotspotDragStart, true);
+  document.addEventListener("mousedown", handleHotspotDragStart, true);
+  document.addEventListener("pointermove", (event) => {
+    if (!updateHotspotDrag(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  document.addEventListener("mousemove", (event) => {
+    if (!updateHotspotDrag(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  document.addEventListener("pointerup", (event) => {
+    if (!finishHotspotDrag(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  document.addEventListener("mouseup", (event) => {
+    if (!finishHotspotDrag(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  document.addEventListener("pointercancel", (event) => {
+    if (!finishHotspotDrag(event)) return;
+    hotspotDrag = null;
+    setStatus("Point drag cancelled");
   }, true);
   viewerElement.addEventListener("click", (event) => {
     if (event.target.closest("[data-editor-hotspot-id]")) {

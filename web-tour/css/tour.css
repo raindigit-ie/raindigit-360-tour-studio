@@ -343,6 +343,7 @@ body:not(.is-navigator-open) .scene-panel {
 .nav-hotspot-anchor {
   width: 0;
   height: 0;
+  pointer-events: auto;
 }
 
 /* Pannellum receives mouse and touch rotation through this transparent layer. */
@@ -352,7 +353,14 @@ body:not(.is-navigator-open) .scene-panel {
    only custom hotspots opt back into pointer events. */
 .pnlm-render-container { z-index: 2; pointer-events: none; }
 .pnlm-render-container canvas { pointer-events: none; }
-.pnlm-hotspot-base.nav-hotspot-anchor { z-index: 3; pointer-events: auto; }
+.pnlm-hotspot-base.nav-hotspot-anchor {
+  z-index: 3;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: auto;
+}
 
 .nav-hotspot {
   position: absolute;
@@ -368,7 +376,22 @@ body:not(.is-navigator-open) .scene-panel {
   background: var(--accent);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  pointer-events: auto;
   transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.nav-hotspot-anchor * {
+  pointer-events: auto;
+}
+
+body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-selected .nav-hotspot {
+  cursor: grab;
+}
+
+body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-selected:active .nav-hotspot {
+  cursor: grabbing;
 }
 
 .nav-hotspot:hover,

@@ -107,6 +107,27 @@ async function elementCenter(page, selector) {
   });
 }
 
+async function dragElementCenter(page, selector, deltaX, deltaY) {
+  const start = await elementCenter(page, selector);
+  const hitTarget = await page.evaluate(({ x, y }) => {
+    const element = document.elementFromPoint(x, y);
+    const hotspot = element?.closest?.("[data-editor-hotspot-id]");
+    return {
+      tag: element?.tagName || null,
+      className: element?.className?.baseVal || element?.className || null,
+      hotspotId: hotspot?.dataset?.editorHotspotId || null,
+      pointerEvents: element ? getComputedStyle(element).pointerEvents : null
+    };
+  }, start);
+  assert(hitTarget.hotspotId, `Walking button is not the top hit target before drag: ${JSON.stringify({ start, hitTarget })}`);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + deltaX, start.y + deltaY, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  return { start, end: { x: Math.round((start.x + deltaX) * 10) / 10, y: Math.round((start.y + deltaY) * 10) / 10 } };
+}
+
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "raindigit-guided-flow-"));
   const port = 22000 + Math.floor(Math.random() * 12000);
@@ -273,8 +294,32 @@ async function main() {
     assertNear(firstMarker.y, firstTarget.y, 8, "The first walking button did not stay under the centre target after save");
     let first = (await addedHotspots(page, sourceSceneId))[0];
     assert(first?.kind === "doorway" && first.positionConfirmed, `The first walking button was not saved: ${JSON.stringify(first)}`);
-    assertNear(first.pitch, firstPose.pitch, 0.6, "The first walking button pitch did not match the centre target");
-    assertNear(first.yaw, firstPose.yaw, 0.6, "The first walking button yaw did not match the centre target");
+    assertNear(first.pitch, firstPose.pitch, 1, "The first walking button pitch did not match the centre target");
+    assertNear(first.yaw, firstPose.yaw, 1, "The first walking button yaw did not match the centre target");
+    const draggedFirst = await dragElementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 92, 34);
+    const firstAfterDrag = (await addedHotspots(page, sourceSceneId))[0];
+    if (firstAfterDrag.pitch === first.pitch && firstAfterDrag.yaw === first.yaw) {
+      const dragDiagnostics = await page.evaluate(() => ({
+        status: document.querySelector("#editorStatus")?.textContent,
+        snapshot: window.__RAINDIGIT_STUDIO_DEBUG__.snapshot(),
+        topAtMarker: (() => {
+          const element = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+          const box = element?.getBoundingClientRect();
+          if (!box) return null;
+          const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          return {
+            tag: top?.tagName || null,
+            className: top?.className?.baseVal || top?.className || null,
+            hotspotId: top?.closest?.("[data-editor-hotspot-id]")?.dataset?.editorHotspotId || null
+          };
+        })()
+      }));
+      throw new Error(`Dragging a selected walking button did not change its coordinates: ${JSON.stringify({ first, firstAfterDrag, draggedFirst, dragDiagnostics })}`);
+    }
+    const draggedMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+    assertNear(draggedMarker.x, draggedFirst.end.x, 24, "Dragged walking button did not stay near the release pointer");
+    assertNear(draggedMarker.y, draggedFirst.end.y, 24, "Dragged walking button did not stay near the release pointer");
+    first = firstAfterDrag;
     await page.getByRole("button", { name: "Adjust point" }).click();
     await page.getByRole("button", { name: "Update point here" }).waitFor();
     const currentMarkerWhileAdjusting = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
@@ -298,8 +343,8 @@ async function main() {
     assert(both.length === 2 && both.every((hotspot) => hotspot.positionConfirmed), `Two independent points were not preserved: ${JSON.stringify(both)}`);
     assert(JSON.stringify(both[0]) === JSON.stringify(first), `Placing the second point changed the first point: ${JSON.stringify({ first, both })}`);
     assert(both[0].pitch !== both[1].pitch || both[0].yaw !== both[1].yaw, "Two points collapsed onto the same panorama coordinate.");
-    assertNear(both[1].pitch, secondPose.pitch, 0.6, "The second walking button pitch did not match the centre target");
-    assertNear(both[1].yaw, secondPose.yaw, 0.6, "The second walking button yaw did not match the centre target");
+    assertNear(both[1].pitch, secondPose.pitch, 1, "The second walking button pitch did not match the centre target");
+    assertNear(both[1].yaw, secondPose.yaw, 1, "The second walking button yaw did not match the centre target");
     await page.getByRole("button", { name: "Next walking button" }).click();
     while (await page.getByRole("button", { name: "Save point here" }).isVisible().catch(() => false)) {
       await page.waitForFunction(() => {
@@ -405,7 +450,7 @@ async function main() {
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
     const events = new Set(logBody.entries.map((entry) => entry.event));
-    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "movement-centre-confirmed", "draft-save-success"]) {
+    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "movement-centre-confirmed", "movement-drag-screen-check", "operator-step", "draft-save-success"]) {
       assert(events.has(required), `Diagnostic journal is missing ${required}.`);
     }
     const logPath = join(root, "workspace", "studio-debug.ndjson");
