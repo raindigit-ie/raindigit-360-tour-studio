@@ -2058,6 +2058,10 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-photo.is-selected { border-color: var(--accent); }
 .editor-room-photo.is-dragging { opacity: 0.55; }
+.editor-room-photo.is-drag-over {
+  border-color: #69c2a3;
+  background: rgba(105, 194, 163, 0.1);
+}
 
 .editor-room-photo__select {
   position: relative;
