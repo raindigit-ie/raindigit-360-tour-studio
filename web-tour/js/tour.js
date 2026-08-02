@@ -221,11 +221,10 @@ function syncLocalAdjustments(sceneId, previousIds = []) {
   const adjustments = localAdjustments[sceneId] || [];
   if (viewer.getScene() === sceneId && !viewer.isLoaded()) {
     const navigation = sceneConfig.hotSpots.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"));
-    sceneConfig.hotSpots = navigation.concat(adjustments.map((adjustment) => toPannellumLocalAdjustment(sceneId, adjustment)));
+    sceneConfig.hotSpots.splice(0, sceneConfig.hotSpots.length, ...navigation, ...adjustments.map((adjustment) => toPannellumLocalAdjustment(sceneId, adjustment)));
     return;
   }
   [...new Set([...previousIds, ...viewerElementLocalAdjustments(sceneId)])].forEach((id) => removeLiveNavigationHotspot(sceneId, id));
-  sceneConfig.hotSpots = sceneConfig.hotSpots.filter((hotspot) => !hotspot.id?.startsWith("local-adjustment::"));
   adjustments.forEach((adjustment) => addLiveNavigationHotspot(sceneId, toPannellumLocalAdjustment(sceneId, adjustment)));
 }
 
@@ -338,11 +337,10 @@ function rebuildSceneHotspots(sceneId) {
     .map((hotspot) => hotspot.id);
   if (viewer.getScene() === sceneId && !viewer.isLoaded()) {
     const localOverlays = sceneConfig.hotSpots.filter((hotspot) => hotspot.id?.startsWith("local-adjustment::"));
-    sceneConfig.hotSpots = scene.hotspots.map((hotspot, hotspotIndex) => toPannellumHotspot(scene, hotspot, hotspotIndex)).concat(localOverlays);
+    sceneConfig.hotSpots.splice(0, sceneConfig.hotSpots.length, ...scene.hotspots.map((hotspot, hotspotIndex) => toPannellumHotspot(scene, hotspot, hotspotIndex)), ...localOverlays);
     return;
   }
   existingNavigationIds.forEach((id) => removeLiveNavigationHotspot(sceneId, id));
-  sceneConfig.hotSpots = sceneConfig.hotSpots.filter((hotspot) => hotspot.id?.startsWith("local-adjustment::"));
   scene.hotspots.forEach((hotspot, hotspotIndex) => addLiveNavigationHotspot(sceneId, toPannellumHotspot(scene, hotspot, hotspotIndex)));
 }
 
@@ -377,7 +375,7 @@ function updateHotspotCoordinates(sceneId, hotspotIndex, coordinates) {
   hotspot.pitch = coordinates.pitch;
   hotspot.yaw = coordinates.yaw;
   const id = hotspotId(sceneId, hotspotIndex);
-  const configuredHotspot = configScenes[sceneId]?.hotSpots?.[hotspotIndex];
+  const configuredHotspot = configScenes[sceneId]?.hotSpots?.find((candidate) => candidate.id === id);
   if (configuredHotspot) {
     configuredHotspot.pitch = coordinates.pitch;
     configuredHotspot.yaw = coordinates.yaw;
@@ -395,7 +393,7 @@ function updateHotspotArrival(sceneId, hotspotIndex, arrival) {
   hotspot.targetPitch = Math.max(-85, Math.min(85, arrival.pitch));
   hotspot.targetYaw = Math.max(-180, Math.min(180, arrival.yaw));
   hotspot.targetHfov = Math.max(58, Math.min(112, arrival.hfov));
-  const configuredHotspot = configScenes[sceneId]?.hotSpots?.[hotspotIndex];
+  const configuredHotspot = configScenes[sceneId]?.hotSpots?.find((candidate) => candidate.id === hotspotId(sceneId, hotspotIndex));
   if (configuredHotspot) {
     configuredHotspot.targetPitch = hotspot.targetPitch;
     configuredHotspot.targetYaw = hotspot.targetYaw;

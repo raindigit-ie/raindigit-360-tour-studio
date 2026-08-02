@@ -44,6 +44,7 @@ The studio is local-first. It keeps source material and the editable workspace o
    - Create a link only where a visitor can move: a physical doorway/passage or another camera viewpoint.
    - Default to a viewpoint marker for another camera in the same room and a doorway marker for a different room. Keep marker type and custom name under **Link options**.
    - Select its type and destination, then use the explicit **Rotate view** / **Place selected** modes. Placement locks the camera; a short click/tap positions the selected marker, while a drag positions nothing. Selecting another marker never turns the camera or changes another marker.
+   - After placement, rotating the panorama must move the marker's screen projection while its saved spherical coordinate remains unchanged. A marker that stays screen-fixed, disappears from the active scene configuration or leaves a stale DOM copy fails review.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
    - A newly added transition remains incomplete until placement mode records an explicit point. If Continue finds unfinished work on another photo, it opens that source photo, selects the point and enters placement mode automatically.
 

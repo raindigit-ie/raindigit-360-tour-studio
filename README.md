@@ -100,7 +100,7 @@ release service serves only the built static output at `http://127.0.0.1:8080`.
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
 studio journey covers create, upload, rooms, look, movement, first views, preview,
 both downloads, local release, editable-tour restore, direct offline opening of
-the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points keep independent coordinates, placement drags do not rotate the camera and unfinished work is reopened automatically.
+the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points keep independent coordinates, placement drags do not rotate the camera, an anchored marker follows the panorama projection without changing yaw/pitch, and unfinished work is reopened automatically.
 It also enforces a novice-default action budget and checks that technical terms do
 not leak into the visible task surface.
 

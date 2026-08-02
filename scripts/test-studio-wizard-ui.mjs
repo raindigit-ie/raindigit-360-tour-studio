@@ -78,6 +78,33 @@ async function dragPlacementSurface(page, deltaX, deltaY) {
   await page.mouse.up();
 }
 
+async function dragPanorama(page, deltaX, deltaY) {
+  const bounds = await page.locator("#panorama").boundingBox();
+  assert(bounds, "The panorama is not visible.");
+  const x = bounds.x + bounds.width * 0.25;
+  const y = bounds.y + bounds.height * 0.35;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + deltaX, y + deltaY, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+}
+
+async function markerProjection(page, editorId) {
+  return page.evaluate((id) => {
+    const api = window.__TOUR_EDITOR_API;
+    const marker = document.querySelector(`[data-editor-hotspot-id="${id}"]`);
+    const bounds = marker?.getBoundingClientRect();
+    const configured = api.viewer.getConfig().hotSpots?.find((hotspot) => hotspot.id === id);
+    return {
+      configured: Boolean(configured),
+      visibility: marker ? getComputedStyle(marker).visibility : "missing",
+      x: bounds?.x,
+      y: bounds?.y
+    };
+  }, editorId);
+}
+
 async function runMagick(arguments_) {
   for (const binary of ["magick", "convert"]) {
     try {
@@ -195,6 +222,18 @@ async function main() {
     const firstPlaced = await addedHotspots(page, sourceSceneId);
     assert(firstPlaced.length === 1 && firstPlaced[0].positionConfirmed, `The first movement was not placed: ${JSON.stringify(firstPlaced)}`);
     assert(await page.getByRole("button", { name: "Rotate view" }).getAttribute("aria-pressed") === "true", "Placing a movement must return to rotate mode.");
+    const firstEditorId = `${sourceSceneId}::0`;
+    const firstProjection = await markerProjection(page, firstEditorId);
+    const poseBeforeRotation = await viewerPose(page);
+    await dragPanorama(page, 90, 0);
+    const poseAfterRotation = await viewerPose(page);
+    const movedProjection = await markerProjection(page, firstEditorId);
+    const firstAfterRotation = (await addedHotspots(page, sourceSceneId))[0];
+    assert(firstProjection.configured && movedProjection.configured, `Placed movement is missing from Pannellum config: ${JSON.stringify({ firstProjection, movedProjection })}`);
+    assert(firstProjection.visibility === "visible" && movedProjection.visibility === "visible", `Placed movement is not projected in the panorama: ${JSON.stringify({ firstProjection, movedProjection })}`);
+    assert(Math.abs(poseAfterRotation.yaw - poseBeforeRotation.yaw) > 1, `Rotate mode did not turn the camera: ${JSON.stringify({ poseBeforeRotation, poseAfterRotation })}`);
+    assert(Math.abs(movedProjection.x - firstProjection.x) > 8, `Placed movement stayed screen-fixed after camera rotation: ${JSON.stringify({ firstProjection, movedProjection })}`);
+    assert(JSON.stringify(firstAfterRotation) === JSON.stringify(firstPlaced[0]), `Camera rotation changed the panorama coordinate: ${JSON.stringify({ before: firstPlaced[0], after: firstAfterRotation })}`);
 
     await page.getByText("Link options", { exact: true }).click();
     await page.getByLabel("Move to").selectOption({ label: "Living room - View 4" });
