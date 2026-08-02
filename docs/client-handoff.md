@@ -9,7 +9,7 @@ For another operator, extract `raindigit-360-tour-studio.zip` first. The kit con
 3. Complete the six numbered screens in order. The studio saves at every **Continue**.
 4. On **Movement**, use **Rotate view** to frame the area, then **Place selected** and click once. The camera is locked while placing. The next screen remains locked until all new points are positioned and automatically opens the first unfinished point.
 5. On **First views**, save the destination view for every new movement. Publish remains locked until all destination views are reviewed.
-6. On **Publish**, build the tour and download `raindigit-360-tour.html`.
+6. On **Publish**, build the tour and download `raindigit-360-tour.html` for a one-file page, or `raindigit-360-tour-embed.html` when a website editor needs one paste-in HTML block.
 7. Use **Backups and advanced files -> Download editable backup** only for internal continuation or transfer to another operator. It is not required by the website owner.
 8. Double-click `Stop RainDigit 360 Studio.command` when finished.
 
@@ -23,6 +23,8 @@ Camera originals stay outside the studio. The `.rdtour` backup contains normaliz
 4. Paste the generated iframe into the page where the tour should appear.
 
 The delivered HTML is self-contained and can also be opened directly from disk for review. It does not need adjacent image, CSS or JavaScript files.
+
+If the website editor cannot upload a separate file, use `raindigit-360-tour-embed.html` instead. It is a single compressed body fragment containing the tour, styles and scripts. Paste its full contents into the page body. It shows a small preloader first, then creates the tour iframe after the host page has loaded and the browser is idle. This is convenient but heavier for the page than the normal iframe-by-URL method because the panorama data is inside the page markup.
 
 Use the folder package under **Backups and advanced files** only when a host needs normal cacheable folders. That ZIP must be extracted without changing its internal paths. The one-file HTML remains the default customer handoff.
 

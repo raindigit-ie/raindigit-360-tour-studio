@@ -64,6 +64,7 @@ async function main() {
   const output = join(root, "release");
   const zip = join(root, "raindigit-360-tour.zip");
   const singleHtml = join(root, "raindigit-360-tour.html");
+  const embedHtml = join(root, "raindigit-360-tour-embed.html");
   const artifacts = join(root, "artifacts");
   const port = 18000 + Math.floor(Math.random() * 20000);
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -124,12 +125,12 @@ async function main() {
         action: "structure",
         title: "Product QA Tour",
         rooms: [{ id: "room-kitchen", label: "Kitchen" }, { id: "room-hall", label: "Hall" }],
-        firstScene: "scene-002",
+        firstScene: "scene-001",
         sceneIds: ["scene-002", "scene-001", "scene-003"],
         scenes: structuredScenes
       })
     });
-    assert(structured.firstScene === "scene-002", "The selected opening viewpoint must persist.");
+    assert(structured.firstScene === "scene-002", "The first visible viewpoint order must define the opening scene.");
     assert(structured.scenes[0].id === "scene-002", "Viewpoint order must persist.");
 
     const draft = {
@@ -184,7 +185,7 @@ async function main() {
 
     let incompleteBuildRejected = false;
     try {
-      await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--replace"], { cwd: projectRoot });
+      await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--embed", embedHtml, "--replace"], { cwd: projectRoot });
     } catch (error) {
       incompleteBuildRejected = /Place every transition point/.test(error.stderr || error.message);
     }
@@ -196,20 +197,31 @@ async function main() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(draft)
     });
-    await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--replace"], { cwd: projectRoot });
+    await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-tour-release.mjs"), "--workspace", workspace, "--output", output, "--zip", zip, "--single", singleHtml, "--embed", embedHtml, "--replace"], { cwd: projectRoot });
     await execFileAsync("unzip", ["-t", zip]);
     const { stdout: listing } = await execFileAsync("unzip", ["-Z1", zip]);
     assert(listing.includes("INSTALL.txt"), "The package must contain installation instructions.");
     assert(listing.includes("index.html") && listing.includes("js/tour-config.js"), "The package must contain a deployable tour.");
     assert(!/draft\.json|tour-editor|tour-preview|studio-workspace/i.test(listing), "Editor or draft data leaked into the release archive.");
     const releaseConfig = await readFile(join(output, "js", "tour-config.js"), "utf8");
+    assert(releaseConfig.includes('"firstScene":"scene-002"'), "The release must open on the first visible viewpoint, not a stale firstScene.");
     assert(releaseConfig.includes('"pitch":-8') && releaseConfig.includes('"yaw":-60') && releaseConfig.includes('"hfov":92'), "Saved default viewpoints must be baked into the release.");
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
     assert(!releaseConfig.includes("positionConfirmed") && !releaseConfig.includes("arrivalConfirmed") && !releaseConfig.includes("plannedTargets"), "Editor planning or review metadata must not leak into the public release.");
     const singleRelease = await readFile(singleHtml, "utf8");
-    assert(singleRelease.includes("data:image/jpeg;base64,") && singleRelease.includes("window.TOUR_CONFIG"), "The single HTML must embed its tour and panorama data.");
+    const singleRuntime = singleRelease.match(/data:text\/javascript;base64,([A-Za-z0-9+/=]+)/)?.[1];
+    assert(singleRuntime, "The single HTML must embed its runtime.");
+    assert(!singleRelease.includes("\n"), "The single HTML must stay on one line.");
+    const singleRuntimeJs = Buffer.from(singleRuntime, "base64").toString("utf8");
+    assert(singleRuntimeJs.includes("data:image/jpeg;base64,") && singleRuntimeJs.includes('"firstScene":"scene-002"'), "The single HTML runtime must embed the tour and preserve the first visible viewpoint.");
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");
+    const embedRelease = await readFile(embedHtml, "utf8");
+    assert(embedRelease.includes("Loading 360 tour...") && embedRelease.includes("requestIdleCallback") && embedRelease.includes("srcdoc"), "The paste-in HTML must preload and lazy-start the self-contained tour.");
+    const embedRuntime = embedRelease.match(/data:text\/javascript;base64,([A-Za-z0-9+/=]+)/)?.[1];
+    assert(embedRuntime && Buffer.from(embedRuntime, "base64").toString("utf8").includes('"firstScene":"scene-002"'), "The paste-in HTML must preserve the first visible viewpoint.");
+    assert(!embedRelease.includes("\n"), "The paste-in HTML must stay on one line for copy/paste.");
+    assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(embedRelease), "The paste-in HTML must not depend on local files.");
 
     const projectDownload = await fetch(`${baseUrl}/__tour-editor/project-download?workspace=1`);
     assert(projectDownload.ok, "Editable project download must succeed.");
@@ -264,6 +276,7 @@ async function main() {
       releaseReadinessGate: true,
       sameOriginPreview: true,
       singleHtml: true,
+      pasteInHtml: true,
       archiveBytes: (await stat(zip)).size
     }, null, 2));
   } finally {

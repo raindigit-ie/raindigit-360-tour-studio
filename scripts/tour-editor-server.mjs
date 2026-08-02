@@ -22,6 +22,7 @@ const artifactRoot = process.env.INSTA360_TOUR_ARTIFACTS ? resolve(process.env.I
 const releaseRoot = process.env.INSTA360_TOUR_RELEASE ? resolve(process.env.INSTA360_TOUR_RELEASE) : join(projectRoot, "release");
 const releaseZipPath = join(artifactRoot, "raindigit-360-tour.zip");
 const releaseSinglePath = join(artifactRoot, "raindigit-360-tour.html");
+const releaseEmbedPath = join(artifactRoot, "raindigit-360-tour-embed.html");
 const projectBackupPath = join(artifactRoot, "raindigit-tour-project.rdtour");
 const host = process.env.TOUR_SERVER_HOST || "127.0.0.1";
 const previewMode = process.argv.includes("--preview");
@@ -241,7 +242,7 @@ function roomId(label, preferred = "") {
 
 async function releaseStatus() {
   try {
-    const [archive, single, manifest] = await Promise.all([stat(releaseZipPath), stat(releaseSinglePath), stat(workspaceProjectPath)]);
+    const [archive, single, embed, manifest] = await Promise.all([stat(releaseZipPath), stat(releaseSinglePath), stat(releaseEmbedPath), stat(workspaceProjectPath)]);
     let latestInput = manifest.mtimeMs;
     try {
       latestInput = Math.max(latestInput, (await stat(workspaceDraftPath)).mtimeMs);
@@ -249,9 +250,11 @@ async function releaseStatus() {
       if (error.code !== "ENOENT") throw error;
     }
     return {
-      ready: archive.mtimeMs >= latestInput && single.mtimeMs >= latestInput,
+      ready: archive.mtimeMs >= latestInput && single.mtimeMs >= latestInput && embed.mtimeMs >= latestInput,
+      embedReady: embed.mtimeMs >= latestInput,
       bytes: archive.size,
       singleBytes: single.size,
+      embedBytes: embed.size,
       updatedAt: archive.mtime.toISOString()
     };
   } catch (error) {
@@ -468,7 +471,7 @@ function workspaceConfig(project, scope) {
   }));
   return {
     title: project.title,
-    firstScene: project.firstScene || scenes[0]?.id || null,
+    firstScene: scenes[0]?.id || null,
     scenes
   };
 }
@@ -631,7 +634,7 @@ const server = createServer(async (request, response) => {
         existing.title = title;
         existing.rooms = rooms;
         existing.scenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
-        existing.firstScene = typeof body.firstScene === "string" && incomingById.has(body.firstScene) ? body.firstScene : existing.scenes[0]?.id || null;
+        existing.firstScene = existing.scenes[0]?.id || null;
         await writeWorkspaceProject(existing);
         replyJson(response, 200, existing);
         return;
@@ -750,7 +753,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
-      await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--replace"], {
+      await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--embed", releaseEmbedPath, "--replace"], {
         cwd: projectRoot,
         maxBuffer: 4 * 1024 * 1024,
         timeout: 10 * 60 * 1000
@@ -788,6 +791,20 @@ const server = createServer(async (request, response) => {
         "content-length": status.singleBytes
       });
       createReadStream(releaseSinglePath).pipe(response);
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-embed-download` && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!workspace || !status.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before downloading paste-in code." });
+        return;
+      }
+      response.writeHead(200, {
+        ...responseHeaders("text/html; charset=utf-8"),
+        "content-disposition": "attachment; filename=raindigit-360-tour-embed.html",
+        "content-length": status.embedBytes
+      });
+      createReadStream(releaseEmbedPath).pipe(response);
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-single-preview.html` && request.method === "GET") {

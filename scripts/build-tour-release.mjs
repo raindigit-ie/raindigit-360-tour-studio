@@ -16,6 +16,7 @@ function parseArguments(argv) {
     output: join(projectRoot, "release"),
     zip: null,
     single: null,
+    embed: null,
     quality: 86,
     replace: false
   };
@@ -25,10 +26,11 @@ function parseArguments(argv) {
     else if (argument === "--output") options.output = resolve(argv[++index] || "");
     else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
     else if (argument === "--single") options.single = resolve(argv[++index] || "");
+    else if (argument === "--embed") options.embed = resolve(argv[++index] || "");
     else if (argument === "--quality") options.quality = Number(argv[++index]);
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--quality 84..94] [--replace]");
+      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--quality 84..94] [--replace]");
       process.exit(0);
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -113,7 +115,9 @@ function normaliseProject(project) {
     assert(Array.isArray(scene.hotspots), `Scene ${scene.id} must define hotspots.`);
   });
   assert(ids.has(project.firstScene || project.scenes[0].id), "Initial scene must exist in the project.");
-  return structuredClone(project);
+  const normalised = structuredClone(project);
+  normalised.firstScene = normalised.scenes[0].id;
+  return normalised;
 }
 
 function clamp(value, minimum, maximum, fallback) {
@@ -301,6 +305,23 @@ function inlineScript(value) {
   return value.replace(/<\/script/gi, "<\\/script");
 }
 
+function minifyCss(value) {
+  return value
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*([{}:;,>+~])\s*/g, "$1")
+    .replace(/;}/g, "}")
+    .trim();
+}
+
+function compactHtml(value) {
+  return value
+    .replace(/<!--(?!\[if)[\s\S]*?-->/g, "")
+    .replace(/>\s+</g, "><")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function dataUrl(path, mimeType) {
   return `data:${mimeType};base64,${(await readFile(path)).toString("base64")}`;
 }
@@ -320,15 +341,33 @@ async function createSingleHtml(output, project, singlePath) {
     dataUrl(join(output, "assets", "raindigit-mark.svg"), "image/svg+xml")
   ]);
   const configJs = `window.TOUR_CONFIG = ${JSON.stringify(singleProject)};`;
-  const html = template
-    .replace(/<link rel="stylesheet" href="css\/pannellum\.css[^"]*" \/>/, `<style>${pannellumCss}</style>`)
-    .replace(/<link rel="stylesheet" href="css\/tour\.css[^"]*" \/>/, `<style>${tourCss}</style>`)
+  const runtimeDataUrl = `data:text/javascript;base64,${Buffer.from(`${configJs}\n${pannellumJs}\n${tourJs}`, "utf8").toString("base64")}`;
+  const html = compactHtml(template
+    .replace(/<link rel="stylesheet" href="css\/pannellum\.css[^"]*" \/>/, `<style>${minifyCss(pannellumCss)}</style>`)
+    .replace(/<link rel="stylesheet" href="css\/tour\.css[^"]*" \/>/, `<style>${minifyCss(tourCss)}</style>`)
     .replace('src="assets/raindigit-mark.svg"', `src="${logo}"`)
-    .replace(/<script src="js\/tour-bootstrap\.js[^"]*"><\/script>/, `<script>${inlineScript(configJs)}\n${inlineScript(pannellumJs)}\n${inlineScript(tourJs)}</script>`);
+    .replace(/<script src="js\/tour-bootstrap\.js[^"]*"><\/script>/, `<script src="${runtimeDataUrl}"></script>`));
+  assert(!/\n/.test(html), "Single-file release must stay on one line.");
   assert(!/<(?:link|script)[^>]+(?:href|src)="(?!data:|https?:|#)/i.test(html), "Single-file release still has a local runtime dependency.");
   await mkdir(dirname(singlePath), { recursive: true });
   await rm(singlePath, { force: true });
   await writeFile(singlePath, html, "utf8");
+  return html;
+}
+
+async function createEmbedHtml(singleHtml, embedPath) {
+  const id = `raindigit-tour-${createHash("sha256").update(singleHtml).digest("hex").slice(0, 12)}`;
+  const srcdoc = JSON.stringify(singleHtml);
+  const shellStyle = "width:100%;aspect-ratio:16/9;min-height:360px;background:#10110e;color:#f7f2df;display:grid;place-items:center;overflow:hidden;border:0;position:relative";
+  const loaderStyle = "font:600 14px/1.4 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#d6af5c";
+  const script = `(()=>{const r=document.getElementById(${JSON.stringify(id)}),h=${srcdoc};if(!r)return;const s=()=>{const f=document.createElement("iframe");f.title="RainDigit 360 tour";f.loading="lazy";f.allow="fullscreen";f.allowFullscreen=true;f.setAttribute("allowfullscreen","");f.style.cssText="display:block;width:100%;height:100%;border:0;background:#10110e";f.onload=()=>r.setAttribute("data-loaded","1");r.textContent="";r.appendChild(f);f.srcdoc=h};const q=()=>("requestIdleCallback"in window?requestIdleCallback(s,{timeout:1500}):setTimeout(s,1));document.readyState==="complete"?q():addEventListener("load",q,{once:true})})();`;
+  const html = `<div id="${id}" data-raindigit-tour="1" style="${shellStyle}"><div style="${loaderStyle}">Loading 360 tour...</div></div><script>${inlineScript(script)}</script>`;
+  assert(!/\n/.test(html), "Paste-in embed code must stay on one line.");
+  assert(!/<(?:link|script)[^>]+(?:href|src)="(?!data:|https?:|#)/i.test(html), "Paste-in embed still has a local runtime dependency.");
+  await mkdir(dirname(embedPath), { recursive: true });
+  await rm(embedPath, { force: true });
+  await writeFile(embedPath, html, "utf8");
+  return html;
 }
 
 async function main() {
@@ -358,8 +397,13 @@ async function main() {
     await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
     await rm(temporaryRoot, { recursive: true, force: true });
     if (options.zip) await createZip(options.output, options.zip);
-    if (options.single) await createSingleHtml(options.output, project, options.single);
-    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, scenes: project.scenes.length, mediaBytes: totalBytes, quality: options.quality }, null, 2));
+    let singleHtml = null;
+    if (options.single || options.embed) {
+      const singleTarget = options.single || join(options.output, "raindigit-360-tour.html");
+      singleHtml = await createSingleHtml(options.output, project, singleTarget);
+    }
+    if (options.embed) await createEmbedHtml(singleHtml, options.embed);
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, mediaBytes: totalBytes, quality: options.quality }, null, 2));
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
     throw error;

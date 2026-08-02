@@ -34,6 +34,7 @@ The studio is local-first. It keeps source material and the editable workspace o
 3. **Rooms and walking routes**
    - Show one visual setup board. The operator sets the number of rooms, names each room and sees every uploaded photo as a large thumbnail card.
    - Treat each uploaded 360 photo as a camera point, not as a room. Avoid the standalone word `places` in normal copy; use walking routes, camera points and destinations.
+   - The first visible photo in the board order is the opening scene for local preview, release preview and the customer HTML. Do not keep or trust a stale hidden `firstScene` value after reordering.
    - When a photo still has an auto title like `View 3`, rename it from its room label (`Kitchen`, or `Kitchen view 2` when several camera points share one room). Preserve any title the operator typed manually.
    - Provide a large **Preview** action for every source and destination card so the operator can check visible doorways, openings and camera points before planning routes.
    - Support dragging a photo card into a room and an equivalent Room menu for touch, keyboard and recovery. Keep room columns horizontally scrollable rather than compressing thumbnails beyond recognition.
@@ -66,6 +67,7 @@ The studio is local-first. It keeps source material and the editable workspace o
    - Build the static package, then show **Download website file** as the only primary result.
    - Keep preview/testing, website-install code, editable backup and folder ZIP in separate collapsed disclosures.
    - `raindigit-360-tour.html` is the normal one-file customer installation. The editable backup is an operator asset, not part of the default customer handoff.
+   - `raindigit-360-tour-embed.html` is the secondary paste-in installation for website editors that cannot host a separate file. It must be one compressed body fragment with inline styles, scripts and panorama data, show a preloader immediately, then create the self-contained tour iframe after host page `load` plus idle callback or timeout.
 
 ## Review Gate
 
@@ -81,10 +83,11 @@ Use **Build the tour** on the Publish screen, or run `npm run build:release` aft
 
 - `release/` - static deployable folder;
 - `dist/raindigit-360-tour.html` - self-contained tour with no adjacent runtime or media files;
+- `dist/raindigit-360-tour-embed.html` - one-line paste-in body fragment with a preloader and lazy self-contained iframe startup;
 - `dist/raindigit-360-tour.zip` - advanced folder-based deployment;
 - the studio download endpoint creates `raindigit-tour-project.rdtour`, containing project JSON, draft JSON and normalized editable media.
 
-For the simplest customer handoff, upload the single HTML file and use its URL directly. The ZIP remains available for hosts that prefer normal cacheable assets and includes `INSTALL.txt`.
+For the simplest customer handoff, upload the single HTML file and use its URL directly. The iframe-by-URL installation is lighter for the host page than pasting the whole tour into page markup. The paste-in block is available when a website editor can only accept body HTML. The ZIP remains available for hosts that prefer normal cacheable assets and includes `INSTALL.txt`.
 
 The single HTML must also open directly from disk and render when embedded in a
 fullscreen-enabled iframe. Both paths are part of the automated product test.

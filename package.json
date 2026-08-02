@@ -9,7 +9,7 @@
     "app:start": "sh scripts/start-studio.sh",
     "app:stop": "sh scripts/stop-studio.sh",
     "check": "node --check scripts/tour-editor-server.mjs && node --check scripts/build-tour-release.mjs && node --check web-tour/js/tour-bootstrap.js && node --check web-tour/js/tour.js && node --check web-tour/js/tour-editor.js && node --check web-tour/js/tour-preview.js",
-    "build:release": "node scripts/build-tour-release.mjs --workspace studio-workspace --output release --zip dist/raindigit-360-tour.zip --single dist/raindigit-360-tour.html --replace",
+    "build:release": "node scripts/build-tour-release.mjs --workspace studio-workspace --output release --zip dist/raindigit-360-tour.zip --single dist/raindigit-360-tour.html --embed dist/raindigit-360-tour-embed.html --replace",
     "build:studio-kit": "node scripts/package-studio-kit.mjs",
     "test:product": "node scripts/test-product-flow.mjs",
     "test:studio-ui": "node scripts/test-studio-wizard-ui.mjs",
