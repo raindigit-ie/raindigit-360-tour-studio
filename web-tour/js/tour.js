@@ -106,19 +106,13 @@ function numericViewParam(name, fallback) {
 }
 
 function createTransitionHotspot(hotspotDiv, args) {
-  hotspotDiv.classList.add("nav-hotspot", `nav-hotspot--${args.kind}`);
+  hotspotDiv.classList.add("nav-hotspot", "nav-hotspot--doorway");
   hotspotDiv.dataset.label = args.label;
   if (args.editorId) {
     hotspotDiv.dataset.editorHotspotId = args.editorId;
   }
   hotspotDiv.setAttribute("aria-label", args.label);
-  hotspotDiv.innerHTML = args.kind === "viewpoint"
-    ? `<svg class="nav-hotspot__view" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 8V5h3" /><path d="M20 8V5h-3" />
-        <path d="M4 16v3h3" /><path d="M20 16v3h-3" />
-        <circle cx="12" cy="12" r="3.5" />
-      </svg>`
-    : `<svg class="nav-hotspot__person" viewBox="0 0 24 24" aria-hidden="true">
+  hotspotDiv.innerHTML = `<svg class="nav-hotspot__person" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="13" cy="4.8" r="1.9" />
         <path d="m11.6 8.3 2.1 3.8 3.2 1.4" />
         <path d="m13.3 12.1-2 3.5-2.7 2.2" />
@@ -158,7 +152,7 @@ function toPannellumHotspot(scene, hotspot, hotspotIndex) {
     targetHfov: hotspot.targetHfov,
     cssClass: "nav-hotspot-anchor",
     createTooltipFunc: createTransitionHotspot,
-    createTooltipArgs: { label: hotspot.label, kind: hotspot.kind || "doorway", editorId: id }
+    createTooltipArgs: { label: hotspot.label, editorId: id }
   };
 }
 

@@ -189,10 +189,15 @@ function validateWorkspaceProject(value) {
     if (!value.rooms.every((room) => room && typeof room.id === "string" && /^[a-z0-9-]{1,60}$/i.test(room.id) && !roomIds.has(room.id) && roomIds.add(room.id) && typeof room.label === "string" && room.label.trim().length >= 1 && room.label.length <= 80)) return false;
   }
   const ids = new Set();
-  return value.title.trim().length >= 1 && value.title.length <= 100 && value.scenes.length <= 100 && value.scenes.every((scene) => {
+  const validScenes = value.title.trim().length >= 1 && value.title.length <= 100 && value.scenes.length <= 100 && value.scenes.every((scene) => {
     if (!scene || typeof scene !== "object" || !/^scene-\d{3,}$/i.test(scene.id) || ids.has(scene.id)) return false;
     ids.add(scene.id);
-    return typeof scene.title === "string" && scene.title.trim().length >= 1 && scene.title.length <= 80 &&
+    const validPlannedTargets = scene.plannedTargets === undefined || (
+      Array.isArray(scene.plannedTargets) && scene.plannedTargets.length <= 99 &&
+      new Set(scene.plannedTargets).size === scene.plannedTargets.length &&
+      scene.plannedTargets.every((target) => typeof target === "string" && /^scene-\d{3,}$/i.test(target) && target !== scene.id)
+    );
+    return validPlannedTargets && typeof scene.title === "string" && scene.title.trim().length >= 1 && scene.title.length <= 80 &&
       typeof scene.subtitle === "string" && scene.subtitle.length <= 120 &&
       typeof scene.space === "string" && /^[a-z0-9-]{1,60}$/i.test(scene.space) &&
       typeof scene.spaceLabel === "string" && scene.spaceLabel.trim().length >= 1 && scene.spaceLabel.length <= 80 &&
@@ -201,6 +206,7 @@ function validateWorkspaceProject(value) {
       Number.isFinite(scene.pitch) && Number.isFinite(scene.yaw) && Number.isFinite(scene.hfov) &&
       Array.isArray(scene.hotspots);
   });
+  return validScenes && value.scenes.every((scene) => (scene.plannedTargets || []).every((target) => ids.has(target)));
 }
 
 function cleanHeader(value) {
@@ -597,7 +603,10 @@ const server = createServer(async (request, response) => {
             replyJson(response, 400, { error: `Photo ${original.id} needs a room and a name.` });
             return;
           }
-          nextScenes.push({ ...original, title: sceneTitle, subtitle, space, spaceLabel });
+          const plannedTargets = Array.isArray(incoming.plannedTargets)
+            ? [...new Set(incoming.plannedTargets.filter((target) => typeof target === "string" && target !== original.id && incomingById.has(target)))].slice(0, 99)
+            : Array.isArray(original.plannedTargets) ? original.plannedTargets : [];
+          nextScenes.push({ ...original, title: sceneTitle, subtitle, space, spaceLabel, plannedTargets });
         }
         const order = Array.isArray(body.sceneIds) ? body.sceneIds : nextScenes.map((scene) => scene.id);
         if (order.length !== nextScenes.length || new Set(order).size !== nextScenes.length || order.some((id) => !incomingById.has(id))) {
@@ -625,7 +634,11 @@ const server = createServer(async (request, response) => {
         ]);
         existing.scenes = existing.scenes
           .filter((candidate) => candidate.id !== sceneId)
-          .map((candidate) => ({ ...candidate, hotspots: candidate.hotspots.filter((hotspot) => hotspot.target !== sceneId) }));
+          .map((candidate) => ({
+            ...candidate,
+            hotspots: candidate.hotspots.filter((hotspot) => hotspot.target !== sceneId),
+            plannedTargets: (candidate.plannedTargets || []).filter((target) => target !== sceneId)
+          }));
         existing.firstScene = existing.firstScene === sceneId ? existing.scenes[0]?.id || null : existing.firstScene;
         await writeWorkspaceProject(existing);
 

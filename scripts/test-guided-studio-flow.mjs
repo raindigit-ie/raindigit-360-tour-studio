@@ -135,22 +135,49 @@ async function main() {
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.setViewportSize({ width: 390, height: 605 });
-    await assertOneTask(page, "Where was this photo taken?");
-    await page.getByLabel("Name this view").fill("Kitchen window");
-    await page.getByText("This is a different room", { exact: true }).click();
-    await page.getByLabel("New room name").fill("Kitchen");
-    await page.getByRole("button", { name: "Create and choose this room" }).click();
-    assert(await page.getByLabel("Name this view").inputValue() === "Kitchen window", "Creating a room erased the edited view name.");
-    await page.getByRole("button", { name: "Save and next photo" }).click();
-    await page.getByRole("button", { name: "Kitchen", exact: true }).click();
-    await page.getByLabel("Name this view").fill("Kitchen door");
-    await page.getByRole("button", { name: "Save and next photo" }).click();
-    await page.getByLabel("Name this view").fill("Hall entrance");
-    await page.getByText("This is a different room", { exact: true }).click();
-    await page.getByLabel("New room name").fill("Hall");
-    await page.getByRole("button", { name: "Create and choose this room" }).click();
-    assert(await page.getByLabel("Name this view").inputValue() === "Hall entrance", "Creating the second room erased the view name.");
-    await page.getByRole("button", { name: "Save rooms" }).click();
+    await assertOneTask(page, "Set up rooms and places");
+    await page.getByLabel("Number of rooms").fill("2");
+    await page.getByRole("button", { name: "Update rooms" }).click();
+    const roomNames = page.locator("#editorRoomList input");
+    await roomNames.nth(0).fill("Kitchen");
+    await roomNames.nth(0).press("Tab");
+    await roomNames.nth(1).fill("Hall");
+    await roomNames.nth(1).press("Tab");
+
+    const photoNames = page.locator(".editor-room-photo input");
+    await photoNames.nth(0).fill("Kitchen window");
+    await photoNames.nth(1).fill("Kitchen door");
+    await photoNames.nth(2).fill("Hall entrance");
+    const thirdPhoto = page.locator('.editor-room-photo[data-scene-id="scene-003"]');
+    const hallColumn = page.locator(".editor-room-column").nth(1);
+    await thirdPhoto.locator(".editor-room-photo__select").dragTo(hallColumn);
+    const dragState = await page.evaluate(() => ({
+      columns: Array.from(document.querySelectorAll(".editor-room-column")).map((column) => ({
+        roomId: column.dataset.roomId,
+        scenes: Array.from(column.querySelectorAll(".editor-room-photo")).map((card) => card.dataset.sceneId)
+      })),
+      status: document.querySelector("#editorStatus")?.textContent
+    }));
+    assert(await hallColumn.locator(".editor-room-photo").count() === 1, `Dragging a photo did not move it into Hall: ${JSON.stringify(dragState)}`);
+    const kitchenRoomId = await page.locator(".editor-room-column").nth(0).getAttribute("data-room-id");
+    const hallRoomId = await hallColumn.getAttribute("data-room-id");
+    const thirdRoomSelect = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
+    assert(await thirdRoomSelect.inputValue() === hallRoomId, "The room selector did not follow the drag operation.");
+    await thirdRoomSelect.selectOption(kitchenRoomId);
+    assert(await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").count() === 3, "The accessible Room menu could not move a photo.");
+    await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').selectOption(hallRoomId);
+    assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, "The Room menu did not move the photo back to Hall.");
+
+    await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
+    await page.getByRole("button", { name: /Kitchen door Kitchen/ }).click();
+    await page.getByRole("button", { name: /Hall entrance Hall/ }).click();
+    await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
+    assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
+    await page.evaluate(() => { document.querySelector(".editor-panel__content").scrollTop = 0; });
+    await page.screenshot({ path: join(outputDir, "01-room-board-top-mobile.png") });
+    await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(outputDir, "01-room-board-places-mobile.png") });
+    await page.getByRole("button", { name: "Save setup" }).click();
 
     await assertOneTask(page, "Choose the look");
     await page.screenshot({ path: join(outputDir, "01-look-mobile.png"), fullPage: true });
@@ -160,19 +187,18 @@ async function main() {
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.setViewportSize({ width: 1280, height: 760 });
-    await assertOneTask(page, "Choose where people can go");
-    assert(await page.getByRole("button", { name: /Another view of Kitchen Kitchen door/ }).count() === 1, "The same-room camera view is not explained plainly.");
-    assert(await page.getByRole("button", { name: /Another room: Hall Hall entrance/ }).count() === 1, "The different-room destination is not explained plainly.");
+    await assertOneTask(page, "Place the walking buttons");
+    await page.waitForFunction(() => {
+      const button = document.querySelector("#editorConfirmCentre");
+      return button && !button.disabled;
+    });
     const sourceSceneId = await page.evaluate(() => window.__TOUR_EDITOR_API.viewer.getScene());
 
-    await page.getByRole("button", { name: "Place this movement" }).click();
-    await assertOneTask(page, "Choose where people can go");
     await dragViewer(page, 130);
     await page.getByRole("button", { name: "Save point here" }).click();
     const first = (await addedHotspots(page, sourceSceneId))[0];
-    assert(first?.kind === "viewpoint" && first.positionConfirmed, `The same-room point was not saved: ${JSON.stringify(first)}`);
+    assert(first?.kind === "doorway" && first.positionConfirmed, `The first walking button was not saved: ${JSON.stringify(first)}`);
 
-    await page.getByRole("button", { name: "Place this movement" }).click();
     await dragViewer(page, -170);
     await page.getByRole("button", { name: "Save point here" }).click();
     const both = await addedHotspots(page, sourceSceneId);
@@ -181,15 +207,12 @@ async function main() {
     assert(both[0].pitch !== both[1].pitch || both[0].yaw !== both[1].yaw, "Two points collapsed onto the same panorama coordinate.");
     await page.screenshot({ path: join(outputDir, "02-movements-desktop.png"), fullPage: true });
 
-    await page.getByRole("button", { name: "Next photo" }).click();
-    await page.getByText("Photo 2 of 3: Kitchen door", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Back" }).click();
-    await page.getByText("Photo 1 of 3: Kitchen window", { exact: true }).waitFor();
+    await assertOneTask(page, "Choose the look");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await assertOneTask(page, "Place the walking buttons");
     assert(await page.locator(".editor-saved-movement").count() === 2, "Back navigation lost saved movement points.");
-    await page.getByRole("button", { name: "Next photo" }).click();
-    await page.getByText("Photo 2 of 3: Kitchen door", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "Next photo" }).click();
-    await page.getByText("Photo 3 of 3: Hall entrance", { exact: true }).waitFor();
+    assert(await page.locator(".editor-walking-icon").count() >= 2, "Walking buttons do not use one consistent person icon.");
     const pendingBeforeArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
     assert(pendingBeforeArrival === 2, `Expected two first views, found ${pendingBeforeArrival}.`);
     await page.setViewportSize({ width: 390, height: 605 });
@@ -260,7 +283,7 @@ async function main() {
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
     const events = new Set(logBody.entries.map((entry) => entry.event));
-    for (const required of ["room-task-complete", "movement-added", "movement-centre-confirmed", "draft-save-success"]) {
+    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "movement-centre-confirmed", "draft-save-success"]) {
       assert(events.has(required), `Diagnostic journal is missing ${required}.`);
     }
     const logPath = join(root, "workspace", "studio-debug.ndjson");
@@ -273,7 +296,8 @@ async function main() {
       passed: true,
       photos: 3,
       rooms: 2,
-      sameRoomLink: true,
+      visualRoomBoard: true,
+      unifiedWalkingButtons: true,
       independentPoints: true,
       backNavigation: true,
       firstViews: 2,

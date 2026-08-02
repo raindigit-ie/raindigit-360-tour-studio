@@ -206,7 +206,7 @@ async function main() {
     assert(releaseConfig.includes('"pitch":-8') && releaseConfig.includes('"yaw":-60') && releaseConfig.includes('"hfov":92'), "Saved default viewpoints must be baked into the release.");
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
-    assert(!releaseConfig.includes("positionConfirmed") && !releaseConfig.includes("arrivalConfirmed"), "Editor review metadata must not leak into the public release.");
+    assert(!releaseConfig.includes("positionConfirmed") && !releaseConfig.includes("arrivalConfirmed") && !releaseConfig.includes("plannedTargets"), "Editor planning or review metadata must not leak into the public release.");
     const singleRelease = await readFile(singleHtml, "utf8");
     assert(singleRelease.includes("data:image/jpeg;base64,") && singleRelease.includes("window.TOUR_CONFIG"), "The single HTML must embed its tour and panorama data.");
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");

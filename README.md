@@ -62,9 +62,9 @@ Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
 1. **Start**: create a new tour or explicitly open an editable `.rdtour` project file. The studio does not list or silently reopen a previous local workspace.
 2. **Photos**: add all ready 2:1 JPG photos without making room decisions.
-3. **Rooms**: process one photo at a time. Name the view, choose an existing room, or create a different room. Choose the same room again when it contains a second camera position.
+3. **Rooms and places**: set the room count and names, then arrange every visible photo card into a room by dragging it or using its Room menu. Select a source photo and mark every destination photo people can reach from it; this creates the required walking buttons.
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
-5. **Movement**: choose one plainly labelled destination, rotate until the real doorway or other camera position is under the centre target, then press **Save point here**. The studio chooses walking versus same-room view markers automatically.
+5. **Places**: the studio opens every planned walking button in order. Rotate until its real position is under the centre target, then press **Save point here**. All destinations use the same person marker, including another camera position in the same room.
 6. **First views**: open one destination at a time, rotate to its useful first frame and save it. Buttons remain disabled while a photo or cross-fade is loading.
 7. **Publish**: check readiness, build and download one self-contained website file. Preview, website-install code, editable backup and folder package are separate collapsed options.
 
@@ -81,7 +81,7 @@ Create the customer package only after review approval:
 npm run build:release
 ```
 
-The studio blocks publishing when a newly added movement has not been explicitly
+The studio blocks publishing when a planned walking button has not been explicitly
 positioned or its destination view has not been saved. This prevents a technically
 valid but unfinished navigation graph from reaching a customer.
 
@@ -101,9 +101,9 @@ The studio binds only to localhost and mounts the local project directory. The
 release service serves only the built static output at `http://127.0.0.1:8080`.
 
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
-studio journey covers create, upload, one-photo room assignment, look, centre-target movement placement, first views, preview,
+studio journey covers create, upload, visual room-count/name setup, drag-and-drop photo assignment, multi-place selection, look, centre-target walking-button placement, first views, preview,
 downloads, local release, editable-tour restore, direct offline opening of
-the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points from one source keep independent coordinates through Back/Next navigation, same-room destinations are explained plainly, and panorama loading cannot be skipped by rapid clicks.
+the downloaded HTML, iframe installation and every wizard screen at a short mobile width. It also verifies that the footer stays visible, two points from one source keep independent coordinates through Back navigation, every selected place must be positioned, and panorama loading cannot be skipped by rapid clicks.
 It also enforces a novice-default action budget and checks that technical terms do
 not leak into the visible task surface.
 

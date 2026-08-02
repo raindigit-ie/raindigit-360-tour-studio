@@ -165,10 +165,13 @@ function assertReleaseReady(project, draft) {
 }
 
 function stripEditorMetadata(project) {
-  project.scenes.forEach((scene) => scene.hotspots.forEach((hotspot) => {
-    delete hotspot.positionConfirmed;
-    delete hotspot.arrivalConfirmed;
-  }));
+  project.scenes.forEach((scene) => {
+    delete scene.plannedTargets;
+    scene.hotspots.forEach((hotspot) => {
+      delete hotspot.positionConfirmed;
+      delete hotspot.arrivalConfirmed;
+    });
+  });
 }
 
 function releaseDimensions(source) {

@@ -12,7 +12,7 @@
     upload: "Photos",
     rooms: "Rooms",
     light: "Look",
-    links: "Movement",
+    links: "Places",
     arrival: "First views",
     export: "Publish"
   };
@@ -32,16 +32,12 @@
     importProgress: { current: 0, total: 0 },
     building: false,
     sceneMoving: false,
-    linkDraftSceneId: null,
     pendingFocus: null,
     release: { ready: false },
-    roomSceneIndex: 0,
-    roomChoiceId: null,
+    roomPlanSceneId: null,
     lookSceneIndex: 0,
     linkSceneIndex: 0,
     linkStep: "choose",
-    linkTargetId: null,
-    linkIsNew: false,
     arrivalLoading: false,
     viewportSettling: false,
     viewerSettled: false,
@@ -108,32 +104,27 @@
         <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded 360 photos"></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="rooms">
-        <div class="editor-step-heading"><span>Step 2</span><h2>Where was this photo taken?</h2></div>
-        <p class="editor-task-progress" id="editorRoomTaskProgress"></p>
-        <article class="editor-guided-card">
-          <img class="editor-guided-card__image" id="editorRoomTaskThumb" alt="Current 360 photo" />
-          <label class="editor-field editor-field--stacked">
-            <span>Name this view</span>
-            <input id="editorRoomSceneTitle" type="text" maxlength="80" autocomplete="off" />
-          </label>
-          <fieldset class="editor-choice-fieldset">
-            <legend>Choose one room</legend>
-            <div class="editor-choice-list" id="editorRoomChoices"></div>
-          </fieldset>
-          <details class="editor-disclosure editor-disclosure--compact" id="editorNewRoomPanel">
-            <summary>This is a different room</summary>
-            <div class="editor-add-room">
-              <label class="editor-field editor-field--stacked">
-                <span>New room name</span>
-                <input id="editorNewRoomName" type="text" maxlength="80" autocomplete="off" value="Room 2" />
-              </label>
-              <button class="editor-button editor-button--wide" id="editorAddRoom" type="button">Create and choose this room</button>
-            </div>
-          </details>
-        </article>
-        <div class="editor-room-list" id="editorRoomList" hidden></div>
-        <span id="editorAssignmentStatus" hidden></span>
-        <div id="editorProjectOrder" hidden></div>
+        <div class="editor-step-heading"><span>Step 2</span><h2>Set up rooms and places</h2></div>
+        <section class="editor-setup-section">
+          <div class="editor-setup-section__heading"><span>1</span><div><strong>Rooms</strong><small>Name the rooms in this tour.</small></div></div>
+          <div class="editor-room-count">
+            <label class="editor-field editor-field--stacked"><span>Number of rooms</span><input id="editorRoomCount" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" /></label>
+            <button class="editor-button" id="editorApplyRoomCount" type="button">Update rooms</button>
+          </div>
+          <div class="editor-room-list" id="editorRoomList"></div>
+        </section>
+        <section class="editor-setup-section">
+          <div class="editor-setup-section__heading"><span>2</span><div><strong>Photos</strong><small>Drag each photo into its room.</small></div></div>
+          <div class="editor-room-board" id="editorProjectOrder" aria-label="Photos grouped by room"></div>
+          <p class="editor-task-progress" id="editorAssignmentStatus"></p>
+        </section>
+        <section class="editor-setup-section editor-place-planner">
+          <div class="editor-setup-section__heading"><span>3</span><div><strong>Places</strong><small>Select a photo, then choose every photo people can move to.</small></div></div>
+          <div class="editor-photo-strip" id="editorRoomChoices" aria-label="Choose the starting photo"></div>
+          <p class="editor-task-progress" id="editorRoomTaskProgress"></p>
+          <div class="editor-planned-places" id="editorPlannedPlaces"></div>
+          <div class="editor-place-choices" id="editorPlaceChoices" aria-label="Choose destination photos"></div>
+        </section>
       </section>
       <section class="editor-stage-panel" data-stage-panel="light">
         <div class="editor-step-heading"><span>Step 3</span><h2>Choose the look</h2></div>
@@ -150,31 +141,16 @@
         </details>
       </section>
       <section class="editor-stage-panel" data-stage-panel="links">
-        <div class="editor-step-heading"><span>Step 4</span><h2 id="editorMovementHeading">Choose where people can go</h2></div>
+        <div class="editor-step-heading"><span>Step 4</span><h2 id="editorMovementHeading">Place the walking buttons</h2></div>
         <p class="editor-task-progress" id="editorLinkTaskProgress"></p>
         <p class="editor-guidance" id="editorLinkGuidance"></p>
         <div class="editor-hotspot-list" id="editorHotspotList" aria-label="Saved movements"></div>
-        <div class="editor-new-link" id="editorNewLink">
-          <fieldset class="editor-choice-fieldset">
-            <legend>Choose one destination</legend>
-            <div class="editor-choice-list" id="editorLinkChoices"></div>
-          </fieldset>
-          <label class="editor-field editor-field--stacked" hidden><span>Move to</span><select id="editorLinkTarget" aria-label="Move to"></select></label>
-          <select id="editorLinkKind" aria-label="Movement type" hidden><option value="doorway">Walk to another room</option><option value="viewpoint">Move inside this room</option></select>
-          <input id="editorLinkLabel" type="text" maxlength="80" autocomplete="off" hidden />
-          <button class="editor-button editor-button--primary editor-button--wide" id="editorAddLink" type="button">Place this movement</button>
-        </div>
         <div class="editor-place-at-centre" id="editorPlaceAtCentre" hidden>
-          <strong>Put the doorway or camera position under the centre target.</strong>
-          <span>You can drag the 360 photo normally. The saved point will stay attached to the room.</span>
+          <strong>Put the place people should walk to under the centre target.</strong>
+          <span>Drag the 360 photo, then save the walking button.</span>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorConfirmCentre" type="button">Save point here</button>
-          <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Choose a different destination</button>
+          <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Change rooms and places</button>
         </div>
-        <div class="editor-placement-modes" id="editorPlacementModes" hidden>
-          <button class="editor-button" id="editorRotate" type="button" aria-pressed="true">Rotate view</button>
-          <button class="editor-button" id="editorPlace" type="button" aria-pressed="false">Place selected</button>
-        </div>
-        <button class="editor-button" id="editorRemoveLink" type="button" hidden>Remove movement</button>
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
         <div class="editor-step-heading"><span>Step 5</span><h2>Choose what people see first</h2></div>
@@ -236,7 +212,7 @@
   document.body.classList.add("is-editor-open");
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "NewRoomName", "AddRoom", "NewRoomPanel", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomTaskThumb", "RoomSceneTitle", "RoomChoices", "HotspotList", "ArrivalList", "PlacementModes", "Rotate", "Place", "RemoveLink", "NewLink", "LinkTarget", "LinkKind", "LinkLabel", "LinkChoices", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "AddLink", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const viewerElement = api.viewer.getContainer();
   const placementSurface = document.createElement("div");
@@ -258,6 +234,22 @@
   let studioLogSequence = 0;
   let studioLogBuffer = [];
   let studioLogTimer = 0;
+  let roomPointerDrag = null;
+
+  document.addEventListener("pointermove", (event) => {
+    if (!roomPointerDrag) return;
+    if (Math.hypot(event.clientX - roomPointerDrag.startX, event.clientY - roomPointerDrag.startY) > 8) {
+      roomPointerDrag.moved = true;
+    }
+  });
+  document.addEventListener("pointerup", (event) => {
+    if (!roomPointerDrag) return;
+    const drag = roomPointerDrag;
+    roomPointerDrag = null;
+    if (!drag.moved) return;
+    const column = document.elementFromPoint(event.clientX, event.clientY)?.closest(".editor-room-column");
+    if (column?.dataset.roomId) assignSceneToRoom(drag.sceneId, column.dataset.roomId);
+  });
 
   const editorToggle = document.createElement("button");
   editorToggle.className = "icon-button";
@@ -392,12 +384,11 @@
     state.placement = null;
     state.pendingFocus = null;
     if (stage !== "arrival") state.arrival = null;
-    if (stage === "rooms" && previousStage === "upload") state.roomSceneIndex = 0;
+    if (stage === "rooms" && previousStage === "upload") state.roomPlanSceneId = state.workspaceProject?.scenes?.[0]?.id || null;
     if (stage === "light" && previousStage === "rooms") state.lookSceneIndex = 0;
     if (stage === "links" && previousStage === "light") {
       state.linkSceneIndex = 0;
       state.linkStep = "choose";
-      state.linkTargetId = null;
     }
     studioLog("stage-change", { from: previousStage, to: stage }, true);
     render();
@@ -438,6 +429,8 @@
 
   function focusHotspotTask(task, stage, place = false) {
     if (!task) return;
+    const taskSceneIndex = api.scenes.findIndex((scene) => scene.id === task.sceneId);
+    if (taskSceneIndex >= 0) state.linkSceneIndex = taskSceneIndex;
     state.pendingFocus = { ...task, stage, place };
     state.activeStage = stage;
     state.arrival = null;
@@ -460,7 +453,7 @@
     const readiness = releaseReadiness();
     elements.Back.hidden = ["start", "upload"].includes(state.activeStage);
     elements.Continue.hidden = ["start", "export"].includes(state.activeStage)
-      || (state.activeStage === "links" && state.linkStep === "place")
+      || (state.activeStage === "links" && readiness.pendingPositions > 0)
       || (state.activeStage === "arrival" && readiness.pendingArrivals > 0);
     const viewerRequired = ["light", "links", "arrival"].includes(state.activeStage);
     const viewerBusy = viewerRequired && (!api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling);
@@ -468,13 +461,13 @@
     elements.Status.textContent = viewerBusy ? "Loading photo..." : state.statusMessage;
     const totalScenes = state.workspaceProject?.scenes?.length || api.scenes.length;
     elements.Continue.textContent = state.activeStage === "rooms"
-      ? state.roomSceneIndex < totalScenes - 1 ? "Save and next photo" : "Save rooms"
+      ? "Save setup"
       : state.activeStage === "light"
         ? state.lookSceneIndex < api.scenes.length - 1 ? "Next photo" : "Continue"
         : state.activeStage === "links"
-          ? state.linkSceneIndex < api.scenes.length - 1 ? "Next photo" : "Choose first views"
+          ? "Choose first views"
           : state.activeStage === "arrival" ? "Check tour" : "Continue";
-    elements.Continue.classList.toggle("editor-button--primary", state.activeStage !== "links");
+    elements.Continue.classList.toggle("editor-button--primary", true);
     panel.querySelector(".editor-panel__scene").hidden = ["start", "upload", "rooms", "export"].includes(state.activeStage);
     panel.querySelector("#editorPreviousScene").hidden = true;
     panel.querySelector("#editorNextScene").hidden = true;
@@ -534,69 +527,61 @@
       scene.space = room.id;
       scene.spaceLabel = room.label;
     });
-    elements.NewRoomName.value = "Room 2";
   }
 
-  function nextRoomName() {
-    return `Room ${projectRooms().length + 1}`;
-  }
-
-  function addRoom() {
-    const project = state.workspaceProject;
-    const label = elements.NewRoomName.value.trim();
-    if (!project || !label) {
-      setStatus("Enter a room name");
-      return;
-    }
-    const id = `room-${Date.now().toString(36)}`;
-    projectRooms(project).push({ id, label });
-    const scene = project.scenes[state.roomSceneIndex];
-    if (scene) {
-      scene.space = id;
-      scene.spaceLabel = label;
-      state.roomChoiceId = id;
-    }
-    elements.NewRoomName.value = nextRoomName();
-    elements.NewRoomPanel.open = false;
-    setStatus(`${label} chosen for this photo`);
-    studioLog("room-created-and-selected", { roomId: id, label, sceneId: scene?.id || null });
-    renderRoomsPanel();
-  }
-
-  function removeRoom(roomId) {
-    const project = state.workspaceProject;
-    const rooms = projectRooms(project);
-    const room = rooms.find((candidate) => candidate.id === roomId);
-    if (!project || !room) return;
-    if (rooms.length === 1) {
-      setStatus("A project needs at least one room");
-      return;
-    }
-    if (project.scenes.some((scene) => scene.space === roomId)) {
-      setStatus(`Move the photos out of ${room.label} first`);
-      return;
-    }
-    project.rooms = rooms.filter((candidate) => candidate.id !== roomId);
-    setStatus(`${room.label} removed`);
-    renderRoomsPanel();
-  }
-
-  function updateRoomSummary() {
+  function setRoomCount() {
     const project = state.workspaceProject;
     if (!project) return;
-    const roomIds = new Set(projectRooms(project).map((room) => room.id));
-    const assigned = project.scenes.filter((scene) => roomIds.has(scene.space)).length;
-    elements.AssignmentStatus.textContent = `${assigned} of ${project.scenes.length} assigned`;
-    elements.RoomList.querySelectorAll("[data-room-id]").forEach((row) => {
-      const count = project.scenes.filter((scene) => scene.space === row.dataset.roomId).length;
-      const output = row.querySelector("[data-room-count]");
-      if (output) output.textContent = `${count} view${count === 1 ? "" : "s"}`;
-      const remove = row.querySelector("[data-remove-room]");
-      if (remove) {
-        remove.disabled = count > 0 || projectRooms(project).length === 1;
-        remove.title = count > 0 ? "Move its photos before removing" : "Remove empty room";
-      }
-    });
+    const count = Math.max(1, Math.min(100, Number.parseInt(elements.RoomCount.value, 10) || 1));
+    const rooms = projectRooms(project);
+    while (rooms.length < count) {
+      const number = rooms.length + 1;
+      rooms.push({ id: `room-${Date.now().toString(36)}-${number}`, label: `Room ${number}` });
+    }
+    if (rooms.length > count) {
+      const kept = rooms.slice(0, count);
+      const keptIds = new Set(kept.map((room) => room.id));
+      const fallback = kept[0];
+      project.scenes.forEach((scene) => {
+        if (keptIds.has(scene.space)) return;
+        scene.space = fallback.id;
+        scene.spaceLabel = fallback.label;
+      });
+      project.rooms = kept;
+    }
+    elements.RoomCount.value = String(count);
+    setStatus(`${count} room${count === 1 ? "" : "s"} ready`);
+    studioLog("room-count-changed", { count });
+    renderRoomsPanel();
+  }
+
+  function assignSceneToRoom(sceneId, roomId) {
+    const project = state.workspaceProject;
+    const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
+    const room = projectRooms(project).find((candidate) => candidate.id === roomId);
+    if (!scene || !room) return;
+    scene.space = room.id;
+    scene.spaceLabel = room.label;
+    setStatus(`${scene.title} moved to ${room.label}`);
+    studioLog("room-selected", { roomId: room.id, sceneId: scene.id });
+    renderRoomsPanel();
+  }
+
+  function plannedTargets(scene) {
+    if (!Array.isArray(scene.plannedTargets)) scene.plannedTargets = [];
+    return scene.plannedTargets;
+  }
+
+  function togglePlannedTarget(sourceId, targetId) {
+    const source = state.workspaceProject?.scenes.find((scene) => scene.id === sourceId);
+    if (!source || source.id === targetId) return;
+    const targets = plannedTargets(source);
+    source.plannedTargets = targets.includes(targetId)
+      ? targets.filter((id) => id !== targetId)
+      : [...targets, targetId];
+    setStatus(`${source.plannedTargets.length} place${source.plannedTargets.length === 1 ? "" : "s"} selected from ${source.title}`);
+    studioLog("planned-place-toggled", { sourceSceneId: sourceId, targetSceneId: targetId, selected: source.plannedTargets.includes(targetId) });
+    renderRoomsPanel();
   }
 
   function renderRoomsPanel() {
@@ -604,33 +589,149 @@
     elements.RoomList.replaceChildren();
     elements.ProjectOrder.replaceChildren();
     elements.RoomChoices.replaceChildren();
+    elements.PlaceChoices.replaceChildren();
+    elements.PlannedPlaces.replaceChildren();
     if (!project) return;
     ensureInitialRoom();
     const rooms = projectRooms(project);
-    state.roomSceneIndex = Math.max(0, Math.min(state.roomSceneIndex, project.scenes.length - 1));
-    const scene = project.scenes[state.roomSceneIndex];
-    if (!scene) return;
-    state.roomChoiceId = rooms.some((room) => room.id === scene.space) ? scene.space : rooms[0]?.id || null;
-    elements.RoomTaskProgress.textContent = `Photo ${state.roomSceneIndex + 1} of ${project.scenes.length}`;
-    elements.RoomTaskThumb.src = workspaceAsset(scene.thumb);
-    elements.RoomSceneTitle.value = scene.title;
+    const roomIds = new Set(rooms.map((room) => room.id));
+    const fallbackRoom = rooms[0];
+    project.scenes.forEach((scene) => {
+      if (!roomIds.has(scene.space)) {
+        scene.space = fallbackRoom.id;
+        scene.spaceLabel = fallbackRoom.label;
+      }
+      plannedTargets(scene);
+    });
+    elements.RoomCount.value = String(rooms.length);
+
     for (const room of rooms) {
+      const field = document.createElement("label");
+      field.className = "editor-field editor-field--stacked";
+      field.innerHTML = `<span>Room name</span><input type="text" maxlength="80" autocomplete="off" />`;
+      const input = field.querySelector("input");
+      input.value = room.label;
+      input.setAttribute("aria-label", `Name for ${room.label}`);
+      input.addEventListener("change", () => {
+        const nextLabel = input.value.trim();
+        if (!nextLabel) {
+          input.value = room.label;
+          setStatus("Every room needs a name");
+          return;
+        }
+        room.label = nextLabel;
+        project.scenes.filter((scene) => scene.space === room.id).forEach((scene) => { scene.spaceLabel = nextLabel; });
+        studioLog("room-name-edited", { roomId: room.id, label: nextLabel });
+        renderRoomsPanel();
+      });
+      elements.RoomList.appendChild(field);
+
+      const column = document.createElement("section");
+      column.className = "editor-room-column";
+      column.dataset.roomId = room.id;
+      const roomScenes = project.scenes.filter((scene) => scene.space === room.id);
+      column.innerHTML = `<header><strong></strong><span></span></header><div class="editor-room-column__photos"></div>`;
+      column.querySelector("strong").textContent = room.label;
+      column.querySelector("span").textContent = `${roomScenes.length} photo${roomScenes.length === 1 ? "" : "s"}`;
+      column.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        column.classList.add("is-drag-over");
+      });
+      column.addEventListener("dragleave", () => column.classList.remove("is-drag-over"));
+      column.addEventListener("drop", (event) => {
+        event.preventDefault();
+        column.classList.remove("is-drag-over");
+        assignSceneToRoom(event.dataTransfer.getData("text/plain"), room.id);
+      });
+      const photoList = column.querySelector(".editor-room-column__photos");
+      roomScenes.forEach((scene) => {
+        const card = document.createElement("article");
+        card.className = `editor-room-photo${state.roomPlanSceneId === scene.id ? " is-selected" : ""}`;
+        card.draggable = true;
+        card.dataset.sceneId = scene.id;
+        card.innerHTML = `<button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose places</span></button><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Room</span><select></select></label>`;
+        card.querySelector("img").src = workspaceAsset(scene.thumb);
+        const choose = card.querySelector("button");
+        choose.setAttribute("aria-label", `Choose places from ${scene.title}`);
+        choose.draggable = true;
+        choose.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0 || event.pointerType !== "mouse") return;
+          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
+        });
+        choose.addEventListener("click", () => {
+          state.roomPlanSceneId = scene.id;
+          setStatus(`Choose places people can reach from ${scene.title}`);
+          renderRoomsPanel();
+        });
+        const titleInput = card.querySelector("input");
+        titleInput.value = scene.title;
+        titleInput.setAttribute("aria-label", `Name for ${scene.title}`);
+        titleInput.addEventListener("input", () => {
+          scene.title = titleInput.value;
+          studioLog("view-name-edited", { sceneId: scene.id });
+        });
+        const roomSelect = card.querySelector("select");
+        roomSelect.setAttribute("aria-label", `Room for ${scene.title}`);
+        rooms.forEach((candidate) => roomSelect.add(new Option(candidate.label, candidate.id)));
+        roomSelect.value = room.id;
+        roomSelect.addEventListener("change", () => assignSceneToRoom(scene.id, roomSelect.value));
+        const beginDrag = (event) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", scene.id);
+          card.classList.add("is-dragging");
+        };
+        card.addEventListener("dragstart", beginDrag);
+        choose.addEventListener("dragstart", beginDrag);
+        card.addEventListener("dragend", () => card.classList.remove("is-dragging"));
+        photoList.appendChild(card);
+      });
+      elements.ProjectOrder.appendChild(column);
+    }
+
+    if (!state.roomPlanSceneId || !project.scenes.some((scene) => scene.id === state.roomPlanSceneId)) {
+      state.roomPlanSceneId = project.scenes[0]?.id || null;
+    }
+    project.scenes.forEach((scene) => {
       const button = document.createElement("button");
-      button.className = `editor-choice${room.id === state.roomChoiceId ? " is-selected" : ""}`;
+      button.className = `editor-photo-choice${scene.id === state.roomPlanSceneId ? " is-selected" : ""}`;
       button.type = "button";
-      button.textContent = room.label;
-      button.setAttribute("aria-pressed", String(room.id === state.roomChoiceId));
+      button.setAttribute("aria-pressed", String(scene.id === state.roomPlanSceneId));
+      button.innerHTML = `<img alt="" /><span></span>`;
+      button.querySelector("img").src = workspaceAsset(scene.thumb);
+      button.querySelector("span").textContent = scene.title;
       button.addEventListener("click", () => {
-        scene.space = room.id;
-        scene.spaceLabel = room.label;
-        state.roomChoiceId = room.id;
-        setStatus(`${room.label} chosen`);
-        studioLog("room-selected", { roomId: room.id, sceneId: scene.id });
+        state.roomPlanSceneId = scene.id;
         renderRoomsPanel();
       });
       elements.RoomChoices.appendChild(button);
+    });
+
+    const source = project.scenes.find((scene) => scene.id === state.roomPlanSceneId);
+    if (source) {
+      const selectedTargets = plannedTargets(source);
+      elements.RoomTaskProgress.textContent = `${selectedTargets.length} place${selectedTargets.length === 1 ? "" : "s"} from ${source.title}`;
+      project.scenes.filter((scene) => scene.id !== source.id).forEach((target) => {
+        const selected = selectedTargets.includes(target.id);
+        const button = document.createElement("button");
+        button.className = `editor-place-choice${selected ? " is-selected" : ""}`;
+        button.type = "button";
+        button.setAttribute("aria-pressed", String(selected));
+        button.innerHTML = `<img alt="" /><span><strong></strong><small></small></span><i aria-hidden="true"></i>`;
+        button.querySelector("img").src = workspaceAsset(target.thumb);
+        button.querySelector("strong").textContent = target.title;
+        button.querySelector("small").textContent = target.spaceLabel;
+        button.querySelector("i").textContent = selected ? "✓" : "+";
+        button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
+        elements.PlaceChoices.appendChild(button);
+      });
+      const summary = document.createElement("p");
+      summary.textContent = selectedTargets.length
+        ? `Walking buttons: ${selectedTargets.map((id) => project.scenes.find((scene) => scene.id === id)?.title).filter(Boolean).join(", ")}`
+        : "No walking buttons selected yet.";
+      elements.PlannedPlaces.appendChild(summary);
     }
-    elements.AssignmentStatus.textContent = `${state.roomSceneIndex + 1} of ${project.scenes.length}`;
+    const totalPlaces = project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0);
+    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} room${rooms.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}`;
   }
 
   function renderProjectPanel() {
@@ -682,7 +783,14 @@
         rooms,
         firstScene: project.firstScene,
         sceneIds: project.scenes.map((scene) => scene.id),
-        scenes: project.scenes.map(({ id, title, subtitle, space, spaceLabel }) => ({ id, title, subtitle, space, spaceLabel }))
+        scenes: project.scenes.map(({ id, title, subtitle, space, spaceLabel, plannedTargets: targets }) => ({
+          id,
+          title,
+          subtitle,
+          space,
+          spaceLabel,
+          plannedTargets: Array.isArray(targets) ? targets : []
+        }))
       })
     });
     if (!response.ok) throw new Error((await response.json()).error || `Could not save room structure (${response.status})`);
@@ -766,6 +874,10 @@
     renderSceneHeading(scene);
   }
 
+  function walkingIconMarkup() {
+    return `<svg class="editor-walking-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.8" r="1.9" /><path d="m11.6 8.3 2.1 3.8 3.2 1.4" /><path d="m13.3 12.1-2 3.5-2.7 2.2" /><path d="m13.3 12.1 1.5 4.1 2.9 2.1" /><path d="m11.8 8.7-3.2 2.4" /></svg>`;
+  }
+
   function renderHotspotButtons(container, scene, targetStage) {
     container.replaceChildren();
     if (!scene.hotspots.length) {
@@ -780,11 +892,11 @@
       button.className = `editor-hotspot${state.selected?.sceneId === scene.id && state.selected.hotspotIndex === hotspotIndex ? " is-selected" : ""}`;
       button.type = "button";
       const pending = targetStage === "links" && hotspot.positionConfirmed === false
-        ? "Place point"
+        ? "Place button"
         : targetStage === "arrival" && hotspot.arrivalConfirmed === false
           ? "Set arrival"
           : "Ready";
-      button.innerHTML = `<span class="editor-hotspot__type">${hotspot.kind === "viewpoint" ? "◎" : "↗"}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords"></span>`;
+      button.innerHTML = `<span class="editor-hotspot__type">${walkingIconMarkup()}</span><span class="editor-hotspot__label"></span><span class="editor-hotspot__coords"></span>`;
       button.querySelector(".editor-hotspot__label").textContent = hotspot.label;
       button.querySelector(".editor-hotspot__coords").textContent = pending;
       button.addEventListener("click", () => setSelected(scene.id, hotspotIndex, targetStage));
@@ -794,93 +906,40 @@
 
   function renderHotspotList(scene) {
     if (state.activeStage !== "links") return;
-    const source = api.scenes[state.linkSceneIndex] || scene;
-    elements.LinkTaskProgress.textContent = `Photo ${state.linkSceneIndex + 1} of ${api.scenes.length}: ${source.title}`;
+    const selected = selectedHotspot();
+    const source = selected?.scene || api.scenes[state.linkSceneIndex] || scene;
+    const allTasks = api.scenes.flatMap((candidate) => candidate.hotspots.map((hotspot, hotspotIndex) => ({ scene: candidate, hotspot, hotspotIndex })));
+    const selectedTaskIndex = state.selected
+      ? allTasks.findIndex((task) => task.scene.id === state.selected.sceneId && task.hotspotIndex === state.selected.hotspotIndex)
+      : -1;
+    elements.LinkTaskProgress.textContent = selectedTaskIndex >= 0
+      ? `Walking button ${selectedTaskIndex + 1} of ${allTasks.length}`
+      : `${allTasks.length} walking button${allTasks.length === 1 ? "" : "s"} placed`;
     elements.HotspotList.replaceChildren();
     source.hotspots.forEach((hotspot, hotspotIndex) => {
       const target = api.sceneById[hotspot.target];
       const row = document.createElement("button");
-      row.className = "editor-saved-movement";
+      const isSelected = state.selected?.sceneId === source.id && state.selected.hotspotIndex === hotspotIndex;
+      row.className = `editor-saved-movement${isSelected ? " is-selected" : ""}`;
       row.type = "button";
-      row.innerHTML = `<span aria-hidden="true">${hotspot.kind === "viewpoint" ? "◎" : "↗"}</span><strong></strong><small>Move point</small>`;
+      row.innerHTML = `<span>${walkingIconMarkup()}</span><strong></strong><small></small>`;
       row.querySelector("strong").textContent = target?.title || hotspot.label;
+      row.querySelector("small").textContent = hotspot.positionConfirmed ? "Position saved" : "Needs a position";
       row.addEventListener("click", () => {
         state.selected = { sceneId: source.id, hotspotIndex };
         state.linkStep = "place";
-        state.linkIsNew = false;
-        setStatus("Move the photo, then save the point at the centre target");
+        setStatus(`Place the walking button for ${target?.title || "this place"}`);
         render();
       });
       elements.HotspotList.appendChild(row);
     });
-    elements.HotspotList.hidden = source.hotspots.length === 0 || state.linkStep === "place";
-    elements.NewLink.hidden = state.linkStep !== "choose";
-    elements.PlaceAtCentre.hidden = state.linkStep !== "place";
-    const selectedIndex = state.selected?.sceneId === source.id ? state.selected.hotspotIndex : -1;
-    elements.RemoveLink.hidden = state.linkStep !== "place" || state.linkIsNew || selectedIndex < api.getBaseHotspotCount(source.id);
-    elements.LinkGuidance.textContent = state.linkStep === "place"
-      ? "Drag the photo until the real doorway or the other camera position is exactly under the centre target."
-      : source.hotspots.length
-        ? "Saved movements are shown above. Choose another destination, or continue to the next photo."
-        : "Choose the photo a visitor can reach from here. A second photo in the same room is shown as another camera view.";
-    renderLinkCreator(scene);
-  }
-
-  function suggestedLinkKind(scene = currentScene(), targetScene = api.sceneById[elements.LinkTarget.value]) {
-    return scene && targetScene && scene.space === targetScene.space ? "viewpoint" : "doorway";
-  }
-
-  function suggestedLinkLabel() {
-    const targetScene = api.sceneById[elements.LinkTarget.value];
-    if (elements.LinkKind.value === "viewpoint") return `Go to ${targetScene?.title || "destination"}`;
-    return `Walk to ${targetScene?.spaceLabel || targetScene?.title || "destination"}`;
-  }
-
-  function renderLinkCreator(scene) {
-    const source = api.scenes[state.linkSceneIndex] || scene;
-    const selectedTarget = state.linkTargetId || elements.LinkTarget.value;
-    elements.LinkTarget.replaceChildren();
-    elements.LinkChoices.replaceChildren();
-    const linkedTargets = new Set(source.hotspots.map((hotspot) => hotspot.target));
-    const candidates = api.scenes.filter((candidate) => candidate.id !== source.id && !linkedTargets.has(candidate.id));
-    state.linkTargetId = candidates.some((candidate) => candidate.id === selectedTarget)
-      ? selectedTarget
-      : candidates[0]?.id || null;
-    candidates.forEach((candidate) => {
-      const option = document.createElement("option");
-      option.value = candidate.id;
-      option.textContent = `${candidate.spaceLabel || candidate.title} - ${candidate.title}`;
-      elements.LinkTarget.appendChild(option);
-      const sameRoom = candidate.space === source.space;
-      const button = document.createElement("button");
-      button.className = `editor-choice editor-choice--destination${candidate.id === state.linkTargetId ? " is-selected" : ""}`;
-      button.type = "button";
-      button.setAttribute("aria-pressed", String(candidate.id === state.linkTargetId));
-      const relation = document.createElement("span");
-      relation.textContent = sameRoom ? `Another view of ${candidate.spaceLabel || "this room"}` : `Another room: ${candidate.spaceLabel || candidate.title}`;
-      const name = document.createElement("strong");
-      name.textContent = candidate.title;
-      button.append(relation, name);
-      button.addEventListener("click", () => {
-        state.linkTargetId = candidate.id;
-        elements.LinkTarget.value = candidate.id;
-        elements.LinkKind.value = suggestedLinkKind(source, candidate);
-        elements.LinkLabel.value = suggestedLinkLabel();
-        setStatus(`${candidate.title} chosen`);
-        renderLinkCreator(source);
-      });
-      elements.LinkChoices.appendChild(button);
-    });
-    if (state.linkTargetId) elements.LinkTarget.value = state.linkTargetId;
-    if (state.linkDraftSceneId !== source.id) {
-      state.linkDraftSceneId = source.id;
-      elements.LinkKind.value = suggestedLinkKind(source);
-      elements.LinkLabel.value = suggestedLinkLabel();
-    } else if (!elements.LinkLabel.value) {
-      elements.LinkLabel.value = suggestedLinkLabel();
-    }
-    elements.AddLink.disabled = candidates.length === 0 || !state.linkTargetId;
-    elements.NewLink.hidden = state.linkStep !== "choose" || candidates.length === 0;
+    elements.HotspotList.hidden = source.hotspots.length <= 1;
+    elements.PlaceAtCentre.hidden = !selected;
+    elements.ConfirmCentre.disabled = !selected || api.viewer.getScene() !== source.id || !api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling;
+    const target = selected ? api.sceneById[selected.hotspot.target] : null;
+    elements.LinkGuidance.textContent = selected
+      ? `From ${selected.scene.title} to ${target?.title || "the selected place"}.`
+      : "Every walking button has an exact position.";
   }
 
   function renderArrivalPanel(scene) {
@@ -907,7 +966,7 @@
     }
     const target = api.sceneById[selected.hotspot.target];
     elements.ArrivalHelp.textContent = viewerReady
-      ? `Next movement: ${scene.title} to ${target?.title || "the destination"}. Open it and choose the first view.`
+      ? `Next place: ${scene.title} to ${target?.title || "the destination"}. Open it and choose the first view.`
       : "Loading the source photo...";
     elements.EditArrival.textContent = `Open ${target?.title || "destination"}`;
     elements.EditArrival.hidden = false;
@@ -1080,7 +1139,7 @@
       const adjustment = api.getSceneAdjustment(scene.id);
       return adjustment.brightness !== 100 || adjustment.contrast !== 100 || adjustment.saturation !== 100 || adjustment.warmth !== 0 || api.getLocalAdjustments(scene.id).length > 0;
     }).length;
-    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Moves</span></div><div><strong>${adjusted}</strong><span>Picture changes</span></div>`;
+    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Places</span></div><div><strong>${adjusted}</strong><span>Picture changes</span></div>`;
     const readiness = releaseReadiness();
     elements.Readiness.classList.toggle("is-ready", readiness.ready);
     elements.Readiness.textContent = readiness.ready
@@ -1153,7 +1212,8 @@
     placementSurface.hidden = !placing;
     placementSurface.setAttribute("aria-label", state.placement?.type === "hotspot" ? "Place selected movement" : "Place light area");
     document.body.classList.toggle("is-editor-placing", placing);
-    const centring = state.activeStage === "links" && state.linkStep === "place";
+    const centringSelection = selectedHotspot();
+    const centring = state.activeStage === "links" && state.linkStep === "place" && centringSelection?.scene.id === api.viewer.getScene();
     centreTarget.hidden = !centring;
     document.body.classList.toggle("is-editor-centre-target", centring);
   }
@@ -1219,6 +1279,48 @@
     state.placement = null;
     render();
     queueDraftSave(placementType === "adjustment" ? "adjustment-placed" : "movement-placed");
+  }
+
+  function syncPlannedPlacesToDraft() {
+    const projectScenes = new Map((state.workspaceProject?.scenes || []).map((scene) => [scene.id, scene]));
+    let changed = false;
+    for (const scene of api.scenes) {
+      const projectScene = projectScenes.get(scene.id);
+      if (!projectScene) continue;
+      const existing = api.getAddedHotspots(scene.id);
+      if (!Array.isArray(projectScene.plannedTargets)) {
+        projectScene.plannedTargets = [...new Set(existing.map((hotspot) => hotspot.target))];
+      }
+      const existingByTarget = new Map(existing.map((hotspot) => [hotspot.target, hotspot]));
+      const desired = plannedTargets(projectScene)
+        .filter((targetId) => targetId !== scene.id && api.sceneById[targetId])
+        .map((targetId) => {
+          const target = api.sceneById[targetId];
+          const current = existingByTarget.get(targetId);
+          return {
+            ...(current || {
+              pitch: 0,
+              yaw: 0,
+              targetPitch: target.pitch,
+              targetYaw: target.yaw,
+              targetHfov: target.hfov,
+              positionConfirmed: false,
+              arrivalConfirmed: false
+            }),
+            kind: "doorway",
+            target: targetId,
+            label: `Go to ${target.title}`
+          };
+        });
+      if (JSON.stringify(existing) !== JSON.stringify(desired)) {
+        api.setAddedHotspots(scene.id, desired);
+        changed = true;
+      }
+    }
+    if (changed) studioLog("planned-places-synchronised", {
+      places: api.scenes.reduce((total, scene) => total + api.getAddedHotspots(scene.id).length, 0)
+    }, true);
+    return changed;
   }
 
   function createDraft() {
@@ -1315,45 +1417,47 @@
     api.viewer.loadScene(target.id);
   }
 
-  function saveCurrentRoomTask() {
+  function validateTourSetup() {
     const project = state.workspaceProject;
-    const scene = project?.scenes?.[state.roomSceneIndex];
-    const room = projectRooms(project).find((candidate) => candidate.id === state.roomChoiceId);
-    const title = elements.RoomSceneTitle.value.trim();
-    if (!scene || !room || !title) {
-      setStatus(!title ? "Name this view before continuing" : "Choose one room before continuing");
+    if (!project?.scenes?.length) return false;
+    const rooms = projectRooms(project);
+    const roomIds = new Set(rooms.map((room) => room.id));
+    const unnamedRoom = rooms.find((room) => !room.label.trim());
+    if (unnamedRoom) {
+      setStatus("Name every room before continuing");
       return false;
     }
-    scene.title = title;
-    scene.space = room.id;
-    scene.spaceLabel = room.label;
-    studioLog("room-task-complete", { sceneId: scene.id, roomId: room.id, index: state.roomSceneIndex });
+    const incompleteScene = project.scenes.find((scene) => !scene.title.trim() || !roomIds.has(scene.space));
+    if (incompleteScene) {
+      setStatus(!incompleteScene.title.trim() ? "Name every photo before continuing" : "Put every photo in a room");
+      return false;
+    }
+    if (project.scenes.length > 1) {
+      const totalPlaces = project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0);
+      if (totalPlaces === 0) {
+        state.roomPlanSceneId = project.scenes[0].id;
+        renderRoomsPanel();
+        setStatus("Choose at least one place people can go");
+        return false;
+      }
+    }
+    studioLog("tour-setup-complete", {
+      rooms: rooms.length,
+      scenes: project.scenes.length,
+      places: project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0)
+    });
     return true;
   }
 
   async function backWizard() {
-    if (state.activeStage === "rooms" && state.roomSceneIndex > 0) {
-      state.roomSceneIndex -= 1;
-      render();
-      return;
-    }
     if (state.activeStage === "light" && state.lookSceneIndex > 0) {
       state.lookSceneIndex -= 1;
       openSceneAt(state.lookSceneIndex);
       return;
     }
-    if (state.activeStage === "links" && state.linkStep === "place") {
-      state.linkStep = "choose";
-      state.linkTargetId = null;
-      render();
-      return;
-    }
-    if (state.activeStage === "links" && state.linkSceneIndex > 0) {
-      if (!await queueDraftSave("before-previous-movement-photo")) return;
-      state.linkSceneIndex -= 1;
-      state.linkTargetId = null;
-      state.selected = null;
-      openSceneAt(state.linkSceneIndex);
+    if (state.activeStage === "links") {
+      if (!await queueDraftSave("before-leaving-walking-buttons")) return;
+      setStage("light");
       return;
     }
     setStage(stageOffset(-1));
@@ -1370,13 +1474,7 @@
       return;
     }
     if (state.activeStage === "rooms") {
-      if (!saveCurrentRoomTask()) return;
-      if (state.roomSceneIndex < state.workspaceProject.scenes.length - 1) {
-        state.roomSceneIndex += 1;
-        render();
-        setStatus("Choose the room for the next photo");
-        return;
-      }
+      if (!validateTourSetup()) return;
       try {
         await saveWorkspaceStructure("light");
       } catch (error) {
@@ -1392,24 +1490,25 @@
         setStatus("Choose the look for the next photo");
         return;
       }
-      setStage("links");
-      openSceneAt(0);
+      const nextPosition = findPendingHotspot("positionConfirmed");
+      if (nextPosition) {
+        state.linkStep = "place";
+        focusHotspotTask(nextPosition, "links");
+        setStatus("Place the first walking button");
+      } else {
+        setStage("links");
+      }
       return;
     }
     if (state.activeStage === "links") {
-      if (state.linkStep === "place") {
-        setStatus("Save the point at the centre target first");
+      const nextPosition = findPendingHotspot("positionConfirmed");
+      if (nextPosition) {
+        state.linkStep = "place";
+        focusHotspotTask(nextPosition, "links");
+        setStatus("Place every walking button before continuing");
         return;
       }
-      if (!await queueDraftSave("movement-photo-reviewed")) return;
-      if (state.linkSceneIndex < api.scenes.length - 1) {
-        state.linkSceneIndex += 1;
-        state.linkTargetId = null;
-        state.selected = null;
-        openSceneAt(state.linkSceneIndex);
-        setStatus("Choose movements for the next photo");
-        return;
-      }
+      if (!await queueDraftSave("all-walking-buttons-placed")) return;
       const nextArrival = findPendingHotspot("arrivalConfirmed");
       if (nextArrival) {
         focusHotspotTask(nextArrival, "arrival");
@@ -1463,7 +1562,7 @@
     const nextPending = findPendingHotspot("arrivalConfirmed");
     if (nextPending) {
       focusHotspotTask(nextPending, "arrival");
-      setStatus("Destination view saved. Next movement selected.");
+      setStatus("Destination view saved. Next place selected.");
       return;
     }
     state.selected = null;
@@ -1564,13 +1663,8 @@
   });
   elements.RestoreProject.addEventListener("click", () => restoreProject(false));
   elements.ImportFiles.addEventListener("change", importPanoramas);
-  elements.RoomSceneTitle.addEventListener("input", () => {
-    const scene = state.workspaceProject?.scenes?.[state.roomSceneIndex];
-    if (!scene) return;
-    scene.title = elements.RoomSceneTitle.value;
-    studioLog("view-name-edited", { sceneId: scene.id, index: state.roomSceneIndex });
-  });
-  elements.AddRoom.addEventListener("click", addRoom);
+  elements.ApplyRoomCount.addEventListener("click", setRoomCount);
+  elements.RoomCount.addEventListener("change", setRoomCount);
   elements.Home.addEventListener("click", () => setStage("start"));
   elements.Back.addEventListener("click", backWizard);
   elements.Continue.addEventListener("click", continueWizard);
@@ -1586,70 +1680,6 @@
   });
   panel.querySelector("#editorPreviousScene").addEventListener("click", () => moveScene(-1));
   panel.querySelector("#editorNextScene").addEventListener("click", () => moveScene(1));
-  elements.Rotate.addEventListener("click", () => {
-    state.placement = null;
-    setStatus("Rotate view mode");
-    render();
-  });
-  elements.Place.addEventListener("click", () => {
-    if (!selectedHotspot()) return;
-    state.placement = { type: "hotspot" };
-    setStatus("Place the selected movement on the photo");
-    render();
-  });
-  elements.RemoveLink.addEventListener("click", () => {
-    const scene = api.scenes[state.linkSceneIndex] || currentScene();
-    const selected = state.selected;
-    if (!scene || !selected || selected.sceneId !== scene.id || selected.hotspotIndex < api.getBaseHotspotCount(scene.id)) return;
-    const localIndex = selected.hotspotIndex - api.getBaseHotspotCount(scene.id);
-    const removedId = api.hotspotId(scene.id, selected.hotspotIndex);
-    api.setAddedHotspots(scene.id, api.getAddedHotspots(scene.id).filter((_, index) => index !== localIndex));
-    state.selected = null;
-    state.linkStep = "choose";
-    state.linkTargetId = null;
-    state.linkIsNew = false;
-    setStatus("Transition removed");
-    render();
-    studioLog("movement-removed", { id: removedId, sceneId: scene.id }, true);
-    queueDraftSave("movement-removed");
-  });
-  elements.LinkTarget.addEventListener("change", () => {
-    elements.LinkKind.value = suggestedLinkKind();
-    elements.LinkLabel.value = suggestedLinkLabel();
-  });
-  elements.LinkKind.addEventListener("change", () => { elements.LinkLabel.value = suggestedLinkLabel(); });
-  elements.AddLink.addEventListener("click", () => {
-    const scene = api.scenes[state.linkSceneIndex] || currentScene();
-    const targetScene = api.sceneById[state.linkTargetId || elements.LinkTarget.value];
-    if (!scene || !targetScene) return;
-    const additions = api.getAddedHotspots(scene.id);
-    const kind = suggestedLinkKind(scene, targetScene);
-    api.setAddedHotspots(scene.id, [...additions, {
-      kind,
-      pitch: roundCoordinate(api.viewer.getPitch()),
-      yaw: roundCoordinate(api.viewer.getYaw()),
-      target: targetScene.id,
-      label: kind === "viewpoint" ? `Go to ${targetScene.title}` : `Walk to ${targetScene.spaceLabel || targetScene.title}`,
-      targetPitch: targetScene.pitch,
-      targetYaw: targetScene.yaw,
-      targetHfov: targetScene.hfov,
-      positionConfirmed: false,
-      arrivalConfirmed: false
-    }]);
-    state.selected = { sceneId: scene.id, hotspotIndex: api.getBaseHotspotCount(scene.id) + additions.length };
-    state.linkStep = "place";
-    state.linkIsNew = true;
-    state.placement = null;
-    setStatus("Move the photo, then save the point at the centre target");
-    render();
-    studioLog("movement-added", {
-      id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
-      sourceSceneId: scene.id,
-      targetSceneId: targetScene.id,
-      kind
-    }, true);
-    queueDraftSave("movement-added");
-  });
   elements.ConfirmCentre.addEventListener("click", () => {
     const selected = selectedHotspot();
     if (!selected) return;
@@ -1660,27 +1690,24 @@
     studioLog("movement-centre-confirmed", {
       id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex), pitch, yaw
     }, true);
-    state.linkStep = "choose";
-    state.linkTargetId = null;
-    state.linkIsNew = false;
-    state.selected = null;
-    setStatus("Movement saved. Add another, or continue to the next photo.");
-    render();
     queueDraftSave("movement-centre-confirmed");
-  });
-  elements.CancelCentre.addEventListener("click", () => {
-    const selected = selectedHotspot();
-    if (selected && state.linkIsNew && state.selected.hotspotIndex >= api.getBaseHotspotCount(selected.scene.id)) {
-      const localIndex = state.selected.hotspotIndex - api.getBaseHotspotCount(selected.scene.id);
-      api.setAddedHotspots(selected.scene.id, api.getAddedHotspots(selected.scene.id).filter((_, index) => index !== localIndex));
-      queueDraftSave("movement-cancelled");
+    const nextPending = findPendingHotspot("positionConfirmed");
+    if (nextPending) {
+      state.linkStep = "place";
+      focusHotspotTask(nextPending, "links");
+      setStatus("Walking button saved. Place the next one.");
+      return;
     }
     state.linkStep = "choose";
-    state.linkTargetId = null;
-    state.linkIsNew = false;
     state.selected = null;
-    setStatus("Choose a destination");
+    setStatus("All walking buttons are placed");
     render();
+  });
+  elements.CancelCentre.addEventListener("click", () => {
+    state.linkStep = "choose";
+    state.selected = null;
+    setStatus("Change the room board or selected places");
+    setStage("rooms");
   });
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
   elements.SaveArrival.addEventListener("click", saveArrivalView);
@@ -1771,10 +1798,7 @@
     await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
     await waitForViewerFade();
     state.viewerSettled = true;
-    renderStages();
-    if (state.activeStage === "arrival") {
-      renderArrivalPanel(currentScene());
-    }
+    render();
   });
 
   document.addEventListener("raindigit:tour-debug", (event) => {
@@ -1869,6 +1893,7 @@
     await waitForViewerSettled();
     state.viewerSettled = true;
     applyDraft(draft);
+    const plannedPlacesChanged = syncPlannedPlacesToDraft();
     const scene = currentScene();
     state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
     setStatus(state.activeStage === "start"
@@ -1881,6 +1906,7 @@
           ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
           : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
+    if (plannedPlacesChanged) queueDraftSave("planned-places-synchronised");
     studioLog("studio-ready", {
       savedAt: state.savedAt,
       workspaceAvailable: Boolean(state.workspaceProject),

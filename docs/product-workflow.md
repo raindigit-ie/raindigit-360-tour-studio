@@ -32,23 +32,23 @@ The studio is local-first. It keeps source material and the editable workspace o
    - It produces private normalized browser derivatives and thumbnails while stripping metadata. The source files remain outside the release flow.
 
 3. **Rooms**
-   - Show one photo at a time and ask one question: **Where was this photo taken?**
-   - Rename the view, then choose an existing room or create and choose a different room. Choosing the same room for another photo explicitly creates another camera view of that room.
-   - **Save and next photo** advances only after the current view has a name and one room. Creating a room must not erase a view name already typed on the same screen.
+   - Show one visual setup board. The operator sets the number of rooms, names each room and sees every uploaded photo as a large thumbnail card.
+   - Support dragging a photo card into a room and an equivalent Room menu for touch, keyboard and recovery. Keep room columns horizontally scrollable rather than compressing thumbnails beyond recognition.
+   - Select a source photo, then toggle every destination photo a visitor can reach. Store these planned destinations in the editable project and create one required centre-positioned walking button for each selection.
+   - For multi-photo tours require at least one planned place before continuing. Every photo still needs a name and a room.
 
 4. **Look**
    - Show Natural, Bright and Warm as the normal choice. Keep brightness, contrast, saturation and warm/cool controls under **Fine tune picture**.
    - Add any number of local circle/ellipse or square/rectangle light/color areas. Every area must fade to zero at its boundary so it cannot introduce a visible seam.
    - Inspect each correction at the panorama seam and at the edges of the corrected area.
 
-5. **Movement**
-   - Create a link only where a visitor can move: a physical doorway/passage or another camera viewpoint.
-   - Label destinations as **Another view of this room** or **Another room**. The studio chooses the correct viewfinder or walking marker automatically.
-   - Choose one destination, rotate the panorama normally until the real doorway or other camera position is under the fixed centre target, then press **Save point here**. There is no rotate/place mode switch.
+5. **Places**
+   - Do not ask the operator to classify doorway versus same-room viewpoint. Every planned destination is one place and uses the same walking-person marker.
+   - Open the planned buttons one at a time. Rotate the panorama normally until the real doorway, passage or other camera position is under the fixed centre target, then press **Save point here**. There is no destination picker or rotate/place mode switch on this screen.
    - After placement, rotating the panorama must move the marker's screen projection while its saved spherical coordinate remains unchanged. A marker that stays screen-fixed, disappears from the active scene configuration or leaves a stale DOM copy fails review.
    - Check the source frame from more than one structural reference. Avoid movable furniture. For a same-room link, use the visible tripod footprint, fixed walls, tile grid or other fixed architecture in both views.
-   - A newly added transition remains incomplete until **Save point here** records an explicit spherical coordinate. Back cancels a new unfinished point without changing an older point.
-   - Save immediately after adding, placing or removing a movement. The wizard controls photo order itself; it waits for the queued save and for the current panorama and cross-fade to settle before enabling the next action.
+   - Every planned button remains incomplete until **Save point here** records an explicit spherical coordinate. Saving automatically opens the next unfinished button; Continue remains unavailable until all are positioned.
+   - Save immediately after every placement. The wizard waits for the queued save and for the current panorama and cross-fade to settle before enabling the action.
    - Test at least two points by cycling through every scene forwards and backwards twice. After each cycle, the stable point IDs must match in the scene model, active Pannellum configuration, rendered DOM and persisted draft.
 
 6. **First views**
@@ -58,7 +58,7 @@ The studio is local-first. It keeps source material and the editable workspace o
    - After saving, automatically return to the next movement source. Disable Open/Save while a panorama or cross-fade is still loading, and do not open Publish while any first view is unfinished.
 
 7. **Publish**
-   - Review the room, view, movement and picture-change counts and require a green readiness gate.
+   - Review the room, view, place and picture-change counts and require a green readiness gate.
    - Build the static package, then show **Download website file** as the only primary result.
    - Keep preview/testing, website-install code, editable backup and folder ZIP in separate collapsed disclosures.
    - `raindigit-360-tour.html` is the normal one-file customer installation. The editable backup is an operator asset, not part of the default customer handoff.
