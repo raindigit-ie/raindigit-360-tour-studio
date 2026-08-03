@@ -22,6 +22,7 @@ const included = [
   "docs/client-handoff.md",
   "docs/asset-protection.md",
   "scripts/build-tour-release.mjs",
+  "scripts/assess-x4-raw-benefit.py",
   "scripts/start-studio.sh",
   "scripts/stop-studio.sh",
   "scripts/tour-editor-server.mjs",

@@ -27,6 +27,7 @@ try {
   assert(listing.includes("raindigit-360-tour-studio/Start RainDigit 360 Studio.command"), "The start launcher is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/web-tour/index.html"), "The studio runtime is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/config/insta360-x4-calibration.pto"), "The X4 lens calibration is missing from the operator kit.");
+  assert(listing.includes("raindigit-360-tour-studio/scripts/assess-x4-raw-benefit.py"), "The RAW benefit assessment is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/scripts/x4-raw-process.py"), "The RAW processor is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/scripts/x4-raw-align.py"), "The RAW aligner is missing from the operator kit.");
   assert(!/(studio-workspace|originals|panoramas\/scene-|thumbnails\/scene-|manual-hotspot|\/release\/|\/dist\/|node_modules|\.git\/)/i.test(listing), "Private or generated project data leaked into the operator kit.");

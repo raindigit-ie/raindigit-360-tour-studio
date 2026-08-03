@@ -111,8 +111,8 @@
       <section class="editor-stage-panel" data-stage-panel="upload">
         <div class="editor-step-heading"><span>Step 1</span><h2>Add 360 photos</h2></div>
         <label class="editor-upload-zone">
-          <strong>Choose JPG photos or matching DNG + JPG pairs</strong>
-          <span>For maximum quality, select each camera DNG together with the JPG that has the same filename. RainDigit processes the RAW pair locally.</span>
+          <strong>Choose camera JPG photos</strong>
+          <span>For a normal 360 tour, use the ready camera JPG. A matching DNG + JPG pair is only for a manual RAW correction test when a shot needs highlight or white-balance recovery.</span>
           <input id="editorImportFiles" type="file" accept="image/jpeg,image/x-adobe-dng,.jpg,.jpeg,.dng" multiple />
         </label>
         <p class="editor-empty" id="editorProjectEmpty"></p>
@@ -855,7 +855,7 @@
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
       dimensions.textContent = scene.sourceFormat === "dng-x4-calibrated"
-        ? "RAW enhanced locally"
+        ? "DNG checked against camera JPG"
         : scene.sourceFormat === "dng" ? "DNG developed locally" : "360 photo ready";
       details.append(title, dimensions);
       const remove = document.createElement("button");
@@ -1848,6 +1848,17 @@
     };
   }
 
+  function viewerCoordinatesAtElementCenter(element) {
+    const box = element?.getBoundingClientRect();
+    if (!box) return null;
+    const [pitch, yaw] = api.viewer.mouseEventToCoords({
+      clientX: box.left + box.width / 2,
+      clientY: box.top + box.height / 2
+    });
+    if (!Number.isFinite(pitch) || !Number.isFinite(yaw)) return null;
+    return { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) };
+  }
+
   function render() {
     const scene = currentScene();
     if (!scene) return;
@@ -1912,10 +1923,13 @@
   function saveSelectedHotspotAtViewerCenter(reason = "movement-centre-confirmed") {
     const selected = selectedHotspot();
     if (!selected) return false;
-    // Centre placement is the operator's explicit measurement. Do not replace it
-    // with a guide snap or the marker would no longer remain under the cross.
-    const pitch = roundCoordinate(api.viewer.getPitch());
-    const yaw = roundCoordinate(api.viewer.getYaw());
+    // The visible crosshair is the operator's measurement. Its DOM centre can
+    // differ slightly from Pannellum's mathematical viewport centre after layout.
+    const placement = viewerCoordinatesAtElementCenter(centreTarget) || {
+      pitch: roundCoordinate(api.viewer.getPitch()),
+      yaw: roundCoordinate(api.viewer.getYaw())
+    };
+    const { pitch, yaw } = placement;
     selected.hotspot.positionConfirmed = true;
     api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch, yaw });
     const guide = guideForScene(selected.scene);
