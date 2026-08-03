@@ -30,8 +30,6 @@ const portArgument = process.argv.indexOf("--port");
 const port = portArgument >= 0 ? Number(process.argv[portArgument + 1]) : previewMode ? 8768 : 8767;
 const endpoint = previewMode ? "/__tour-preview" : "/__tour-editor";
 const previewEndpoint = "/__tour-preview";
-// X4 DNG files are commonly about 140 MB. The raw source is processed locally,
-// then discarded from the workspace; only the derived panorama is retained.
 const maxUploadBytes = 256 * 1024 * 1024;
 const maxFloorplanBytes = 15 * 1024 * 1024;
 const maxProjectBytes = 512 * 1024 * 1024;
@@ -497,25 +495,6 @@ async function runMagick(args) {
   throw new Error("Image preparation failed: ImageMagick is not installed.");
 }
 
-async function processX4Dng(inputPath, referencePath, outputPath, metricsPath) {
-  const processor = join(projectRoot, "scripts", "x4-raw-process.py");
-  try {
-    await execFileAsync("/usr/bin/python3", [
-      processor,
-      "--dng", inputPath,
-      "--reference", referencePath,
-      "--output", outputPath,
-      "--metrics", metricsPath
-    ], {
-      cwd: projectRoot,
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: 30 * 60 * 1000
-    });
-  } catch (error) {
-    throw new Error(`Container RAW processing failed: ${error.stderr || error.stdout || error.message}`);
-  }
-}
-
 function workspaceConfig(project, scope) {
   const prefix = scope.startsWith("/") ? scope : `/${scope}`;
   const scenes = project.scenes.map((scene) => ({
@@ -802,29 +781,6 @@ const server = createServer(async (request, response) => {
       replyJson(response, 201, { map: project.map, project });
       return;
     }
-    if (!readOnly && url.pathname === `${routeEndpoint}/workspace-raw-reference` && request.method === "POST") {
-      const project = await readWorkspaceProject();
-      if (!project) {
-        replyJson(response, 409, { error: "Create a tour before adding photos." });
-        return;
-      }
-      const fileName = cleanHeader(request.headers["x-tour-file-name"]).replace(/[\\/]/g, "");
-      if (!/\.jpe?g$/i.test(fileName)) {
-        replyJson(response, 400, { error: "Choose the camera JPG recorded with this DNG." });
-        return;
-      }
-      const source = await readBody(request, maxUploadBytes);
-      const dimensions = jpegDimensions(source);
-      if (!dimensions || dimensions.width < 1600 || Math.abs(dimensions.width / dimensions.height - 2) > 0.02) {
-        replyJson(response, 400, { error: "The matching camera JPG must be a finished 2:1 panorama." });
-        return;
-      }
-      const token = createHash("sha256").update(source).update(String(Date.now())).digest("hex");
-      await mkdir(workspaceRoot, { recursive: true });
-      await writeFile(join(workspaceRoot, `.raw-reference-${token}.jpg`), source);
-      replyJson(response, 201, { token });
-      return;
-    }
     if (!readOnly && url.pathname === `${routeEndpoint}/workspace-import` && request.method === "POST") {
       const project = await readWorkspaceProject();
       if (!project) {
@@ -832,10 +788,9 @@ const server = createServer(async (request, response) => {
         return;
       }
       const fileName = cleanHeader(request.headers["x-tour-file-name"]).replace(/[\\/]/g, "");
-      const isDng = /\.dng$/i.test(fileName);
       const isJpeg = /\.jpe?g$/i.test(fileName);
-      if (!fileName || (!isJpeg && !isDng)) {
-        replyJson(response, 400, { error: "Choose a stitched 2:1 JPG, or an exported stitched 2:1 DNG." });
+      if (!fileName || !isJpeg) {
+        replyJson(response, 400, { error: "Choose a ready stitched 2:1 JPG photo." });
         return;
       }
       const source = await readBody(request, maxUploadBytes);
@@ -844,42 +799,10 @@ const server = createServer(async (request, response) => {
         replyJson(response, 409, { error: "This photo is already in the tour." });
         return;
       }
-      const temporaryInput = join(workspaceRoot, `.upload-${process.pid}-${Date.now()}${isDng ? ".dng" : ".jpg"}`);
-      const temporaryStitched = join(workspaceRoot, `.stitched-${process.pid}-${Date.now()}.jpg`);
-      const temporaryMetrics = join(workspaceRoot, `.raw-metrics-${process.pid}-${Date.now()}.json`);
-      const referenceToken = cleanHeader(request.headers["x-tour-reference-token"]);
-      const temporaryReference = /^[a-f0-9]{64}$/.test(referenceToken)
-        ? join(workspaceRoot, `.raw-reference-${referenceToken}.jpg`)
-        : "";
-      await writeFile(temporaryInput, source);
-      let developed;
-      let sourceFormat = isDng ? "dng" : "jpeg";
-      let sourceQuality;
-      try {
-        if (isDng) {
-          if (!temporaryReference) throw new Error("Select the matching camera DNG and JPG together. The JPG supplies the exact camera tone; the DNG supplies additional detail.");
-          try {
-            await stat(temporaryReference);
-          } catch {
-            throw new Error("The matching JPG upload expired. Select the DNG and JPG together again.");
-          }
-          await processX4Dng(temporaryInput, temporaryReference, temporaryStitched, temporaryMetrics);
-          developed = await readFile(temporaryStitched);
-          sourceQuality = JSON.parse(await readFile(temporaryMetrics, "utf8"));
-          sourceFormat = "dng-x4-calibrated";
-        } else {
-          developed = source;
-        }
-      } finally {
-        await rm(temporaryInput, { force: true });
-        await rm(temporaryStitched, { force: true });
-        await rm(temporaryMetrics, { force: true });
-        if (temporaryReference) await rm(temporaryReference, { force: true });
-      }
-      const dimensions = jpegDimensions(developed);
+      const dimensions = jpegDimensions(source);
       const ratio = dimensions ? dimensions.width / dimensions.height : 0;
       if (!dimensions || dimensions.width < 1600 || Math.abs(ratio - 2) > 0.02) {
-        replyJson(response, 400, { error: isDng ? "The X4 DNG pair could not be converted to a finished 2:1 panorama." : "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
+        replyJson(response, 400, { error: "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
         return;
       }
       const id = nextSceneId(project.scenes);
@@ -895,11 +818,9 @@ const server = createServer(async (request, response) => {
       await mkdir(dirname(outputPanorama), { recursive: true });
       await mkdir(dirname(outputThumb), { recursive: true });
       const preparedInput = join(workspaceRoot, `.prepared-${process.pid}-${Date.now()}.jpg`);
-      await writeFile(preparedInput, developed);
+      await writeFile(preparedInput, source);
       try {
-        const panoramaQuality = isDng ? "96" : "92";
-        const panoramaSampling = isDng ? "4:4:4" : "4:2:0";
-        await runMagick([preparedInput, "-auto-orient", "-strip", "-interlace", "Plane", "-sampling-factor", panoramaSampling, "-quality", panoramaQuality, outputPanorama]);
+        await runMagick([preparedInput, "-auto-orient", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "92", outputPanorama]);
         await runMagick([outputPanorama, "-thumbnail", "480x240^", "-gravity", "center", "-extent", "480x240", "-strip", "-interlace", "Plane", "-quality", "84", outputThumb]);
       } finally {
         await rm(preparedInput, { force: true });
@@ -918,8 +839,7 @@ const server = createServer(async (request, response) => {
         hfov: 94,
         hotspots: [],
         sourceHash,
-        sourceFormat,
-        ...(sourceQuality ? { sourceQuality } : {})
+        sourceFormat: "jpeg"
       };
       project.scenes.push(scene);
       project.firstScene ||= id;

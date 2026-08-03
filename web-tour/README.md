@@ -33,7 +33,7 @@ Upload the complete `web-tour` folder to the site and embed:
 ```
 
 ## Notes
-- Original JPG/DNG files are outside this folder in `../originals/Camera01`.
+- Original JPG/DNG files are outside this folder in `../originals/Camera01`; the studio imports only ready stitched JPG panoramas.
 - Web panoramas were stripped of EXIF/GPS metadata.
 - The navigator is generated from `js/tour-config.js`, stays horizontal and scrollable on desktop/mobile, and supports any number of scenes without taking a vertical portion of the panorama.
 - The navigator distinguishes room views from physical travel: a viewfinder can reveal another camera position in the same room, while the walking-person marker only marks actual doorways. Their coordinates and arrival compositions are in `js/tour-config.js`.

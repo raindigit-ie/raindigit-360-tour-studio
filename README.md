@@ -9,7 +9,7 @@
 ## Current Killarney Source
 - Media card: `/Volumes/Untitled/DCIM/Camera01`.
 - Camera: Insta360 X4.
-- Captured files: 4 equirectangular JPG panoramas plus 4 DNG originals.
+- Captured files: 4 equirectangular JPG panoramas plus 4 DNG originals retained only as archive evidence.
 - Old DJI media present elsewhere on the card was not copied for this tour.
 
 ## Current Killarney Output
@@ -61,7 +61,7 @@ npm run studio
 Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
 1. **Start**: create a new tour or explicitly open an editable `.rdtour` project file. The studio does not list or silently reopen a previous local workspace.
-2. **Photos**: add all ready 2:1 JPG photos without making room decisions.
+2. **Photos**: add all ready stitched 2:1 JPG photos without making room decisions. DNG/RAW import is not part of the operator workflow because local tests did not show a reliable visible quality gain over the camera JPG.
 3. **Rooms and walking routes**: set the room count and names, then arrange every visible photo card into a room by dragging it or using its Room menu. Generic `View 1` names are automatically replaced with room-based camera-point names, while manually typed photo names are preserved. Use **Preview** to open any 360 photo large, then select a source photo and mark every destination photo people can reach from it; this creates the required walking buttons.
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
 5. **Walking buttons**: the studio opens every planned walking button in order. Rotate until its real position is under the centre target, then press **Save point here**. All destinations use the same person marker, including another camera position in the same room.

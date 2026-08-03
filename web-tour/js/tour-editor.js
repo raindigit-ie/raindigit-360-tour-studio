@@ -112,8 +112,8 @@
         <div class="editor-step-heading"><span>Step 1</span><h2>Add 360 photos</h2></div>
         <label class="editor-upload-zone">
           <strong>Choose camera JPG photos</strong>
-          <span>For a normal 360 tour, use the ready camera JPG. A matching DNG + JPG pair is only for a manual RAW correction test when a shot needs highlight or white-balance recovery.</span>
-          <input id="editorImportFiles" type="file" accept="image/jpeg,image/x-adobe-dng,.jpg,.jpeg,.dng" multiple />
+          <span>Use ready stitched 2:1 JPG photos from the camera app or desktop export.</span>
+          <input id="editorImportFiles" type="file" accept="image/jpeg,.jpg,.jpeg" multiple />
         </label>
         <p class="editor-empty" id="editorProjectEmpty"></p>
         <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded 360 photos"></div>
@@ -854,9 +854,7 @@
       const title = document.createElement("strong");
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
-      dimensions.textContent = scene.sourceFormat === "dng-x4-calibrated"
-        ? "DNG checked against camera JPG"
-        : scene.sourceFormat === "dng" ? "DNG developed locally" : "360 photo ready";
+      dimensions.textContent = "360 photo ready";
       details.append(title, dimensions);
       const remove = document.createElement("button");
       remove.className = "editor-button editor-button--icon editor-button--danger";
@@ -1271,64 +1269,30 @@
   async function importPanoramas() {
     const files = [...elements.ImportFiles.files];
     if (!files.length || !state.workspaceProject) return;
-    const grouped = new Map();
-    for (const [index, file] of files.entries()) {
-      const stem = file.name.replace(/\.(?:dng|jpe?g)$/i, "").toLowerCase();
-      const kind = /\.dng$/i.test(file.name) ? "dng" : "jpeg";
-      const entry = grouped.get(stem) || { index, dng: null, jpeg: null };
-      if (entry[kind]) {
-        setStatus(`Choose only one ${kind.toUpperCase()} for ${file.name.replace(/\.[^.]+$/, "")}.`);
-        elements.ImportFiles.value = "";
-        return;
-      }
-      entry[kind] = file;
-      grouped.set(stem, entry);
-    }
-    const missingPair = [...grouped.values()].find((entry) => entry.dng && !entry.jpeg);
-    if (missingPair) {
-      setStatus(`Add the matching JPG for ${missingPair.dng.name}. Select both files together.`);
+    const invalid = files.find((file) => !/\.jpe?g$/i.test(file.name) && file.type !== "image/jpeg");
+    if (invalid) {
+      setStatus(`Use ready stitched JPG photos. ${invalid.name} is not supported.`);
       elements.ImportFiles.value = "";
       return;
     }
-    const tasks = [...grouped.values()]
-      .sort((left, right) => left.index - right.index)
-      .map((entry) => entry.dng
-        ? { file: entry.dng, reference: entry.jpeg }
-        : { file: entry.jpeg, reference: null });
     const roomLabel = "Unassigned";
     const roomId = "room-unassigned";
     state.importing = true;
-    state.importProgress = { current: 0, total: tasks.length };
+    state.importProgress = { current: 0, total: files.length };
     renderProjectPanel();
     let imported = 0;
     try {
-      for (const [index, task] of tasks.entries()) {
-        const { file, reference } = task;
+      for (const [index, file] of files.entries()) {
         state.importProgress.current = index + 1;
         renderUploadPanel();
-        setStatus(`Preparing ${index + 1} of ${tasks.length}: ${file.name}${reference ? " + matching JPG" : ""}`);
-        let referenceToken = "";
-        if (reference) {
-          const referenceResponse = await fetch(studioUrl("workspace-raw-reference", true), {
-            method: "POST",
-            headers: {
-              "content-type": "image/jpeg",
-              "x-tour-file-name": encodeURIComponent(reference.name)
-            },
-            body: reference
-          });
-          const referenceBody = await referenceResponse.json();
-          if (!referenceResponse.ok) throw new Error(referenceBody.error || `Matching JPG upload failed (${referenceResponse.status})`);
-          referenceToken = referenceBody.token;
-        }
+        setStatus(`Preparing ${index + 1} of ${files.length}: ${file.name}`);
         const response = await fetch(studioUrl("workspace-import", true), {
           method: "POST",
           headers: {
-            "content-type": /\.dng$/i.test(file.name) ? "image/x-adobe-dng" : "image/jpeg",
+            "content-type": "image/jpeg",
             "x-tour-file-name": encodeURIComponent(file.name),
             "x-tour-room-id": encodeURIComponent(roomId),
-            "x-tour-room-label": encodeURIComponent(roomLabel),
-            ...(referenceToken ? { "x-tour-reference-token": referenceToken } : {})
+            "x-tour-room-label": encodeURIComponent(roomLabel)
           },
           body: file
         });
@@ -1923,13 +1887,8 @@
   function saveSelectedHotspotAtViewerCenter(reason = "movement-centre-confirmed") {
     const selected = selectedHotspot();
     if (!selected) return false;
-    // The visible crosshair is the operator's measurement. Its DOM centre can
-    // differ slightly from Pannellum's mathematical viewport centre after layout.
-    const placement = viewerCoordinatesAtElementCenter(centreTarget) || {
-      pitch: roundCoordinate(api.viewer.getPitch()),
-      yaw: roundCoordinate(api.viewer.getYaw())
-    };
-    const { pitch, yaw } = placement;
+    const pitch = roundCoordinate(api.viewer.getPitch());
+    const yaw = roundCoordinate(api.viewer.getYaw());
     selected.hotspot.positionConfirmed = true;
     api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch, yaw });
     const guide = guideForScene(selected.scene);

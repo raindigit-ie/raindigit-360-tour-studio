@@ -17,17 +17,13 @@ const included = [
   "README.md",
   "Start RainDigit 360 Studio.command",
   "Stop RainDigit 360 Studio.command",
-  "config/insta360-x4-calibration.pto",
   "docker",
   "docs/client-handoff.md",
   "docs/asset-protection.md",
   "scripts/build-tour-release.mjs",
-  "scripts/assess-x4-raw-benefit.py",
   "scripts/start-studio.sh",
   "scripts/stop-studio.sh",
   "scripts/tour-editor-server.mjs",
-  "scripts/x4-raw-align.py",
-  "scripts/x4-raw-process.py",
   "web-tour"
 ];
 
