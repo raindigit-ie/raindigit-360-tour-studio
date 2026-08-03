@@ -186,6 +186,17 @@
         <div class="editor-step-heading"><span>Step 6</span><h2>Check and publish</h2></div>
         <div class="editor-export-summary" id="editorExportSummary"></div>
         <div class="editor-readiness" id="editorReadiness" role="status"></div>
+        <details class="editor-disclosure editor-disclosure--compact" id="editorFloorplanOptions">
+          <summary>Optional floorplan</summary>
+          <p class="editor-guidance">Add a plan of the property, then drag each numbered view to where its camera stands. This is optional and is included only when switched on.</p>
+          <label class="editor-file-picker editor-file-picker--compact">
+            <span id="editorMapFileName">Choose a JPG, PNG or WebP floorplan</span>
+            <input id="editorMapFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
+          </label>
+          <label class="editor-check-row"><input id="editorMapEnabled" type="checkbox" /> Show floorplan in the finished tour</label>
+          <p class="editor-empty" id="editorMapStatus"></p>
+          <div class="editor-floorplan" id="editorFloorplan" hidden></div>
+        </details>
         <details class="editor-disclosure editor-disclosure--compact" id="editorPreviewOptions">
           <summary id="editorPreviewOptionsLabel">Check the tour first</summary>
           <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open tour preview</a>
@@ -253,7 +264,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -297,6 +308,7 @@
   let studioLogTimer = 0;
   let roomPointerDrag = null;
   let suppressRoomPhotoClick = false;
+  let floorplanDrag = null;
 
   function trackRoomDragMove(event) {
     if (!roomPointerDrag) return;
@@ -1627,11 +1639,114 @@
     elements.DownloadEmbed.href = studioUrl("release-embed-download");
     elements.DownloadZip.href = studioUrl("release-download");
     updateEmbedCode();
+    renderFloorplanEditor();
     elements.ReleaseStatus.textContent = !workspaceMode
       ? "Create a tour before publishing."
       : state.release.ready
         ? `Website files ready${state.release.singleBytes ? ` - single ${(state.release.singleBytes / 1024 / 1024).toFixed(1)} MB` : ""}${state.release.embedBytes ? `, paste-in ${(state.release.embedBytes / 1024 / 1024).toFixed(1)} MB` : ""}`
         : "The tour has not been built yet.";
+  }
+
+  function floorplanPosition(event) {
+    const bounds = elements.Floorplan.getBoundingClientRect();
+    return {
+      x: roundCoordinate(Math.max(0, Math.min(100, (event.clientX - bounds.left) / bounds.width * 100))),
+      y: roundCoordinate(Math.max(0, Math.min(100, (event.clientY - bounds.top) / bounds.height * 100)))
+    };
+  }
+
+  function updateFloorplanPin(sceneId, position) {
+    const map = state.workspaceProject?.map;
+    if (!map?.pins?.[sceneId]) return;
+    map.pins[sceneId] = position;
+    const pin = elements.Floorplan.querySelector(`[data-floorplan-scene="${sceneId}"]`);
+    if (pin) {
+      pin.style.left = `${position.x}%`;
+      pin.style.top = `${position.y}%`;
+    }
+  }
+
+  async function saveFloorplanMap(reason = "floorplan-saved") {
+    const map = state.workspaceProject?.map;
+    if (!workspaceMode || !map?.asset) return;
+    const response = await fetch(studioUrl("workspace-project", false), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "map", enabled: map.enabled === true, pins: map.pins })
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `Could not save floorplan (${response.status})`);
+    state.workspaceProject = body;
+    state.release = { ready: false };
+    studioLog(reason, { enabled: body.map?.enabled === true, pins: Object.keys(body.map?.pins || {}).length }, true);
+  }
+
+  async function uploadFloorplan() {
+    const file = elements.MapFile.files[0];
+    if (!file || !workspaceMode || !state.workspaceProject) return;
+    elements.MapFile.disabled = true;
+    setStatus("Preparing floorplan...");
+    try {
+      const response = await fetch(studioUrl("workspace-map", false), {
+        method: "POST",
+        headers: { "content-type": file.type || "application/octet-stream", "x-tour-file-name": encodeURIComponent(file.name) },
+        body: file
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || `Could not add floorplan (${response.status})`);
+      state.workspaceProject = body.project;
+      state.release = { ready: false };
+      elements.MapFileName.textContent = file.name;
+      setStatus("Floorplan added. Drag the numbered views to their camera positions.");
+      studioLog("floorplan-uploaded", { name: file.name, size: file.size, pins: Object.keys(body.map?.pins || {}).length }, true);
+    } catch (error) {
+      setStatus(error.message);
+      studioLog("floorplan-upload-failed", { name: file.name, message: error.message }, true);
+    } finally {
+      elements.MapFile.disabled = false;
+      elements.MapFile.value = "";
+      renderExportPanel();
+    }
+  }
+
+  function renderFloorplanEditor() {
+    const map = state.workspaceProject?.map;
+    const hasMap = map?.asset === "floorplan/map.jpg";
+    elements.FloorplanOptions.hidden = !workspaceMode || !state.workspaceProject?.scenes?.length;
+    elements.MapEnabled.checked = Boolean(hasMap && map.enabled === true);
+    elements.MapEnabled.disabled = !hasMap;
+    elements.MapStatus.textContent = !hasMap
+      ? "No floorplan is attached to this tour."
+      : `Drag each number to the camera position. ${map.enabled ? "It will appear in the finished tour." : "It is saved but hidden from the finished tour."}`;
+    elements.Floorplan.hidden = !hasMap;
+    elements.Floorplan.replaceChildren();
+    if (!hasMap) return;
+    const image = document.createElement("img");
+    image.src = workspaceAsset(map.asset);
+    image.alt = "Uploaded floorplan";
+    elements.Floorplan.appendChild(image);
+    api.scenes.forEach((scene, index) => {
+      const position = map.pins?.[scene.id];
+      if (!Number.isFinite(position?.x) || !Number.isFinite(position?.y)) return;
+      const pin = document.createElement("button");
+      pin.type = "button";
+      pin.className = "editor-floorplan__pin";
+      pin.dataset.floorplanScene = scene.id;
+      pin.style.left = `${position.x}%`;
+      pin.style.top = `${position.y}%`;
+      pin.textContent = String(index + 1);
+      pin.setAttribute("aria-label", `Move ${scene.title} on floorplan`);
+      pin.title = `${index + 1}. ${scene.title}`;
+      pin.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        floorplanDrag = { sceneId: scene.id, pointerId: event.pointerId };
+        pin.setPointerCapture?.(event.pointerId);
+        elements.Floorplan.classList.add("is-dragging");
+        setStatus(`Moving ${scene.title}`);
+      });
+      elements.Floorplan.appendChild(pin);
+    });
   }
 
   function releaseReadiness() {
@@ -2332,6 +2447,20 @@
   });
   elements.Build.addEventListener("click", buildRelease);
   elements.DownloadProject.addEventListener("click", downloadEditableProject);
+  elements.MapFile.addEventListener("change", uploadFloorplan);
+  elements.MapEnabled.addEventListener("change", async () => {
+    const map = state.workspaceProject?.map;
+    if (!map?.asset) return;
+    map.enabled = elements.MapEnabled.checked;
+    setStatus(map.enabled ? "Showing floorplan in the finished tour..." : "Hiding floorplan from the finished tour...");
+    try {
+      await saveFloorplanMap("floorplan-visibility-changed");
+      setStatus(map.enabled ? "Floorplan will be shown in the finished tour." : "Floorplan will be hidden from the finished tour.");
+    } catch (error) {
+      setStatus(error.message);
+    }
+    renderExportPanel();
+  });
   elements.DownloadDebug.addEventListener("click", async () => {
     try {
       const response = await fetch(studioUrl("debug-bundle"));
@@ -2474,6 +2603,35 @@
     if (!finishHotspotDrag(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+  }, true);
+  document.addEventListener("pointermove", (event) => {
+    if (!floorplanDrag || event.pointerId !== floorplanDrag.pointerId) return;
+    updateFloorplanPin(floorplanDrag.sceneId, floorplanPosition(event));
+    event.preventDefault();
+  }, true);
+  document.addEventListener("pointerup", async (event) => {
+    if (!floorplanDrag || event.pointerId !== floorplanDrag.pointerId) return;
+    const drag = floorplanDrag;
+    floorplanDrag = null;
+    elements.Floorplan.classList.remove("is-dragging");
+    try {
+      await saveFloorplanMap("floorplan-pin-moved");
+      setStatus("Floorplan position saved");
+    } catch (error) {
+      setStatus(error.message);
+      await refreshWorkspaceProject();
+      renderExportPanel();
+    }
+    studioLog("floorplan-pin-drag-finished", { sceneId: drag.sceneId }, true);
+    event.preventDefault();
+  }, true);
+  document.addEventListener("pointercancel", async (event) => {
+    if (!floorplanDrag || event.pointerId !== floorplanDrag.pointerId) return;
+    floorplanDrag = null;
+    elements.Floorplan.classList.remove("is-dragging");
+    await refreshWorkspaceProject();
+    renderExportPanel();
+    setStatus("Floorplan move cancelled");
   }, true);
   document.addEventListener("mouseup", (event) => {
     if (!finishHotspotDrag(event)) return;

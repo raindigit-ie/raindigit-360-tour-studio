@@ -15,7 +15,7 @@
     "test:studio-ui": "node scripts/test-studio-wizard-ui.mjs",
     "test:guided-flow": "node scripts/test-guided-studio-flow.mjs",
     "test:distribution": "node scripts/test-studio-kit.mjs",
-    "test:release-browser": "playwright test tests/release-mobile.spec.mjs",
+    "test:release-browser": "node scripts/test-release-browser.mjs",
     "test:all": "npm run check && npm run test:product && npm run test:studio-ui && npm run test:distribution && npm run test:release-browser"
   },
   "devDependencies": {

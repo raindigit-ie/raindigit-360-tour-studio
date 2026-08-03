@@ -1,4 +1,4 @@
-const { firstScene, scenes, title: tourTitle } = window.TOUR_CONFIG;
+const { firstScene, scenes, title: tourTitle, map: configuredMap = { enabled: false, asset: null, pins: {} } } = window.TOUR_CONFIG;
 const sceneById = Object.fromEntries(scenes.map((scene) => [scene.id, scene]));
 const configScenes = {};
 const viewParams = new URLSearchParams(window.location.search);
@@ -532,6 +532,11 @@ const routeStrip = document.querySelector("#routeStrip");
 const routeNodes = [];
 const navigatorToggle = document.querySelector("#navigatorToggle");
 const navigatorClose = document.querySelector("#navigatorClose");
+const mapToggle = document.querySelector("#mapToggle");
+const floorplanPanel = document.querySelector("#floorplanPanel");
+const floorplanClose = document.querySelector("#floorplanClose");
+const floorplanCanvas = document.querySelector("#floorplanCanvas");
+const floorplanPins = [];
 const fullscreenButton = document.querySelector("#fullscreen");
 let initialViewApplied = false;
 
@@ -547,6 +552,11 @@ function setActiveScene(sceneId) {
     const isActive = node.dataset.routeSpace === sceneById[sceneId].space;
     node.classList.toggle("is-active", isActive);
     node.setAttribute("aria-current", isActive ? "true" : "false");
+  });
+  floorplanPins.forEach((pin) => {
+    const isActive = pin.dataset.scene === sceneId;
+    pin.classList.toggle("is-active", isActive);
+    pin.setAttribute("aria-current", isActive ? "true" : "false");
   });
   sceneCounter.textContent = `View ${index + 1} of ${scenes.length}`;
   document.title = `${sceneById[sceneId].title} - ${tourTitle}`;
@@ -604,13 +614,48 @@ function setNavigatorOpen(isOpen) {
   navigatorToggle.title = isOpen ? "Hide room navigator" : "Show room navigator";
 }
 
+function setFloorplanOpen(isOpen) {
+  if (!configuredMap.enabled || !configuredMap.asset) return;
+  floorplanPanel.hidden = !isOpen;
+  mapToggle.setAttribute("aria-expanded", String(isOpen));
+  mapToggle.setAttribute("aria-label", isOpen ? "Hide floorplan" : "Show floorplan");
+  mapToggle.title = isOpen ? "Hide floorplan" : "Show floorplan";
+}
+
 navigatorToggle.addEventListener("click", () => {
   setNavigatorOpen(!document.body.classList.contains("is-navigator-open"));
 });
 navigatorClose.addEventListener("click", () => setNavigatorOpen(false));
+if (configuredMap.enabled && configuredMap.asset) {
+  mapToggle.hidden = false;
+  const image = document.createElement("img");
+  image.src = configuredMap.asset;
+  image.alt = "Property floorplan";
+  floorplanCanvas.appendChild(image);
+  Object.entries(configuredMap.pins || {}).forEach(([sceneId, pin]) => {
+    if (!sceneById[sceneId] || !Number.isFinite(pin?.x) || !Number.isFinite(pin?.y)) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "floorplan-pin";
+    button.dataset.scene = sceneId;
+    button.style.left = `${pin.x}%`;
+    button.style.top = `${pin.y}%`;
+    button.textContent = String(scenes.findIndex((scene) => scene.id === sceneId) + 1);
+    button.setAttribute("aria-label", `Open ${sceneById[sceneId].title}`);
+    button.addEventListener("click", () => {
+      viewer.loadScene(sceneId);
+      setFloorplanOpen(false);
+    });
+    floorplanPins.push(button);
+    floorplanCanvas.appendChild(button);
+  });
+  mapToggle.addEventListener("click", () => setFloorplanOpen(floorplanPanel.hidden));
+  floorplanClose.addEventListener("click", () => setFloorplanOpen(false));
+}
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     setNavigatorOpen(false);
+    setFloorplanOpen(false);
   }
 });
 

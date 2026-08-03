@@ -33,6 +33,7 @@ const previewEndpoint = "/__tour-preview";
 // X4 DNG files are commonly about 140 MB. The raw source is processed locally,
 // then discarded from the workspace; only the derived panorama is retained.
 const maxUploadBytes = 256 * 1024 * 1024;
+const maxFloorplanBytes = 15 * 1024 * 1024;
 const maxProjectBytes = 512 * 1024 * 1024;
 const maxStudioLogBytes = 5 * 1024 * 1024;
 
@@ -48,11 +49,13 @@ const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".jpg": "image/jpeg",
+  ".png": "image/png",
   ".js": "application/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".rdtour": "application/zip",
+  ".json": "application/json; charset=utf-8",
+  ".rdtour": "application/zip",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
+  ".webp": "image/webp",
   ".zip": "application/zip"
 };
 
@@ -84,6 +87,19 @@ function emptyWorkspaceProject(title = "Untitled 3D Tour") {
     rooms: [],
     scenes: []
   };
+}
+
+function isValidFloorplanMap(value, sceneIds = new Set()) {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (typeof value.enabled !== "boolean") return false;
+  if (value.asset !== undefined && value.asset !== null && value.asset !== "floorplan/map.jpg") return false;
+  if (value.enabled && value.asset !== "floorplan/map.jpg") return false;
+  if (value.pins !== undefined && (!value.pins || typeof value.pins !== "object" || Array.isArray(value.pins))) return false;
+  return Object.entries(value.pins || {}).every(([sceneId, pin]) =>
+    /^scene-\d{3,}$/i.test(sceneId) && (sceneIds.size === 0 || sceneIds.has(sceneId)) && pin && typeof pin === "object" && !Array.isArray(pin) &&
+    Number.isFinite(pin.x) && pin.x >= 0 && pin.x <= 100 && Number.isFinite(pin.y) && pin.y >= 0 && pin.y <= 100
+  );
 }
 
 function isWorkspaceRequest(url) {
@@ -234,7 +250,7 @@ function validateWorkspaceProject(value) {
       Number.isFinite(scene.pitch) && Number.isFinite(scene.yaw) && Number.isFinite(scene.hfov) &&
       Array.isArray(scene.hotspots);
   });
-  return validScenes && value.scenes.every((scene) => (scene.plannedTargets || []).every((target) => ids.has(target)));
+  return validScenes && isValidFloorplanMap(value.map, ids) && value.scenes.every((scene) => (scene.plannedTargets || []).every((target) => ids.has(target)));
 }
 
 function cleanHeader(value) {
@@ -394,7 +410,9 @@ async function createProjectBackup() {
   }
   await mkdir(dirname(projectBackupPath), { recursive: true });
   await rm(projectBackupPath, { force: true });
-  await execFileAsync("zip", ["-X", "-r", projectBackupPath, "tour-project.json", "draft.json", "panoramas", "thumbnails"], { cwd: workspaceRoot, maxBuffer: 1024 * 1024 });
+  const entries = ["tour-project.json", "draft.json", "panoramas", "thumbnails"];
+  if (project.map?.asset === "floorplan/map.jpg") entries.push("floorplan");
+  await execFileAsync("zip", ["-X", "-r", projectBackupPath, ...entries], { cwd: workspaceRoot, maxBuffer: 1024 * 1024 });
   return stat(projectBackupPath);
 }
 
@@ -408,7 +426,7 @@ async function restoreProjectBackup(source) {
     const { stdout } = await execFileAsync("unzip", ["-Z1", archivePath], { maxBuffer: 1024 * 1024 });
     const entries = stdout.split(/\r?\n/).filter(Boolean);
     if (!entries.includes("tour-project.json") || !entries.includes("draft.json")) throw new Error("This is not a RainDigit editable project.");
-    if (entries.length > 260 || entries.some((entry) => entry.startsWith("/") || entry.includes("..") || !/^(tour-project\.json|draft\.json|panoramas\/(?:scene-\d{3,}\.jpg)?|thumbnails\/(?:scene-\d{3,}\.jpg)?)$/i.test(entry))) {
+    if (entries.length > 270 || entries.some((entry) => entry.startsWith("/") || entry.includes("..") || !/^(tour-project\.json|draft\.json|panoramas\/(?:scene-\d{3,}\.jpg)?|thumbnails\/(?:scene-\d{3,}\.jpg)?|floorplan\/?|floorplan\/map\.jpg)$/i.test(entry))) {
       throw new Error("Project backup contains unsupported files.");
     }
     await mkdir(extractedRoot, { recursive: true });
@@ -419,6 +437,10 @@ async function restoreProjectBackup(source) {
     for (const scene of project.scenes) {
       const [panorama, thumb] = await Promise.all([stat(join(extractedRoot, scene.panorama)), stat(join(extractedRoot, scene.thumb))]);
       if (!panorama.isFile() || !thumb.isFile()) throw new Error(`Project media is missing for ${scene.id}.`);
+    }
+    if (project.map?.asset === "floorplan/map.jpg") {
+      const floorplan = await stat(join(extractedRoot, project.map.asset));
+      if (!floorplan.isFile()) throw new Error("Project floorplan is missing.");
     }
     await rm(workspaceRoot, { recursive: true, force: true });
     await rename(extractedRoot, workspaceRoot);
@@ -534,10 +556,14 @@ function workspaceConfig(project, scope) {
     panorama: `${prefix}/workspace/${scene.panorama}`,
     thumb: `${prefix}/workspace/${scene.thumb}`
   }));
+  const map = project.map?.asset === "floorplan/map.jpg"
+    ? { enabled: project.map.enabled === true, asset: `${prefix}/workspace/${project.map.asset}`, pins: project.map.pins || {} }
+    : { enabled: false, asset: null, pins: {} };
   return {
     title: project.title,
     firstScene: scenes[0]?.id || null,
-    scenes
+    scenes,
+    map
   };
 }
 
@@ -735,6 +761,7 @@ const server = createServer(async (request, response) => {
             hotspots: candidate.hotspots.filter((hotspot) => hotspot.target !== sceneId),
             plannedTargets: (candidate.plannedTargets || []).filter((target) => target !== sceneId)
           }));
+        if (existing.map?.pins) delete existing.map.pins[sceneId];
         existing.firstScene = existing.firstScene === sceneId ? existing.scenes[0]?.id || null : existing.firstScene;
         await writeWorkspaceProject(existing);
 
@@ -753,7 +780,59 @@ const server = createServer(async (request, response) => {
         replyJson(response, 200, existing);
         return;
       }
+      if (body?.action === "map") {
+        if (!existing) {
+          replyJson(response, 409, { error: "Create a tour before configuring its floorplan." });
+          return;
+        }
+        const current = existing.map || { enabled: false, asset: null, pins: {} };
+        const pins = body.pins === undefined ? current.pins || {} : body.pins;
+        const next = { enabled: body.enabled === true, asset: current.asset, pins };
+        if (next.enabled && next.asset !== "floorplan/map.jpg") {
+          replyJson(response, 400, { error: "Upload a floorplan before showing it in the finished tour." });
+          return;
+        }
+        if (!isValidFloorplanMap(next, new Set(existing.scenes.map((scene) => scene.id)))) {
+          replyJson(response, 400, { error: "Floorplan pins are invalid." });
+          return;
+        }
+        existing.map = next;
+        await writeWorkspaceProject(existing);
+        replyJson(response, 200, existing);
+        return;
+      }
       replyJson(response, 400, { error: "Unsupported workspace action." });
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/workspace-map` && request.method === "POST") {
+      const project = await readWorkspaceProject();
+      if (!project) {
+        replyJson(response, 409, { error: "Create a tour before adding a floorplan." });
+        return;
+      }
+      const fileName = cleanHeader(request.headers["x-tour-file-name"]).replace(/[\\/]/g, "");
+      if (!fileName || !/\.(?:jpe?g|png|webp)$/i.test(fileName)) {
+        replyJson(response, 400, { error: "Choose a JPG, PNG or WebP floorplan image." });
+        return;
+      }
+      const source = await readBody(request, maxFloorplanBytes);
+      const temporaryInput = join(workspaceRoot, `.floorplan-${process.pid}-${Date.now()}${extname(fileName).toLowerCase()}`);
+      const output = join(workspaceRoot, "floorplan", "map.jpg");
+      await mkdir(dirname(output), { recursive: true });
+      await writeFile(temporaryInput, source);
+      try {
+        await runMagick([temporaryInput, "-auto-orient", "-resize", "1920x1920>", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "90", output]);
+      } finally {
+        await rm(temporaryInput, { force: true });
+      }
+      const existingPins = project.map?.pins || {};
+      const pins = Object.fromEntries(project.scenes.map((scene, index) => {
+        const fallback = { x: Math.round(18 + (index % 4) * 21), y: Math.round(22 + (Math.floor(index / 4) % 4) * 21) };
+        return [scene.id, isValidFloorplanMap({ enabled: false, pins: { [scene.id]: existingPins[scene.id] } }, new Set([scene.id])) ? existingPins[scene.id] : fallback];
+      }));
+      project.map = { enabled: true, asset: "floorplan/map.jpg", pins };
+      await writeWorkspaceProject(project);
+      replyJson(response, 201, { map: project.map, project });
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/workspace-import` && request.method === "POST") {

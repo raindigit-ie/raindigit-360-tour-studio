@@ -29,6 +29,13 @@
             </svg>
             <span class="icon-button__label">Rooms</span>
           </button>
+          <button class="icon-button" id="mapToggle" type="button" hidden aria-expanded="false" aria-controls="floorplanPanel" aria-label="Show floorplan" title="Show floorplan">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
+              <path d="M9 3v15" />
+              <path d="M15 6v15" />
+            </svg>
+          </button>
           <button class="icon-button" id="resetView" type="button" aria-label="Reset current view" title="Reset current view">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -62,6 +69,16 @@
         <div id="routeStrip" class="route-strip" aria-label="Tour route"></div>
         <div id="sceneList" class="scene-list"></div>
       </aside>
+
+      <section class="floorplan-panel" id="floorplanPanel" hidden aria-label="Floorplan">
+        <header class="floorplan-panel__header">
+          <strong>Floorplan</strong>
+          <button class="icon-button icon-button--small" id="floorplanClose" type="button" aria-label="Close floorplan" title="Close floorplan">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12" /><path d="m18 6-12 12" /></svg>
+          </button>
+        </header>
+        <div class="floorplan-panel__canvas" id="floorplanCanvas"></div>
+      </section>
     </main>
 
     <script src="js/tour-bootstrap.js?v=20260802-stage-restore-v2"></script>

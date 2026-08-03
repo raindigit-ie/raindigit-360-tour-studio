@@ -58,6 +58,17 @@ async function importPanorama(baseUrl, filePath, roomId, roomLabel, expected = 2
   }, expected);
 }
 
+async function uploadFloorplan(baseUrl, filePath, expected = 201) {
+  return requestJson(`${baseUrl}/__tour-editor/workspace-map?workspace=1`, {
+    method: "POST",
+    headers: {
+      "content-type": "image/png",
+      "x-tour-file-name": encodeURIComponent(filePath.split("/").pop())
+    },
+    body: await readFile(filePath)
+  }, expected);
+}
+
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "raindigit-360-product-test-"));
   const workspace = join(root, "workspace");
@@ -133,6 +144,19 @@ async function main() {
     assert(structured.firstScene === "scene-002", "The first visible viewpoint order must define the opening scene.");
     assert(structured.scenes[0].id === "scene-002", "Viewpoint order must persist.");
 
+    const floorplanPath = join(root, "floorplan.png");
+    await runMagick(["-size", "1200x800", "xc:#efe4c5", "-fill", "#254b42", "-draw", "rectangle 120,120 1080,680", floorplanPath]);
+    const uploadedMap = await uploadFloorplan(baseUrl, floorplanPath);
+    assert(uploadedMap.project.map.enabled === true && uploadedMap.project.map.asset === "floorplan/map.jpg", "Floorplan upload must create an enabled normalized map.");
+    assert(Object.keys(uploadedMap.project.map.pins).length === 3, "Floorplan upload must create one pin for every viewpoint.");
+    const mapPins = { ...uploadedMap.project.map.pins, "scene-002": { x: 72.5, y: 31.5 } };
+    const savedMap = await requestJson(`${baseUrl}/__tour-editor/workspace-project`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "map", enabled: true, pins: mapPins })
+    });
+    assert(savedMap.map.pins["scene-002"].x === 72.5 && savedMap.map.pins["scene-002"].y === 31.5, "Floorplan pin positions must persist exactly.");
+
     const draft = {
       schema: "raindigit-tour-hotspot-overrides/v1",
       updatedAt: new Date().toISOString(),
@@ -170,6 +194,7 @@ async function main() {
     const configResponse = await fetch(`${baseUrl}/__tour-editor/workspace-config.js?workspace=1`);
     const config = await configResponse.text();
     assert(configResponse.ok && config.includes("room-kitchen") && config.includes("room-hall"), "Workspace preview config must contain both rooms.");
+    assert(config.includes('"map":{"enabled":true') && config.includes("floorplan/map.jpg"), "Workspace preview config must contain the optional floorplan.");
 
     const sameOriginPreviewStatus = await requestJson(`${baseUrl}/__tour-preview/status?workspace=1`);
     assert(sameOriginPreviewStatus.writable === false && sameOriginPreviewStatus.workspaceAvailable === true, "The studio must expose a same-origin read-only preview.");
@@ -202,9 +227,11 @@ async function main() {
     const { stdout: listing } = await execFileAsync("unzip", ["-Z1", zip]);
     assert(listing.includes("INSTALL.txt"), "The package must contain installation instructions.");
     assert(listing.includes("index.html") && listing.includes("js/tour-config.js"), "The package must contain a deployable tour.");
+    assert(listing.includes("assets/m/"), "The release archive must include the enabled floorplan asset.");
     assert(!/draft\.json|tour-editor|tour-preview|studio-workspace/i.test(listing), "Editor or draft data leaked into the release archive.");
     const releaseConfig = await readFile(join(output, "js", "tour-config.js"), "utf8");
     assert(releaseConfig.includes('"firstScene":"scene-002"'), "The release must open on the first visible viewpoint, not a stale firstScene.");
+    assert(releaseConfig.includes('"map":{"enabled":true') && /"asset":"assets\/m\/[a-f0-9]{20}\.jpg"/.test(releaseConfig), "The release must use a hashed floorplan asset.");
     assert(releaseConfig.includes('"pitch":-8') && releaseConfig.includes('"yaw":-60') && releaseConfig.includes('"hfov":92'), "Saved default viewpoints must be baked into the release.");
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
@@ -214,7 +241,7 @@ async function main() {
     assert(singleRuntime, "The single HTML must embed its runtime.");
     assert(!singleRelease.includes("\n"), "The single HTML must stay on one line.");
     const singleRuntimeJs = Buffer.from(singleRuntime, "base64").toString("utf8");
-    assert(singleRuntimeJs.includes("data:image/jpeg;base64,") && singleRuntimeJs.includes('"firstScene":"scene-002"'), "The single HTML runtime must embed the tour and preserve the first visible viewpoint.");
+    assert(singleRuntimeJs.includes("data:image/jpeg;base64,") && singleRuntimeJs.includes('"firstScene":"scene-002"') && singleRuntimeJs.includes('"map":{"enabled":true'), "The single HTML runtime must embed the tour, floorplan and first visible viewpoint.");
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");
     const embedRelease = await readFile(embedHtml, "utf8");
     assert(embedRelease.includes("Loading 360 tour...") && embedRelease.includes("requestIdleCallback") && embedRelease.includes("srcdoc"), "The paste-in HTML must preload and lazy-start the self-contained tour.");
@@ -230,7 +257,7 @@ async function main() {
     const backupPath = join(root, "product-qa.rdtour");
     await writeFile(backupPath, projectBackup);
     const { stdout: backupListing } = await execFileAsync("unzip", ["-Z1", backupPath]);
-    assert(backupListing.includes("tour-project.json") && backupListing.includes("draft.json") && backupListing.includes("panoramas/scene-001.jpg"), "Editable project must include JSON and media.");
+    assert(backupListing.includes("tour-project.json") && backupListing.includes("draft.json") && backupListing.includes("panoramas/scene-001.jpg") && backupListing.includes("floorplan/map.jpg"), "Editable project must include JSON, media and the optional floorplan.");
 
     const singleOutput = join(root, "release-single");
     const singleZip = join(root, "raindigit-single-tour.zip");
@@ -278,6 +305,7 @@ async function main() {
       sameOriginPreview: true,
       singleHtml: true,
       pasteInHtml: true,
+      optionalFloorplan: true,
       archiveBytes: (await stat(zip)).size
     }, null, 2));
   } finally {

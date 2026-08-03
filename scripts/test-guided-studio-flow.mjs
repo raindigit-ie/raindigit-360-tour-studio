@@ -107,6 +107,13 @@ async function elementCenter(page, selector) {
   });
 }
 
+async function waitForMarkerAt(page, target, tolerance = 8) {
+  await page.waitForFunction(({ expected, allowedDifference }) => {
+    const marker = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot")?.getBoundingClientRect();
+    return Boolean(marker && Math.abs((marker.left + marker.width / 2) - expected.x) <= allowedDifference && Math.abs((marker.top + marker.height / 2) - expected.y) <= allowedDifference);
+  }, { expected: target, allowedDifference: tolerance }, { timeout: 3000 });
+}
+
 async function dragElementCenter(page, selector, deltaX, deltaY) {
   const start = await elementCenter(page, selector);
   const hitTarget = await page.evaluate(({ x, y }) => {
@@ -292,6 +299,7 @@ async function main() {
     await page.getByRole("button", { name: "Save point here" }).click();
     await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Next walking button" }).waitFor();
+    await waitForMarkerAt(page, firstTarget);
     const firstMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
     assertNear(firstMarker.x, firstTarget.x, 8, "The first walking button did not stay under the centre target after save");
     assertNear(firstMarker.y, firstTarget.y, 8, "The first walking button did not stay under the centre target after save");
@@ -325,8 +333,9 @@ async function main() {
     first = firstAfterDrag;
     await page.getByRole("button", { name: "Adjust point" }).click();
     await page.getByRole("button", { name: "Update point here" }).waitFor();
-    const currentMarkerWhileAdjusting = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
     const currentTargetWhileAdjusting = await elementCenter(page, ".editor-centre-target");
+    await waitForMarkerAt(page, currentTargetWhileAdjusting);
+    const currentMarkerWhileAdjusting = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
     assertNear(currentMarkerWhileAdjusting.x, currentTargetWhileAdjusting.x, 8, "Editing an existing point did not show the selected marker under the centre target");
     assertNear(currentMarkerWhileAdjusting.y, currentTargetWhileAdjusting.y, 8, "Editing an existing point did not show the selected marker under the centre target");
     await page.getByRole("button", { name: "Update point here" }).click();
@@ -339,6 +348,7 @@ async function main() {
     const secondTarget = await elementCenter(page, ".editor-centre-target");
     await page.getByRole("button", { name: "Save point here" }).click();
     await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
+    await waitForMarkerAt(page, secondTarget);
     const secondMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
     assertNear(secondMarker.x, secondTarget.x, 8, "The second walking button did not stay under the centre target after save");
     assertNear(secondMarker.y, secondTarget.y, 8, "The second walking button did not stay under the centre target after save");

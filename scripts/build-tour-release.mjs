@@ -117,6 +117,20 @@ function normaliseProject(project) {
   assert(ids.has(project.firstScene || project.scenes[0].id), "Initial scene must exist in the project.");
   const normalised = structuredClone(project);
   normalised.firstScene = normalised.scenes[0].id;
+  const sceneIds = new Set(normalised.scenes.map((scene) => scene.id));
+  const map = normalised.map;
+  if (!map || map.enabled !== true || map.asset !== "floorplan/map.jpg") {
+    normalised.map = { enabled: false, asset: null, pins: {} };
+  } else {
+    assert(map.pins && typeof map.pins === "object" && !Array.isArray(map.pins), "Floorplan pins must be an object.");
+    normalised.map = {
+      enabled: true,
+      asset: "floorplan/map.jpg",
+      pins: Object.fromEntries(Object.entries(map.pins)
+        .filter(([sceneId, pin]) => sceneIds.has(sceneId) && Number.isFinite(pin?.x) && Number.isFinite(pin?.y))
+        .map(([sceneId, pin]) => [sceneId, { x: clamp(pin.x, 0, 100, 50), y: clamp(pin.y, 0, 50) }]))
+    };
+  }
   return normalised;
 }
 
@@ -267,6 +281,22 @@ async function buildScene(scene, workspace, output, draft, temporaryRoot, qualit
   return { panorama: panoramaRelative, thumb: thumbnailRelative, bytes: (await stat(panoramaOutput)).size + (await stat(thumbnailOutput)).size };
 }
 
+async function buildFloorplan(project, workspace, output, temporaryRoot) {
+  if (project.map?.enabled !== true || project.map.asset !== "floorplan/map.jpg") return 0;
+  const input = join(workspace, project.map.asset);
+  const source = await readFile(input);
+  assert(source.length > 0, "Floorplan image is empty.");
+  const work = join(temporaryRoot, "floorplan.jpg");
+  await runMagick([input, "-auto-orient", "-resize", "1600x1600>", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "88", work]);
+  const hash = await hashFile(work);
+  const relative = `assets/m/${hash.slice(0, 20)}.jpg`;
+  const target = join(output, relative);
+  await mkdir(dirname(target), { recursive: true });
+  await rename(work, target);
+  project.map.asset = relative;
+  return (await stat(target)).size;
+}
+
 async function copyRuntime(output) {
   const source = join(projectRoot, "web-tour");
   await cp(join(source, "index.html"), join(output, "index.html"));
@@ -332,6 +362,9 @@ async function createSingleHtml(output, project, singlePath) {
     scene.panorama = await dataUrl(join(output, scene.panorama), "image/jpeg");
     scene.thumb = await dataUrl(join(output, scene.thumb), "image/jpeg");
   }
+  if (singleProject.map?.enabled === true && singleProject.map.asset) {
+    singleProject.map.asset = await dataUrl(join(output, singleProject.map.asset), "image/jpeg");
+  }
   const [template, pannellumCss, tourCss, pannellumJs, tourJs, logo] = await Promise.all([
     readFile(join(output, "index.html"), "utf8"),
     readFile(join(output, "css", "pannellum.css"), "utf8"),
@@ -394,6 +427,7 @@ async function main() {
       delete scene.sourceHash;
       totalBytes += result.bytes;
     }
+    totalBytes += await buildFloorplan(project, workspace, options.output, temporaryRoot);
     await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
     await rm(temporaryRoot, { recursive: true, force: true });
     if (options.zip) await createZip(options.output, options.zip);

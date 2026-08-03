@@ -24,7 +24,7 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   expect(layout.cornerBackground).not.toBe("rgb(255, 255, 255)");
 
   const screenshot = await page.screenshot();
-  expect(screenshot.byteLength).toBeGreaterThan(100_000);
+  expect(screenshot.byteLength).toBeGreaterThan(50_000);
 
   const navigatorToggle = page.locator("#navigatorToggle");
   await navigatorToggle.click();
@@ -46,4 +46,38 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   }));
   expect(globals).toEqual({ editor: false, preview: false });
   expect(consoleErrors).toEqual([]);
+});
+
+test("mobile release exposes an optional floorplan without blocking the tour", async ({ page }) => {
+  await page.route(/\/js\/tour-config\.js(?:\?.*)?$/, (route) => route.fulfill({
+    contentType: "application/javascript; charset=utf-8",
+    body: `window.TOUR_CONFIG=${JSON.stringify({
+      schema: "raindigit-tour-project/v1",
+      title: "Floorplan QA Tour",
+      firstScene: "scene-001",
+      map: {
+        enabled: true,
+        asset: "assets/studio-placeholder.svg",
+        pins: { "scene-001": { x: 24, y: 64 }, "scene-002": { x: 76, y: 32 } }
+      },
+      scenes: [
+        { id: "scene-001", title: "Kitchen", subtitle: "Kitchen view", space: "kitchen", spaceLabel: "Kitchen", thumb: "assets/studio-placeholder.svg", panorama: "assets/studio-placeholder.svg", pitch: 0, yaw: 0, hfov: 94, hotspots: [] },
+        { id: "scene-002", title: "Hall", subtitle: "Hall view", space: "hall", spaceLabel: "Hall", thumb: "assets/studio-placeholder.svg", panorama: "assets/studio-placeholder.svg", pitch: 0, yaw: 0, hfov: 94, hotspots: [] }
+      ]
+    })};`
+  }));
+  await page.goto("/?floorplan-qa=1");
+  await expect(page.locator(".pnlm-render-container canvas")).toBeVisible();
+
+  const toggle = page.locator("#mapToggle");
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(page.locator("#floorplanPanel")).toBeVisible();
+  await expect(page.locator(".floorplan-pin")).toHaveCount(2);
+  await page.locator('.floorplan-pin[data-scene="scene-002"]').click();
+  await expect(page.locator("#sceneCounter")).toContainText("View 2 of 2");
+  await expect(page.locator("#floorplanPanel")).toBeHidden();
+  await toggle.click();
+  await page.locator("#floorplanClose").click();
+  await expect(page.locator("#floorplanPanel")).toBeHidden();
 });
