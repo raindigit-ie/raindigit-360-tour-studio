@@ -45,6 +45,9 @@
     arrivalQueueTotal: 0,
     arrivalLoading: false,
     arrivalSaving: false,
+    placementGuides: {},
+    guidePreferences: { visible: true, snapEnabled: true, snapToleranceDeg: 2.2 },
+    showOriginalLook: false,
     initializing: true,
     viewportSettling: false,
     viewerSettled: false,
@@ -83,6 +86,11 @@
         <div class="editor-step-heading"><span>Start</span><h2>Start a tour</h2></div>
         <div class="editor-start-options">
           <section class="editor-start-block">
+            <strong>Continue current tour</strong>
+            <p class="editor-start-copy" id="editorCurrentProject">No local tour is open.</p>
+            <button class="editor-button editor-button--wide" id="editorContinueWorkspace" type="button" disabled>Continue current tour</button>
+          </section>
+          <section class="editor-start-block">
             <strong>New tour</strong>
             <label class="editor-field editor-field--stacked">
               <span>Tour name</span>
@@ -103,9 +111,9 @@
       <section class="editor-stage-panel" data-stage-panel="upload">
         <div class="editor-step-heading"><span>Step 1</span><h2>Add 360 photos</h2></div>
         <label class="editor-upload-zone">
-          <strong>Choose 360 JPG photos</strong>
-          <span>Use the stitched photos exported by your 360 camera.</span>
-          <input id="editorImportFiles" type="file" accept="image/jpeg,.jpg,.jpeg" multiple />
+          <strong>Choose 360 JPG or DNG photos</strong>
+          <span>JPG is ready to use. DNG is developed locally and must already be a stitched 2:1 panorama.</span>
+          <input id="editorImportFiles" type="file" accept="image/jpeg,image/x-adobe-dng,.jpg,.jpeg,.dng" multiple />
         </label>
         <p class="editor-empty" id="editorProjectEmpty"></p>
         <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded 360 photos"></div>
@@ -136,6 +144,8 @@
       <section class="editor-stage-panel" data-stage-panel="light">
         <div class="editor-step-heading"><span>Step 3</span><h2>Choose the look</h2></div>
         <div class="editor-presets" id="editorImagePresets" aria-label="Picture style"></div>
+        <div class="editor-picture-actions"><button class="editor-button" id="editorToggleOriginal" type="button">Show original</button><button class="editor-button" id="editorApplyLookRoom" type="button">Apply look to room</button></div>
+        <p class="editor-image-warning" id="editorImageWarning"></p>
         <details class="editor-disclosure editor-disclosure--compact">
           <summary>Fine tune picture</summary>
           <div class="editor-image__controls" id="editorImageControls"></div>
@@ -157,6 +167,8 @@
           <span>Drag the 360 photo, then save the walking button.</span>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorConfirmCentre" type="button">Save point here</button>
           <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Change rooms and routes</button>
+          <div class="editor-placement-tools"><button class="editor-button" id="editorInspectSource" type="button">Inspect source photo</button><button class="editor-button" id="editorUseRoomHeight" type="button">Use room height</button><label><input id="editorGuideSnap" type="checkbox" checked /> Snap to room height</label></div>
+          <details class="editor-disclosure editor-disclosure--compact"><summary>Placement details</summary><p id="editorGuideReadout"></p></details>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
@@ -205,6 +217,7 @@
           </details>
           <details class="editor-advanced">
             <summary>Backups and advanced files</summary>
+            <button class="editor-button editor-button--wide" id="editorDownloadDebug" type="button">Download debug bundle</button>
             <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable backup</button>
             <a class="editor-button editor-button--wide" id="editorDownloadZip" download="raindigit-360-tour.zip">Download folder package (.zip)</a>
           </details>
@@ -240,7 +253,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -261,6 +274,18 @@
   centreTarget.hidden = true;
   centreTarget.setAttribute("aria-hidden", "true");
   viewerElement.appendChild(centreTarget);
+  const placementGuides = document.createElement("div");
+  placementGuides.className = "editor-placement-guides";
+  placementGuides.hidden = true;
+  placementGuides.setAttribute("aria-hidden", "true");
+  placementGuides.innerHTML = '<i class="editor-placement-guides__eye"></i><i class="editor-placement-guides__floor"></i><b>Room height</b>';
+  viewerElement.appendChild(placementGuides);
+  const arrivalGuides = document.createElement("div");
+  arrivalGuides.className = "editor-arrival-guides";
+  arrivalGuides.hidden = true;
+  arrivalGuides.setAttribute("aria-hidden", "true");
+  arrivalGuides.innerHTML = '<i></i><i></i><span>First view</span>';
+  viewerElement.appendChild(arrivalGuides);
   let placementPointerStart = null;
   let hotspotDrag = null;
   let suppressPlacementClick = false;
@@ -416,6 +441,33 @@
 
   function currentScene() {
     return api.sceneById[api.viewer.getScene()] || null;
+  }
+
+  function guideForScene(scene = currentScene()) {
+    const roomId = scene?.space;
+    const saved = roomId ? state.placementGuides[roomId] : null;
+    return {
+      roomId,
+      defaultPitch: Number.isFinite(saved?.defaultPitch) ? saved.defaultPitch : -8,
+      snapEnabled: saved?.snapEnabled ?? state.guidePreferences.snapEnabled,
+      snapToleranceDeg: saved?.snapToleranceDeg ?? state.guidePreferences.snapToleranceDeg
+    };
+  }
+
+  function snappedPitch(scene, pitch, allowSnap = true) {
+    const guide = guideForScene(scene);
+    if (!allowSnap || !guide.snapEnabled || Math.abs(pitch - guide.defaultPitch) > guide.snapToleranceDeg) return pitch;
+    studioLog("guide-snap", { roomId: guide.roomId, fromPitch: roundCoordinate(pitch), toPitch: roundCoordinate(guide.defaultPitch) });
+    return guide.defaultPitch;
+  }
+
+  function placementWarnings(scene, hotspot) {
+    if (!scene || !hotspot) return [];
+    const warnings = [];
+    if (hotspot.pitch > 18 || hotspot.pitch < -48) warnings.push("The button is unusually high or low. Check the real doorway or camera point.");
+    if (Math.abs(Math.abs(hotspot.yaw) - 180) < 8) warnings.push("The button is close to the panorama seam. Check it from both directions.");
+    if (hotspot.pitch < -62) warnings.push("The button is near the tripod area. Check that it marks a walking path.");
+    return warnings;
   }
 
   function selectedHotspot() {
@@ -763,6 +815,12 @@
 
   function renderStartPanel() {
     elements.ProjectTitle.value ||= "Untitled 360 Tour";
+    const project = state.workspaceProject;
+    const saved = state.savedAt ? new Date(state.savedAt).toLocaleString() : "not saved yet";
+    elements.CurrentProject.textContent = project
+      ? `${project.title}: ${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"}, ${projectRooms(project).length} room${projectRooms(project).length === 1 ? "" : "s"}; saved ${saved}.`
+      : "No local tour is open.";
+    elements.ContinueWorkspace.disabled = !project;
   }
 
   function renderUploadPanel() {
@@ -784,7 +842,7 @@
       const title = document.createElement("strong");
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
-      dimensions.textContent = "360 photo ready";
+      dimensions.textContent = scene.sourceFormat === "dng" ? "DNG developed locally" : "360 photo ready";
       details.append(title, dimensions);
       const remove = document.createElement("button");
       remove.className = "editor-button editor-button--icon editor-button--danger";
@@ -1213,7 +1271,7 @@
         const response = await fetch(studioUrl("workspace-import", true), {
           method: "POST",
           headers: {
-            "content-type": "image/jpeg",
+            "content-type": /\.dng$/i.test(file.name) ? "image/x-adobe-dng" : "image/jpeg",
             "x-tour-file-name": encodeURIComponent(file.name),
             "x-tour-room-id": encodeURIComponent(roomId),
             "x-tour-room-label": encodeURIComponent(roomLabel)
@@ -1317,20 +1375,26 @@
     elements.PlaceAtCentre.hidden = !showPlacementPanel;
     elements.ConfirmCentre.disabled = !viewerReady;
     const target = selected ? api.sceneById[selected.hotspot.target] : null;
+    const guide = guideForScene(source);
+    elements.GuideSnap.checked = guide.snapEnabled;
+    elements.UseRoomHeight.disabled = !selected || !viewerReady;
+    elements.GuideReadout.textContent = `Room guide: ${roundCoordinate(guide.defaultPitch)} degrees. Snap range: ${roundCoordinate(guide.snapToleranceDeg)} degrees. Hold Option while dragging to bypass snap.`;
     if (selected && state.linkStep === "review") {
       elements.PlaceAtCentre.querySelector("strong").textContent = "Check the walking button on the photo.";
       elements.PlaceAtCentre.querySelector("span").textContent = "If it is in the right place, continue. If not, adjust it.";
       elements.ConfirmCentre.textContent = "Adjust point";
       elements.ConfirmCentre.classList.remove("editor-button--primary");
       elements.CancelCentre.textContent = "Change rooms and routes";
-      elements.LinkGuidance.textContent = `Check ${selected.scene.title} to ${target?.title || "the selected place"}.`;
+      const warnings = placementWarnings(selected.scene, selected.hotspot);
+      elements.LinkGuidance.textContent = `Check ${selected.scene.title} to ${target?.title || "the selected place"}.${warnings.length ? ` ${warnings.join(" ")}` : ""}`;
+      studioLog("movement-review-shown", { sceneId: selected.scene.id, target: selected.hotspot.target, warnings }, true);
     } else if (selected) {
       elements.PlaceAtCentre.querySelector("strong").textContent = "Put the walking button under the door or camera point.";
       elements.PlaceAtCentre.querySelector("span").textContent = "Drag the 360 photo until the target is under the cross, then save.";
       elements.ConfirmCentre.textContent = selected.hotspot.positionConfirmed ? "Update point here" : "Save point here";
       elements.ConfirmCentre.classList.add("editor-button--primary");
       elements.CancelCentre.textContent = "Change rooms and routes";
-      elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}.`;
+      elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}. Place the button on the real route, not on furniture or a wall.`;
     } else {
       elements.LinkGuidance.textContent = "Every walking button has an exact position.";
     }
@@ -1429,6 +1493,14 @@
       });
       elements.ImagePresets.appendChild(button);
     });
+    const adjustment = api.getSceneAdjustment(sceneId);
+    const warnings = [];
+    if (adjustment.brightness > 120) warnings.push("Very bright settings can lose window detail.");
+    if (adjustment.saturation > 135) warnings.push("High saturation can make interior colours look unnatural.");
+    if (api.getLocalAdjustments(sceneId).length > 12) warnings.push("Many light areas can be hard to review.");
+    elements.ImageWarning.textContent = warnings.join(" ");
+    elements.ToggleOriginal.textContent = state.showOriginalLook ? "Show edited" : "Show original";
+    elements.ApplyLookRoom.textContent = `Apply look to ${currentScene()?.spaceLabel || "room"}`;
   }
 
   function updateSelectedAdjustment(change) {
@@ -1639,6 +1711,8 @@
     const centringSelection = selectedHotspot();
     const centring = state.activeStage === "links" && state.linkStep === "place" && centringSelection?.scene.id === api.viewer.getScene();
     centreTarget.hidden = !centring;
+    placementGuides.hidden = !centring || !state.guidePreferences.visible;
+    arrivalGuides.hidden = !(state.activeStage === "arrival" && state.arrival && api.viewer.isLoaded());
     document.body.classList.toggle("is-editor-centre-target", centring);
   }
 
@@ -1681,10 +1755,14 @@
   function saveSelectedHotspotAtViewerCenter(reason = "movement-centre-confirmed") {
     const selected = selectedHotspot();
     if (!selected) return false;
+    // Centre placement is the operator's explicit measurement. Do not replace it
+    // with a guide snap or the marker would no longer remain under the cross.
     const pitch = roundCoordinate(api.viewer.getPitch());
     const yaw = roundCoordinate(api.viewer.getYaw());
     selected.hotspot.positionConfirmed = true;
     api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch, yaw });
+    const guide = guideForScene(selected.scene);
+    if (guide.roomId) state.placementGuides[guide.roomId] = { ...guide, defaultPitch: pitch };
     studioLog(reason, {
       id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
       pitch,
@@ -1699,8 +1777,8 @@
     const scene = api.sceneById[sceneId];
     const hotspot = scene?.hotspots[hotspotIndex];
     if (!hotspot) return false;
-    const [pitch, yaw] = api.viewer.mouseEventToCoords(event);
-    const coordinates = { pitch: roundCoordinate(pitch), yaw: roundCoordinate(yaw) };
+    const [pointerPitch, yaw] = api.viewer.mouseEventToCoords(event);
+    const coordinates = { pitch: roundCoordinate(snappedPitch(scene, pointerPitch, !event.altKey)), yaw: roundCoordinate(yaw) };
     hotspot.positionConfirmed = true;
     api.updateHotspotCoordinates(sceneId, hotspotIndex, coordinates);
     studioLog(reason, {
@@ -1860,11 +1938,13 @@
       sceneViews: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getSceneView(scene.id)])),
       sceneAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getSceneAdjustment(scene.id)])),
       localAdjustments: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getLocalAdjustments(scene.id)])),
+      placementGuides: state.placementGuides,
       uiState: {
         stage: state.activeStage,
         selected: state.selected ? { ...state.selected } : null,
         linkStep: state.linkStep,
-        lookSceneIndex: state.lookSceneIndex
+        lookSceneIndex: state.lookSceneIndex,
+        guidePreferences: state.guidePreferences
       }
     };
   }
@@ -1884,6 +1964,10 @@
     Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => api.setSceneView(sceneId, view));
     Object.entries(draft.sceneAdjustments || {}).forEach(([sceneId, adjustment]) => api.setSceneAdjustment(sceneId, adjustment));
     Object.entries(draft.localAdjustments || {}).forEach(([sceneId, adjustments]) => api.setLocalAdjustments(sceneId, adjustments));
+    state.placementGuides = draft.placementGuides && typeof draft.placementGuides === "object" ? { ...draft.placementGuides } : {};
+    if (draft.uiState?.guidePreferences && typeof draft.uiState.guidePreferences === "object") {
+      state.guidePreferences = { ...state.guidePreferences, ...draft.uiState.guidePreferences };
+    }
     if (!hasSessionStage && workspaceMode && stageOrder.includes(draft.uiState?.stage)) {
       state.activeStage = draft.uiState.stage;
       if (draft.uiState?.linkStep === "place" || draft.uiState?.linkStep === "review" || draft.uiState?.linkStep === "choose") {
@@ -2219,6 +2303,11 @@
     studioLog("project-create-requested", { title: elements.ProjectTitle.value });
     try { await createWorkspace(false); } catch (error) { setStatus(error.message); }
   });
+  elements.ContinueWorkspace.addEventListener("click", () => {
+    if (!state.workspaceProject) return;
+    logOperatorStep("continue-current-tour", { title: state.workspaceProject.title });
+    window.location.assign(workspaceEditorUrl());
+  });
   elements.ProjectBackup.addEventListener("change", () => {
     const file = elements.ProjectBackup.files[0];
     elements.ProjectBackupName.textContent = file?.name || "Choose an editable project file";
@@ -2243,6 +2332,17 @@
   });
   elements.Build.addEventListener("click", buildRelease);
   elements.DownloadProject.addEventListener("click", downloadEditableProject);
+  elements.DownloadDebug.addEventListener("click", async () => {
+    try {
+      const response = await fetch(studioUrl("debug-bundle"));
+      if (!response.ok) throw new Error("Could not prepare debug bundle");
+      downloadBlob(new Blob([JSON.stringify(await response.json(), null, 2)], { type: "application/json" }), "raindigit-tour-debug.json");
+      setStatus("Debug bundle downloaded");
+      logOperatorStep("debug-bundle-downloaded");
+    } catch (error) {
+      setStatus(error.message);
+    }
+  });
   elements.InstallUrl.addEventListener("input", updateEmbedCode);
   elements.CopyEmbed.addEventListener("click", copyEmbedCode);
   elements.CopyEmbedBlock.addEventListener("click", copyEmbedBlock);
@@ -2283,6 +2383,45 @@
     state.selected = null;
     setStatus("Change the room board or selected places");
     setStage("rooms");
+  });
+  elements.InspectSource.addEventListener("click", () => {
+    const selected = selectedHotspot();
+    if (selected) openPhotoPreview(selected.scene.id);
+  });
+  elements.UseRoomHeight.addEventListener("click", () => {
+    const selected = selectedHotspot();
+    if (!selected) return;
+    const guide = guideForScene(selected.scene);
+    api.viewer.lookAt(guide.defaultPitch, api.viewer.getYaw(), api.viewer.getHfov(), 0);
+    setStatus("Room height aligned. Check the cross, then save the point.");
+    logOperatorStep("movement-room-height-used", { roomId: guide.roomId, pitch: guide.defaultPitch });
+  });
+  elements.GuideSnap.addEventListener("change", () => {
+    const selected = selectedHotspot();
+    const guide = guideForScene(selected?.scene);
+    if (guide.roomId) state.placementGuides[guide.roomId] = { ...guide, snapEnabled: elements.GuideSnap.checked };
+    state.guidePreferences.snapEnabled = elements.GuideSnap.checked;
+    scheduleDraftSave("placement-guide-snap-changed");
+    logOperatorStep("placement-guide-snap-changed", { enabled: elements.GuideSnap.checked, roomId: guide.roomId });
+  });
+  elements.ToggleOriginal.addEventListener("click", () => {
+    const scene = currentScene();
+    if (!scene) return;
+    state.showOriginalLook = !state.showOriginalLook;
+    api.setSceneAdjustmentPreview(scene.id, state.showOriginalLook);
+    renderImagePresets(scene.id);
+    logOperatorStep("picture-before-after", { sceneId: scene.id, original: state.showOriginalLook });
+  });
+  elements.ApplyLookRoom.addEventListener("click", () => {
+    const scene = currentScene();
+    if (!scene) return;
+    const adjustment = api.getSceneAdjustment(scene.id);
+    api.scenes.filter((candidate) => candidate.space === scene.space).forEach((candidate) => api.setSceneAdjustment(candidate.id, adjustment));
+    renderImagePresets(scene.id);
+    renderImageControls(scene.id);
+    scheduleDraftSave("picture-look-applied-to-room");
+    setStatus(`Look applied to ${scene.spaceLabel}`);
+    logOperatorStep("picture-look-applied-to-room", { roomId: scene.space });
   });
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
   elements.SaveArrival.addEventListener("click", saveArrivalView);

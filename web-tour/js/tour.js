@@ -10,6 +10,7 @@ const isLocalDraftPreview = viewParams.get("preview") === "1" &&
   ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
 const defaultSceneAdjustment = Object.freeze({ brightness: 100, contrast: 100, saturation: 100, warmth: 0 });
 const sceneAdjustments = Object.fromEntries(scenes.map((scene) => [scene.id, { ...defaultSceneAdjustment }]));
+const adjustmentPreviewDisabled = new Set();
 const localAdjustments = Object.fromEntries(scenes.map((scene) => [scene.id, []]));
 const baseHotspotCounts = Object.fromEntries(scenes.map((scene) => [scene.id, scene.hotspots.length]));
 const addedHotspots = Object.fromEntries(scenes.map((scene) => [scene.id, []]));
@@ -217,10 +218,22 @@ function applySceneAdjustment(sceneId) {
   const adjustment = sceneAdjustments[sceneId] || defaultSceneAdjustment;
   const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");
   if (!canvas) return;
+  if (adjustmentPreviewDisabled.has(sceneId)) {
+    canvas.style.filter = "none";
+    return;
+  }
 
   const warmTint = Math.max(0, adjustment.warmth) / 100;
   const coolHueShift = Math.min(18, Math.max(0, -adjustment.warmth) * 0.9);
   canvas.style.filter = `brightness(${adjustment.brightness}%) contrast(${adjustment.contrast}%) saturate(${adjustment.saturation}%) sepia(${warmTint.toFixed(2)}) hue-rotate(${-coolHueShift.toFixed(1)}deg)`;
+}
+
+function setSceneAdjustmentPreview(sceneId, showOriginal) {
+  if (!sceneById[sceneId]) return false;
+  if (showOriginal) adjustmentPreviewDisabled.add(sceneId);
+  else adjustmentPreviewDisabled.delete(sceneId);
+  if (viewer.getScene() === sceneId) applySceneAdjustment(sceneId);
+  return true;
 }
 
 function getSceneAdjustment(sceneId) {
@@ -496,6 +509,7 @@ if (isLocalEditorRequest) {
     updateHotspotArrival,
     getSceneAdjustment,
     setSceneAdjustment,
+    setSceneAdjustmentPreview,
     getLocalAdjustments,
     setLocalAdjustments,
     setSceneMetadata,

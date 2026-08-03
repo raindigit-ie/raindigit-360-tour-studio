@@ -1984,6 +1984,69 @@ body[data-editor-stage="export"] .editor-panel__footer {
 .editor-centre-target::before { width: 50px; height: 2px; }
 .editor-centre-target::after { width: 2px; height: 50px; }
 
+.editor-placement-guides,
+.editor-arrival-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+}
+
+.editor-placement-guides__eye,
+.editor-placement-guides__floor,
+.editor-arrival-guides > i {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: block;
+  border-top: 1px dashed rgba(255, 244, 204, 0.72);
+}
+
+.editor-placement-guides__eye { top: 46%; }
+.editor-placement-guides__floor { top: 62%; border-color: rgba(105, 194, 163, 0.76); }
+.editor-placement-guides b {
+  position: absolute;
+  top: calc(62% - 18px);
+  left: 12px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  color: #e7fff4;
+  background: rgba(10, 19, 15, 0.78);
+  font-size: 10px;
+}
+
+.editor-arrival-guides > i:first-child { top: 33%; }
+.editor-arrival-guides > i:nth-child(2) { top: 67%; }
+.editor-arrival-guides span {
+  position: absolute;
+  top: calc(33% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 249, 236, 0.8);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.editor-placement-tools,
+.editor-picture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.editor-placement-tools label {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.editor-placement-tools input { accent-color: var(--accent); }
+.editor-image-warning { min-height: 16px; margin: 8px 0 0; color: #f4c978; font-size: 10px; line-height: 1.4; }
+.editor-start-copy { min-height: 30px; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; }
+
+.nav-hotspot-anchor.is-editor-selected .nav-hotspot { animation: editor-marker-review 800ms ease-out 1; }
+@keyframes editor-marker-review { 0% { transform: scale(1); } 42% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
 .editor-button--primary { min-height: 42px; }
 
 body[data-editor-stage="rooms"] .editor-panel__content,
