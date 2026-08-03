@@ -549,6 +549,30 @@ async function developDngToJpeg(inputPath, outputPath) {
   }
 }
 
+async function stitchDualFisheyeToEquirect(inputPath, outputPath) {
+  try {
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-y",
+      "-i", inputPath,
+      "-vf", "v360=input=dfisheye:output=equirect:ih_fov=200:iv_fov=200:w=8192:h=4096",
+      "-frames:v", "1",
+      "-update", "1",
+      "-q:v", "2",
+      outputPath
+    ], {
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 10 * 60 * 1000
+    });
+    await runMagick([outputPath, "-strip", "-sampling-factor", "4:4:4", "-quality", "96", outputPath]);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error("Direct camera DNG stitching needs ffmpeg in the local Studio Docker image. Rebuild the studio, then import the DNG again.");
+    }
+    throw new Error(`DNG stitching failed: ${error.stderr || error.message}`);
+  }
+}
+
 function workspaceConfig(project, scope) {
   const prefix = scope.startsWith("/") ? scope : `/${scope}`;
   const scenes = project.scenes.map((scene) => ({
@@ -856,24 +880,28 @@ const server = createServer(async (request, response) => {
       }
       const temporaryInput = join(workspaceRoot, `.upload-${process.pid}-${Date.now()}${isDng ? ".dng" : ".jpg"}`);
       const temporaryDeveloped = join(workspaceRoot, `.developed-${process.pid}-${Date.now()}.jpg`);
+      const temporaryStitched = join(workspaceRoot, `.stitched-${process.pid}-${Date.now()}.jpg`);
       await writeFile(temporaryInput, source);
       let developed;
+      let sourceFormat = isDng ? "dng" : "jpeg";
       try {
         if (isDng) await developDngToJpeg(temporaryInput, temporaryDeveloped);
         if (isDng && await looksLikeDualFisheye(temporaryDeveloped)) {
-          const error = new Error("This DNG still contains two raw fisheye lenses. Open it in Insta360 Studio and export a stitched 2:1 DNG first; then import that exported DNG here for colour development.");
-          error.code = "EINPUT";
-          throw error;
+          await stitchDualFisheyeToEquirect(temporaryDeveloped, temporaryStitched);
+          developed = await readFile(temporaryStitched);
+          sourceFormat = "dng-dual-fisheye";
+        } else {
+          developed = isDng ? await readFile(temporaryDeveloped) : source;
         }
-        developed = isDng ? await readFile(temporaryDeveloped) : source;
       } finally {
         await rm(temporaryInput, { force: true });
         await rm(temporaryDeveloped, { force: true });
+        await rm(temporaryStitched, { force: true });
       }
       const dimensions = jpegDimensions(developed);
       const ratio = dimensions ? dimensions.width / dimensions.height : 0;
       if (!dimensions || dimensions.width < 1600 || Math.abs(ratio - 2) > 0.02) {
-        replyJson(response, 400, { error: isDng ? "This DNG is not a stitched 2:1 panorama. Export a stitched 2:1 DNG from Insta360 Studio first." : "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
+        replyJson(response, 400, { error: isDng ? "This DNG could not be converted to a 2:1 panorama. Try the camera JPG, or export a stitched 2:1 DNG from Insta360 Studio." : "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
         return;
       }
       const id = nextSceneId(project.scenes);
@@ -912,7 +940,7 @@ const server = createServer(async (request, response) => {
         hfov: 94,
         hotspots: [],
         sourceHash,
-        sourceFormat: isDng ? "dng" : "jpeg"
+        sourceFormat
       };
       project.scenes.push(scene);
       project.firstScene ||= id;

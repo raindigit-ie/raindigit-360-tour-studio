@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim AS studio
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends darktable imagemagick librsvg2-bin unzip zip \
+  && apt-get install -y --no-install-recommends darktable ffmpeg imagemagick librsvg2-bin unzip zip \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

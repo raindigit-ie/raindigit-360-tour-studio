@@ -854,7 +854,9 @@
       const title = document.createElement("strong");
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
-      dimensions.textContent = scene.sourceFormat === "dng" ? "DNG developed locally" : "360 photo ready";
+      dimensions.textContent = scene.sourceFormat === "dng-dual-fisheye"
+        ? "DNG stitched locally"
+        : scene.sourceFormat === "dng" ? "DNG developed locally" : "360 photo ready";
       details.append(title, dimensions);
       const remove = document.createElement("button");
       remove.className = "editor-button editor-button--icon editor-button--danger";
