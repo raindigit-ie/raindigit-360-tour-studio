@@ -497,79 +497,22 @@ async function runMagick(args) {
   throw new Error("Image preparation failed: ImageMagick is not installed.");
 }
 
-async function magickFormat(args) {
-  for (const binary of ["magick", "convert"]) {
-    try {
-      const { stdout } = await execFileAsync(binary, args, { maxBuffer: 1024 * 1024 });
-      return stdout.trim();
-    } catch (error) {
-      if (error.code === "ENOENT") continue;
-      throw new Error(`Image analysis failed: ${error.stderr || error.message}`);
-    }
-  }
-  throw new Error("Image analysis failed: ImageMagick is not installed.");
-}
-
-async function looksLikeDualFisheye(path) {
-  // A finished equirectangular panorama has image information through the centre
-  // seam. A raw X-series DNG instead has two circular lenses separated by a
-  // substantial black gutter. This prevents importing a seemingly-valid 2:1 RAW
-  // file that would render as two fisheyes in the tour.
-  const samples = ["0", "46"].map(async (offset) => {
-    const value = await magickFormat([
-      "-limit", "memory", "1GiB",
-      "-limit", "map", "2GiB",
-      "-limit", "disk", "4GiB",
-      path,
-      "-resize", "1000x500!",
-      "-colorspace", "gray",
-      "-crop", `8%x100%+${offset}%+0`,
-      "+repage",
-      "-threshold", "3%",
-      "-format", "%[fx:1-mean]",
-      "info:"
-    ]);
-    return Number(value);
-  });
-  const [leftBlack, centreBlack] = await Promise.all(samples);
-  return Number.isFinite(leftBlack) && Number.isFinite(centreBlack) && leftBlack > 0.35 && centreBlack > 0.2;
-}
-
-async function developDngToJpeg(inputPath, outputPath) {
+async function processX4Dng(inputPath, referencePath, outputPath, metricsPath) {
+  const processor = join(projectRoot, "scripts", "x4-raw-process.py");
   try {
-    await execFileAsync("darktable-cli", [inputPath, outputPath, "--core", "--conf", "plugins/imageio/format/jpeg/quality=96"], {
-      maxBuffer: 4 * 1024 * 1024,
-      timeout: 10 * 60 * 1000
-    });
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new Error("DNG processing is available in the Docker Studio. Start the studio with Start RainDigit 360 Studio.command, then import the DNG there.");
-    }
-    throw new Error(`DNG development failed: ${error.stderr || error.message}`);
-  }
-}
-
-async function stitchDualFisheyeToEquirect(inputPath, outputPath) {
-  try {
-    await execFileAsync("ffmpeg", [
-      "-hide_banner",
-      "-y",
-      "-i", inputPath,
-      "-vf", "v360=input=dfisheye:output=equirect:ih_fov=200:iv_fov=200:w=8192:h=4096",
-      "-frames:v", "1",
-      "-update", "1",
-      "-q:v", "2",
-      outputPath
+    await execFileAsync("/usr/bin/python3", [
+      processor,
+      "--dng", inputPath,
+      "--reference", referencePath,
+      "--output", outputPath,
+      "--metrics", metricsPath
     ], {
-      maxBuffer: 8 * 1024 * 1024,
-      timeout: 10 * 60 * 1000
+      cwd: projectRoot,
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 30 * 60 * 1000
     });
-    await runMagick([outputPath, "-strip", "-sampling-factor", "4:4:4", "-quality", "96", outputPath]);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new Error("Direct camera DNG stitching needs ffmpeg in the local Studio Docker image. Rebuild the studio, then import the DNG again.");
-    }
-    throw new Error(`DNG stitching failed: ${error.stderr || error.message}`);
+    throw new Error(`Container RAW processing failed: ${error.stderr || error.stdout || error.message}`);
   }
 }
 
@@ -859,6 +802,29 @@ const server = createServer(async (request, response) => {
       replyJson(response, 201, { map: project.map, project });
       return;
     }
+    if (!readOnly && url.pathname === `${routeEndpoint}/workspace-raw-reference` && request.method === "POST") {
+      const project = await readWorkspaceProject();
+      if (!project) {
+        replyJson(response, 409, { error: "Create a tour before adding photos." });
+        return;
+      }
+      const fileName = cleanHeader(request.headers["x-tour-file-name"]).replace(/[\\/]/g, "");
+      if (!/\.jpe?g$/i.test(fileName)) {
+        replyJson(response, 400, { error: "Choose the camera JPG recorded with this DNG." });
+        return;
+      }
+      const source = await readBody(request, maxUploadBytes);
+      const dimensions = jpegDimensions(source);
+      if (!dimensions || dimensions.width < 1600 || Math.abs(dimensions.width / dimensions.height - 2) > 0.02) {
+        replyJson(response, 400, { error: "The matching camera JPG must be a finished 2:1 panorama." });
+        return;
+      }
+      const token = createHash("sha256").update(source).update(String(Date.now())).digest("hex");
+      await mkdir(workspaceRoot, { recursive: true });
+      await writeFile(join(workspaceRoot, `.raw-reference-${token}.jpg`), source);
+      replyJson(response, 201, { token });
+      return;
+    }
     if (!readOnly && url.pathname === `${routeEndpoint}/workspace-import` && request.method === "POST") {
       const project = await readWorkspaceProject();
       if (!project) {
@@ -879,29 +845,41 @@ const server = createServer(async (request, response) => {
         return;
       }
       const temporaryInput = join(workspaceRoot, `.upload-${process.pid}-${Date.now()}${isDng ? ".dng" : ".jpg"}`);
-      const temporaryDeveloped = join(workspaceRoot, `.developed-${process.pid}-${Date.now()}.jpg`);
       const temporaryStitched = join(workspaceRoot, `.stitched-${process.pid}-${Date.now()}.jpg`);
+      const temporaryMetrics = join(workspaceRoot, `.raw-metrics-${process.pid}-${Date.now()}.json`);
+      const referenceToken = cleanHeader(request.headers["x-tour-reference-token"]);
+      const temporaryReference = /^[a-f0-9]{64}$/.test(referenceToken)
+        ? join(workspaceRoot, `.raw-reference-${referenceToken}.jpg`)
+        : "";
       await writeFile(temporaryInput, source);
       let developed;
       let sourceFormat = isDng ? "dng" : "jpeg";
+      let sourceQuality;
       try {
-        if (isDng) await developDngToJpeg(temporaryInput, temporaryDeveloped);
-        if (isDng && await looksLikeDualFisheye(temporaryDeveloped)) {
-          await stitchDualFisheyeToEquirect(temporaryDeveloped, temporaryStitched);
+        if (isDng) {
+          if (!temporaryReference) throw new Error("Select the matching camera DNG and JPG together. The JPG supplies the exact camera tone; the DNG supplies additional detail.");
+          try {
+            await stat(temporaryReference);
+          } catch {
+            throw new Error("The matching JPG upload expired. Select the DNG and JPG together again.");
+          }
+          await processX4Dng(temporaryInput, temporaryReference, temporaryStitched, temporaryMetrics);
           developed = await readFile(temporaryStitched);
-          sourceFormat = "dng-dual-fisheye";
+          sourceQuality = JSON.parse(await readFile(temporaryMetrics, "utf8"));
+          sourceFormat = "dng-x4-calibrated";
         } else {
-          developed = isDng ? await readFile(temporaryDeveloped) : source;
+          developed = source;
         }
       } finally {
         await rm(temporaryInput, { force: true });
-        await rm(temporaryDeveloped, { force: true });
         await rm(temporaryStitched, { force: true });
+        await rm(temporaryMetrics, { force: true });
+        if (temporaryReference) await rm(temporaryReference, { force: true });
       }
       const dimensions = jpegDimensions(developed);
       const ratio = dimensions ? dimensions.width / dimensions.height : 0;
       if (!dimensions || dimensions.width < 1600 || Math.abs(ratio - 2) > 0.02) {
-        replyJson(response, 400, { error: isDng ? "This DNG could not be converted to a 2:1 panorama. Try the camera JPG, or export a stitched 2:1 DNG from Insta360 Studio." : "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
+        replyJson(response, 400, { error: isDng ? "The X4 DNG pair could not be converted to a finished 2:1 panorama." : "This is not a ready 360 photo. Export it as a 2:1 JPG from your camera app first." });
         return;
       }
       const id = nextSceneId(project.scenes);
@@ -940,7 +918,8 @@ const server = createServer(async (request, response) => {
         hfov: 94,
         hotspots: [],
         sourceHash,
-        sourceFormat
+        sourceFormat,
+        ...(sourceQuality ? { sourceQuality } : {})
       };
       project.scenes.push(scene);
       project.firstScene ||= id;

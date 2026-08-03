@@ -111,8 +111,8 @@
       <section class="editor-stage-panel" data-stage-panel="upload">
         <div class="editor-step-heading"><span>Step 1</span><h2>Add 360 photos</h2></div>
         <label class="editor-upload-zone">
-          <strong>Choose 360 JPG or DNG photos</strong>
-          <span>JPG is ready to use. DNG is developed locally and must already be a stitched 2:1 panorama.</span>
+          <strong>Choose JPG photos or matching DNG + JPG pairs</strong>
+          <span>For maximum quality, select each camera DNG together with the JPG that has the same filename. RainDigit processes the RAW pair locally.</span>
           <input id="editorImportFiles" type="file" accept="image/jpeg,image/x-adobe-dng,.jpg,.jpeg,.dng" multiple />
         </label>
         <p class="editor-empty" id="editorProjectEmpty"></p>
@@ -854,8 +854,8 @@
       const title = document.createElement("strong");
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
-      dimensions.textContent = scene.sourceFormat === "dng-dual-fisheye"
-        ? "DNG stitched locally"
+      dimensions.textContent = scene.sourceFormat === "dng-x4-calibrated"
+        ? "RAW enhanced locally"
         : scene.sourceFormat === "dng" ? "DNG developed locally" : "360 photo ready";
       details.append(title, dimensions);
       const remove = document.createElement("button");
@@ -1271,24 +1271,64 @@
   async function importPanoramas() {
     const files = [...elements.ImportFiles.files];
     if (!files.length || !state.workspaceProject) return;
+    const grouped = new Map();
+    for (const [index, file] of files.entries()) {
+      const stem = file.name.replace(/\.(?:dng|jpe?g)$/i, "").toLowerCase();
+      const kind = /\.dng$/i.test(file.name) ? "dng" : "jpeg";
+      const entry = grouped.get(stem) || { index, dng: null, jpeg: null };
+      if (entry[kind]) {
+        setStatus(`Choose only one ${kind.toUpperCase()} for ${file.name.replace(/\.[^.]+$/, "")}.`);
+        elements.ImportFiles.value = "";
+        return;
+      }
+      entry[kind] = file;
+      grouped.set(stem, entry);
+    }
+    const missingPair = [...grouped.values()].find((entry) => entry.dng && !entry.jpeg);
+    if (missingPair) {
+      setStatus(`Add the matching JPG for ${missingPair.dng.name}. Select both files together.`);
+      elements.ImportFiles.value = "";
+      return;
+    }
+    const tasks = [...grouped.values()]
+      .sort((left, right) => left.index - right.index)
+      .map((entry) => entry.dng
+        ? { file: entry.dng, reference: entry.jpeg }
+        : { file: entry.jpeg, reference: null });
     const roomLabel = "Unassigned";
     const roomId = "room-unassigned";
     state.importing = true;
-    state.importProgress = { current: 0, total: files.length };
+    state.importProgress = { current: 0, total: tasks.length };
     renderProjectPanel();
     let imported = 0;
     try {
-      for (const [index, file] of files.entries()) {
+      for (const [index, task] of tasks.entries()) {
+        const { file, reference } = task;
         state.importProgress.current = index + 1;
         renderUploadPanel();
-        setStatus(`Preparing ${index + 1} of ${files.length}: ${file.name}`);
+        setStatus(`Preparing ${index + 1} of ${tasks.length}: ${file.name}${reference ? " + matching JPG" : ""}`);
+        let referenceToken = "";
+        if (reference) {
+          const referenceResponse = await fetch(studioUrl("workspace-raw-reference", true), {
+            method: "POST",
+            headers: {
+              "content-type": "image/jpeg",
+              "x-tour-file-name": encodeURIComponent(reference.name)
+            },
+            body: reference
+          });
+          const referenceBody = await referenceResponse.json();
+          if (!referenceResponse.ok) throw new Error(referenceBody.error || `Matching JPG upload failed (${referenceResponse.status})`);
+          referenceToken = referenceBody.token;
+        }
         const response = await fetch(studioUrl("workspace-import", true), {
           method: "POST",
           headers: {
             "content-type": /\.dng$/i.test(file.name) ? "image/x-adobe-dng" : "image/jpeg",
             "x-tour-file-name": encodeURIComponent(file.name),
             "x-tour-room-id": encodeURIComponent(roomId),
-            "x-tour-room-label": encodeURIComponent(roomLabel)
+            "x-tour-room-label": encodeURIComponent(roomLabel),
+            ...(referenceToken ? { "x-tour-reference-token": referenceToken } : {})
           },
           body: file
         });

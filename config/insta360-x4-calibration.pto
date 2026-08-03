@@ -1,0 +1,16 @@
+# hugin project file
+#hugin_ptoversion 2
+p f2 w11904 h5952 v360 k0 E0.0464671 R0 n"TIFF_m c:LZW r:CROP"
+m i0
+
+# RainDigit Insta360 X4 dual-fisheye calibration. Inputs are written beside this file.
+i w5952 h5952 f2 v210.291831927964 Ra-0.265744715929031 Rb-0.184688657522202 Rc-0.0380476266145706 Rd0.32747146487236 Re-0.015820911154151 Eev0 Er1 Eb1 r1.15982640568002 p-0.253592429468517 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b-0.183562339525854 c0 d7.83157883283937 e-18.3253267780451 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0 Vm5 n"lens0.tif"
+i w5952 h5952 f2 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0.0929342207325236 Er1.01703750802045 Eb1.03079052154812 r-1.50077111078306 p2.17449055100585 y-179.406715280532 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=0 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0 Vm5 n"lens1.tif"
+
+#hugin_blender enblend
+#hugin_remapper nona
+#hugin_outputLDRBlended true
+#hugin_outputLDRLayers false
+#hugin_outputLDRExposureRemapped false
+#hugin_outputImageType tif
+#hugin_outputImageTypeCompression LZW
