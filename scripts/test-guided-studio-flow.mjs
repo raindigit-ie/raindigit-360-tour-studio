@@ -207,7 +207,10 @@ async function main() {
     await page.getByRole("button", { name: "Update spaces" }).click();
     const roomNames = page.locator("#editorRoomList input");
     const spaceTemplates = page.locator("#editorRoomList select");
+    const kitchenTemplateText = await spaceTemplates.nth(0).locator("option", { hasText: "Kitchen - кухня" }).textContent();
+    assert(kitchenTemplateText === "Kitchen - кухня", "The quick-name list did not show the Russian space hint.");
     await spaceTemplates.nth(0).selectOption("Kitchen");
+    assert(await roomNames.nth(0).inputValue() === "Kitchen", "Choosing a quick name should write only the English space name.");
     await roomNames.nth(1).fill("Hall");
     await roomNames.nth(1).press("Tab");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-001"] input').inputValue() === "Kitchen view 1", "The first auto-named photo still looked like a generic View.");

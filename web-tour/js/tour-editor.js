@@ -19,22 +19,22 @@
     export: "Publish"
   };
   const spaceNameTemplates = [
-    "Driveway",
-    "Front of house",
-    "Entrance hall",
-    "Hallway",
-    "Stairs / landing",
-    "Living room",
-    "Kitchen",
-    "Dining area",
-    "Bedroom",
-    "Bathroom",
-    "Ensuite",
-    "Utility room",
-    "Home office",
-    "Garage",
-    "Patio / terrace",
-    "Back garden"
+    { label: "Driveway", hint: "подъезд к дому" },
+    { label: "Front of house", hint: "фасад и вход" },
+    { label: "Entrance hall", hint: "входная зона" },
+    { label: "Hallway", hint: "коридор" },
+    { label: "Stairs / landing", hint: "лестница и площадка" },
+    { label: "Living room", hint: "гостиная" },
+    { label: "Kitchen", hint: "кухня" },
+    { label: "Dining area", hint: "обеденная зона" },
+    { label: "Bedroom", hint: "спальня" },
+    { label: "Bathroom", hint: "ванная" },
+    { label: "Ensuite", hint: "ванная при спальне" },
+    { label: "Utility room", hint: "техническая зона" },
+    { label: "Home office", hint: "рабочий кабинет" },
+    { label: "Garage", hint: "гараж" },
+    { label: "Patio / terrace", hint: "терраса" },
+    { label: "Back garden", hint: "задний двор" }
   ];
   const stageStorageKey = "raindigit-tour-studio-stage";
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
@@ -1101,7 +1101,7 @@
       input.setAttribute("aria-label", `Name for ${room.label}`);
       templateSelect.setAttribute("aria-label", `Quick name for ${room.label}`);
       templateSelect.add(new Option("Choose a common space", ""));
-      spaceNameTemplates.forEach((label) => templateSelect.add(new Option(label, label)));
+      spaceNameTemplates.forEach(({ label, hint }) => templateSelect.add(new Option(`${label} - ${hint}`, label)));
       const commitRoomName = (rerender) => {
         const nextLabel = input.value.trim();
         if (!nextLabel) {
