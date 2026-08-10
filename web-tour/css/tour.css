@@ -410,6 +410,11 @@ body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-selected:active .n
   cursor: grabbing;
 }
 
+body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-placement-hidden {
+  opacity: 0;
+  pointer-events: none !important;
+}
+
 .nav-hotspot:hover,
 .nav-hotspot:focus-visible {
   background: #fff9ec;

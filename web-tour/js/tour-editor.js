@@ -540,11 +540,45 @@
     return warnings;
   }
 
+  function resolveHotspotIndex(sceneId, reference = {}) {
+    const scene = api.sceneById[sceneId];
+    if (!scene) return -1;
+    if (reference.target) {
+      const targetIndex = scene.hotspots.findIndex((hotspot) => hotspot.target === reference.target);
+      if (targetIndex >= 0) return targetIndex;
+    }
+    const fallbackIndex = Number(reference.hotspotIndex);
+    return Number.isInteger(fallbackIndex) && scene.hotspots[fallbackIndex] ? fallbackIndex : -1;
+  }
+
+  function hotspotReference(sceneId, hotspotIndex) {
+    const scene = api.sceneById[sceneId];
+    const hotspot = scene?.hotspots[hotspotIndex];
+    return hotspot ? { sceneId, hotspotIndex, target: hotspot.target } : null;
+  }
+
+  function selectHotspot(sceneId, hotspotIndex) {
+    state.selected = hotspotReference(sceneId, hotspotIndex);
+    return state.selected;
+  }
+
+  function sameHotspotReference(left, right) {
+    if (!left || !right || left.sceneId !== right.sceneId) return false;
+    if (left.target && right.target) return left.target === right.target;
+    return left.hotspotIndex === right.hotspotIndex;
+  }
+
   function selectedHotspot() {
     if (!state.selected) return null;
+    const hotspotIndex = resolveHotspotIndex(state.selected.sceneId, state.selected);
+    if (hotspotIndex < 0) return null;
     const scene = api.sceneById[state.selected.sceneId];
-    const hotspot = scene?.hotspots[state.selected.hotspotIndex];
-    return hotspot ? { scene, hotspot } : null;
+    const hotspot = scene?.hotspots[hotspotIndex];
+    if (!hotspot) return null;
+    if (state.selected.hotspotIndex !== hotspotIndex || state.selected.target !== hotspot.target) {
+      state.selected = { sceneId: scene.id, hotspotIndex, target: hotspot.target };
+    }
+    return { scene, hotspot, hotspotIndex };
   }
 
   function rerenderRoomsPanelPreservingScroll() {
@@ -813,23 +847,29 @@
   }
 
   function setSelected(sceneId, hotspotIndex, stage = "links") {
-    state.selected = { sceneId, hotspotIndex };
+    selectHotspot(sceneId, hotspotIndex);
     state.placement = null;
     state.arrival = null;
-    studioLog("movement-selected", { sceneId, hotspotIndex, requestedStage: stage }, true);
+    studioLog("movement-selected", { ...state.selected, requestedStage: stage }, true);
     setStage(stage);
   }
 
   function findPendingHotspot(field) {
     for (const scene of api.scenes) {
       const hotspotIndex = scene.hotspots.findIndex((hotspot) => hotspot[field] === false);
-      if (hotspotIndex >= 0) return { sceneId: scene.id, hotspotIndex };
+      if (hotspotIndex >= 0) return hotspotReference(scene.id, hotspotIndex);
     }
     return null;
   }
 
   function arrivalTasks() {
-    return api.scenes.flatMap((scene) => scene.hotspots.map((hotspot, hotspotIndex) => ({ scene, hotspot, hotspotIndex })));
+    return api.scenes.flatMap((scene) => scene.hotspots.map((hotspot, hotspotIndex) => ({
+      scene,
+      hotspot,
+      hotspotIndex,
+      sceneId: scene.id,
+      target: hotspot.target
+    })));
   }
 
   function hasArrivalView(hotspot) {
@@ -884,19 +924,21 @@
   }
 
   function arrivalTaskKey(task) {
-    return `${task.sceneId || task.scene?.id}::${task.hotspotIndex}`;
+    const sceneId = task?.sceneId || task?.scene?.id;
+    return `${sceneId}::${task?.target || task?.hotspot?.target || task?.hotspotIndex}`;
   }
 
   function arrivalTaskFromRef(reference) {
     if (!reference) return null;
     const scene = api.sceneById[reference.sceneId];
-    const hotspot = scene?.hotspots[reference.hotspotIndex];
-    return hotspot ? { scene, hotspot, hotspotIndex: reference.hotspotIndex, sceneId: reference.sceneId } : null;
+    const hotspotIndex = resolveHotspotIndex(reference.sceneId, reference);
+    const hotspot = scene?.hotspots[hotspotIndex];
+    return hotspot ? { scene, hotspot, hotspotIndex, sceneId: reference.sceneId, target: hotspot.target } : null;
   }
 
   function resetArrivalQueue() {
     const pending = pendingArrivalTasks();
-    state.arrivalQueue = pending.map((task) => ({ sceneId: task.scene.id, hotspotIndex: task.hotspotIndex }));
+    state.arrivalQueue = pending.map((task) => hotspotReference(task.scene.id, task.hotspotIndex));
     state.arrivalQueueIndex = 0;
     state.arrivalQueueTotal = state.arrivalQueue.length;
     studioLog("arrival-queue-reset", { total: state.arrivalQueueTotal, queue: state.arrivalQueue.map(arrivalTaskKey) }, true);
@@ -948,9 +990,11 @@
       return { task: null, index: -1, total };
     }
     const tasks = arrivalTasks();
-    const task = tasks.find((candidate) => candidate.scene.id === state.selected.sceneId && candidate.hotspotIndex === state.selected.hotspotIndex) || null;
-    const queueIndex = state.arrivalQueue.findIndex((reference) => reference.sceneId === state.selected.sceneId && reference.hotspotIndex === state.selected.hotspotIndex);
-    const index = queueIndex >= 0 ? queueIndex : tasks.findIndex((candidate) => candidate.scene.id === state.selected.sceneId && candidate.hotspotIndex === state.selected.hotspotIndex);
+    const selected = selectedHotspot();
+    const selectedReference = selected ? hotspotReference(selected.scene.id, selected.hotspotIndex) : state.selected;
+    const task = tasks.find((candidate) => sameHotspotReference(candidate, selectedReference)) || null;
+    const queueIndex = state.arrivalQueue.findIndex((reference) => sameHotspotReference(reference, selectedReference));
+    const index = queueIndex >= 0 ? queueIndex : tasks.findIndex((candidate) => sameHotspotReference(candidate, selectedReference));
     const total = state.arrivalQueueTotal || tasks.length;
     return { task, index, total };
   }
@@ -958,13 +1002,20 @@
   function applyPendingFocus() {
     const focus = state.pendingFocus;
     if (!focus || api.viewer.getScene() !== focus.sceneId) return false;
+    const hotspotIndex = resolveHotspotIndex(focus.sceneId, focus);
+    if (hotspotIndex < 0) {
+      state.pendingFocus = null;
+      studioLog("pending-focus-missing-hotspot", focus, true);
+      render();
+      return false;
+    }
     state.pendingFocus = null;
     state.activeStage = focus.stage;
-    state.selected = { sceneId: focus.sceneId, hotspotIndex: focus.hotspotIndex };
+    selectHotspot(focus.sceneId, hotspotIndex);
     state.arrival = null;
     state.placement = focus.place ? { type: "hotspot" } : null;
     const selected = selectedHotspot();
-    if (focus.lookAtHotspot && selected?.hotspot.positionConfirmed !== false) {
+    if (selected && (focus.lookAtHotspot || selected.hotspot.positionConfirmed === false)) {
       api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
     }
     render();
@@ -2028,7 +2079,7 @@
     }
     scene.hotspots.forEach((hotspot, hotspotIndex) => {
       const button = document.createElement("button");
-      button.className = `editor-hotspot${state.selected?.sceneId === scene.id && state.selected.hotspotIndex === hotspotIndex ? " is-selected" : ""}`;
+      button.className = `editor-hotspot${sameHotspotReference(state.selected, { sceneId: scene.id, hotspotIndex, target: hotspot.target }) ? " is-selected" : ""}`;
       button.type = "button";
       const pending = targetStage === "links" && hotspot.positionConfirmed === false
         ? "Place button"
@@ -2074,7 +2125,7 @@
     }
     const sceneIndex = api.scenes.findIndex((scene) => scene.id === source.id);
     if (sceneIndex >= 0) state.linkSceneIndex = sceneIndex;
-    state.selected = { sceneId: source.id, hotspotIndex };
+    selectHotspot(source.id, hotspotIndex);
     state.linkStep = "place";
     state.placement = null;
     state.release = { ready: false };
@@ -2082,7 +2133,7 @@
     queueDraftSave("walking-button-added-from-placement");
     setStatus(`New walking button to ${target.title}. Place it on the photo.`);
     if (api.viewer.getScene() !== source.id) {
-      focusHotspotTask({ sceneId: source.id, hotspotIndex }, "links");
+      focusHotspotTask(hotspotReference(source.id, hotspotIndex), "links");
     } else {
       render();
     }
@@ -2122,9 +2173,15 @@
     if (state.activeStage !== "links") return;
     const selected = selectedHotspot();
     const source = linkSourceScene(scene);
-    const allTasks = api.scenes.flatMap((candidate) => candidate.hotspots.map((hotspot, hotspotIndex) => ({ scene: candidate, hotspot, hotspotIndex })));
+    const allTasks = api.scenes.flatMap((candidate) => candidate.hotspots.map((hotspot, hotspotIndex) => ({
+      scene: candidate,
+      sceneId: candidate.id,
+      hotspot,
+      hotspotIndex,
+      target: hotspot.target
+    })));
     const selectedTaskIndex = state.selected
-      ? allTasks.findIndex((task) => task.scene.id === state.selected.sceneId && task.hotspotIndex === state.selected.hotspotIndex)
+      ? allTasks.findIndex((task) => sameHotspotReference(task, state.selected))
       : -1;
     elements.LinkTaskProgress.textContent = selectedTaskIndex >= 0
       ? `Walking button ${selectedTaskIndex + 1} of ${allTasks.length}`
@@ -2133,7 +2190,7 @@
     source.hotspots.forEach((hotspot, hotspotIndex) => {
       const target = api.sceneById[hotspot.target];
       const row = document.createElement("button");
-      const isSelected = state.selected?.sceneId === source.id && state.selected.hotspotIndex === hotspotIndex;
+      const isSelected = sameHotspotReference(state.selected, { sceneId: source.id, hotspotIndex, target: hotspot.target });
       row.className = `editor-saved-movement${isSelected ? " is-selected" : ""}`;
       row.type = "button";
       row.dataset.savedMovementSource = source.id;
@@ -2143,12 +2200,20 @@
       row.querySelector("strong").textContent = target?.title || hotspot.label;
       row.querySelector("small").textContent = hotspot.positionConfirmed ? "Position saved" : "Needs a position";
       row.addEventListener("click", () => {
-        state.selected = { sceneId: source.id, hotspotIndex };
+        state.pendingFocus = null;
+        selectHotspot(source.id, hotspotIndex);
         state.linkStep = hotspot.positionConfirmed ? "review" : "place";
+        if (api.viewer.getScene() !== source.id) {
+          state.pendingFocus = { ...state.selected, stage: "links", place: false, lookAtHotspot: hotspot.positionConfirmed === false };
+          api.viewer.loadScene(source.id);
+          setStatus(`Opening ${source.title}...`);
+          render();
+          return;
+        }
         if (hotspot.positionConfirmed) {
-          api.viewer.lookAt(hotspot.pitch, hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
-          setStatus(`Check the walking button for ${target?.title || "this place"}`);
+          setStatus(`Selected ${target?.title || "this place"}. Drag the walking person only if it needs to move.`);
         } else {
+          api.viewer.lookAt(hotspot.pitch, hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
           setStatus(`Place the walking button for ${target?.title || "this place"}`);
         }
         render();
@@ -2160,7 +2225,8 @@
     const showPlacementPanel = Boolean(selected && ["place", "review"].includes(state.linkStep));
     const viewerReady = Boolean(selected && api.viewer.getScene() === source.id && api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
     elements.PlaceAtCentre.hidden = !showPlacementPanel;
-    elements.ConfirmCentre.disabled = !viewerReady;
+    elements.ConfirmCentre.hidden = true;
+    elements.ConfirmCentre.disabled = true;
     const target = selected ? api.sceneById[selected.hotspot.target] : null;
     const guide = guideForScene(source);
     elements.GuideSnap.checked = guide.snapEnabled;
@@ -2168,7 +2234,7 @@
     elements.GuideReadout.textContent = `Room guide: ${roundCoordinate(guide.defaultPitch)} degrees. Snap range: ${roundCoordinate(guide.snapToleranceDeg)} degrees. Hold Option while dragging to bypass snap.`;
     if (selected && state.linkStep === "review") {
       elements.PlaceAtCentre.querySelector("strong").textContent = "Check the walking button on the photo.";
-      elements.PlaceAtCentre.querySelector("span").textContent = "If it is in the right place, continue. If not, adjust it.";
+      elements.PlaceAtCentre.querySelector("span").textContent = "If it is wrong, drag the walking person on the photo. Then continue.";
       elements.ConfirmCentre.textContent = "Move this button";
       elements.ConfirmCentre.classList.remove("editor-button--primary");
       elements.CancelCentre.textContent = "Back to rooms setup";
@@ -2176,12 +2242,12 @@
       elements.LinkGuidance.textContent = `Check ${selected.scene.title} to ${target?.title || "the selected place"}.${warnings.length ? ` ${warnings.join(" ")}` : ""}`;
       studioLog("movement-review-shown", { sceneId: selected.scene.id, target: selected.hotspot.target, warnings }, true);
     } else if (selected) {
-      elements.PlaceAtCentre.querySelector("strong").textContent = "Put the walking button under the door or camera point.";
-      elements.PlaceAtCentre.querySelector("span").textContent = "Drag the 360 photo until the target is under the cross, then save.";
-      elements.ConfirmCentre.textContent = selected.hotspot.positionConfirmed ? "Update point here" : "Save point here";
-      elements.ConfirmCentre.classList.add("editor-button--primary");
+      elements.PlaceAtCentre.querySelector("strong").textContent = "Drag the walking button to the real place.";
+      elements.PlaceAtCentre.querySelector("span").textContent = "Move the walking person onto the doorway or camera point. It saves when you release it.";
+      elements.ConfirmCentre.textContent = "Drag the person";
+      elements.ConfirmCentre.classList.remove("editor-button--primary");
       elements.CancelCentre.textContent = "Back to rooms setup";
-      elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}. Place the button on the real route, not on furniture or a wall.`;
+      elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}. Drag the walking person onto the real route, not onto furniture or a wall.`;
     } else {
       elements.LinkGuidance.textContent = "Every walking button has an exact position.";
     }
@@ -2586,9 +2652,15 @@
   }
 
   function syncSelectedMarker() {
-    const activeId = state.selected ? api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex) : "";
+    const selected = selectedHotspot();
+    const activeId = selected ? api.hotspotId(selected.scene.id, selected.hotspotIndex) : "";
+    const hideOtherUnplaced = state.activeStage === "links" && selected?.hotspot.positionConfirmed === false;
     viewerElement.querySelectorAll("[data-editor-hotspot-id]").forEach((element) => {
-      element.classList.toggle("is-editor-selected", element.dataset.editorHotspotId === activeId);
+      const isSelected = element.dataset.editorHotspotId === activeId;
+      const [sceneId, hotspotIndex] = element.dataset.editorHotspotId.split("::");
+      const candidate = api.sceneById[sceneId]?.hotspots[Number(hotspotIndex)];
+      element.classList.toggle("is-editor-selected", isSelected);
+      element.classList.toggle("is-editor-placement-hidden", Boolean(hideOtherUnplaced && !isSelected && candidate?.positionConfirmed === false));
     });
   }
 
@@ -2631,7 +2703,7 @@
     placementSurface.setAttribute("aria-label", state.placement?.type === "hotspot" ? "Place selected movement" : "Place light area");
     document.body.classList.toggle("is-editor-placing", placing);
     const centringSelection = selectedHotspot();
-    const centring = state.activeStage === "links" && state.linkStep === "place" && centringSelection?.scene.id === api.viewer.getScene();
+    const centring = false;
     centreTarget.hidden = !centring;
     placementGuides.hidden = !centring || !state.guidePreferences.visible;
     arrivalGuides.hidden = !(state.activeStage === "arrival" && state.arrival && api.viewer.isLoaded());
@@ -2682,11 +2754,11 @@
     const pitch = roundCoordinate(centreCoordinates?.pitch ?? api.viewer.getPitch());
     const yaw = roundCoordinate(centreCoordinates?.yaw ?? api.viewer.getYaw());
     selected.hotspot.positionConfirmed = true;
-    api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch, yaw });
+    api.updateHotspotCoordinates(selected.scene.id, selected.hotspotIndex, { pitch, yaw });
     const guide = guideForScene(selected.scene);
     if (guide.roomId) state.placementGuides[guide.roomId] = { ...guide, defaultPitch: pitch };
     studioLog(reason, {
-      id: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+      id: api.hotspotId(selected.scene.id, selected.hotspotIndex),
       pitch,
       yaw,
       pose: { pitch, yaw, hfov: roundCoordinate(api.viewer.getHfov()) }
@@ -2713,13 +2785,18 @@
 
   function beginHotspotDrag(event, marker) {
     if (event.button !== undefined && event.button !== 0) return false;
-    const [sceneId, hotspotIndex] = marker.dataset.editorHotspotId.split("::");
-    const index = Number(hotspotIndex);
+    let [sceneId, hotspotIndex] = marker.dataset.editorHotspotId.split("::");
+    let index = Number(hotspotIndex);
+    const selected = selectedHotspot();
+    if (state.activeStage === "links" && selected?.hotspot.positionConfirmed === false && selected.scene.id === api.viewer.getScene()) {
+      sceneId = selected.scene.id;
+      index = selected.hotspotIndex;
+    }
     if (state.activeStage !== "links" || api.viewer.getScene() !== sceneId) {
       setSelected(sceneId, index, state.activeStage === "arrival" ? "arrival" : "links");
       return true;
     }
-    state.selected = { sceneId, hotspotIndex: index };
+    selectHotspot(sceneId, index);
     state.linkStep = "review";
     state.placement = null;
     hotspotDrag = {
@@ -2743,7 +2820,7 @@
     if (Math.hypot(event.clientX - hotspotDrag.startX, event.clientY - hotspotDrag.startY) > 3) hotspotDrag.moved = true;
     if (!hotspotDrag.moved) return true;
     if (moveHotspotToPointer(hotspotDrag.sceneId, hotspotDrag.hotspotIndex, event, "movement-drag-update")) {
-      state.selected = { sceneId: hotspotDrag.sceneId, hotspotIndex: hotspotDrag.hotspotIndex };
+      selectHotspot(hotspotDrag.sceneId, hotspotDrag.hotspotIndex);
       state.linkStep = "review";
       setStatus("Point moved. Release to save it.");
       syncSelectedMarker();
@@ -2863,7 +2940,7 @@
       placementGuides: state.placementGuides,
       uiState: {
         stage: state.activeStage,
-        selected: state.selected ? { ...state.selected } : null,
+        selected: selectedHotspot() ? { ...state.selected } : null,
         linkStep: state.linkStep,
         lookSceneIndex: state.lookSceneIndex,
         guidePreferences: state.guidePreferences
@@ -2898,9 +2975,9 @@
       if (Number.isInteger(draft.uiState?.lookSceneIndex)) {
         state.lookSceneIndex = Math.max(0, Math.min(api.scenes.length - 1, draft.uiState.lookSceneIndex));
       }
-      if (draft.uiState?.selected && typeof draft.uiState.selected.sceneId === "string" && Number.isInteger(draft.uiState.selected.hotspotIndex)) {
-        const scene = api.sceneById[draft.uiState.selected.sceneId];
-        if (scene?.hotspots[draft.uiState.selected.hotspotIndex]) state.selected = { ...draft.uiState.selected };
+      if (draft.uiState?.selected && typeof draft.uiState.selected.sceneId === "string") {
+        const hotspotIndex = resolveHotspotIndex(draft.uiState.selected.sceneId, draft.uiState.selected);
+        if (hotspotIndex >= 0) selectHotspot(draft.uiState.selected.sceneId, hotspotIndex);
       }
       studioLog("ui-state-restored", { stage: state.activeStage, selected: state.selected }, true);
     }
@@ -3096,11 +3173,11 @@
     setStatus("Opening the destination...");
     renderArrivalPanel(currentScene());
     await waitForViewerSettled();
-    if (state.selected?.sceneId !== selection.sceneId || state.selected?.hotspotIndex !== selection.hotspotIndex) {
+    if (!sameHotspotReference(state.selected, selection)) {
       state.arrivalLoading = false;
       return;
     }
-    state.arrival = { ...state.selected };
+    state.arrival = selectedHotspot() ? { ...state.selected } : null;
     state.placement = null;
     api.viewer.loadScene(selected.hotspot.target);
     state.arrivalLoading = false;
@@ -3123,7 +3200,14 @@
     elements.SaveArrival.disabled = true;
     setStatus("Saving first view...");
     if (selected) selected.hotspot.arrivalConfirmed = true;
-    const updated = api.updateHotspotArrival(originSceneId, state.arrival.hotspotIndex, {
+    const arrivalHotspotIndex = resolveHotspotIndex(originSceneId, state.arrival);
+    if (arrivalHotspotIndex < 0) {
+      state.arrivalSaving = false;
+      setStatus("Could not find this first-view task");
+      renderArrivalPanel(currentScene());
+      return;
+    }
+    const updated = api.updateHotspotArrival(originSceneId, arrivalHotspotIndex, {
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
       hfov: roundCoordinate(api.viewer.getHfov())
@@ -3314,19 +3398,18 @@
     const selected = selectedHotspot();
     if (state.activeStage === "links" && state.linkStep === "review" && selected?.hotspot.positionConfirmed) {
       logOperatorStep("adjust-point", {
-        hotspotId: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+        hotspotId: api.hotspotId(selected.scene.id, selected.hotspotIndex),
         pitch: selected.hotspot.pitch,
         yaw: selected.hotspot.yaw
       });
-      state.linkStep = "place";
-      api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
-      setStatus("Move the view until the right place is under the cross");
+      state.linkStep = "review";
+      setStatus("Drag the walking person on the photo. It is saved when you release it.");
       render();
       return;
     }
-    if (!saveSelectedHotspotAtViewerCenter()) return;
+    if (elements.ConfirmCentre.hidden || !saveSelectedHotspotAtViewerCenter()) return;
     logOperatorStep("save-point-here", selected ? {
-      hotspotId: api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex),
+      hotspotId: api.hotspotId(selected.scene.id, selected.hotspotIndex),
       target: selected.hotspot.target
     } : {});
     queueDraftSave("movement-centre-confirmed");
@@ -3516,7 +3599,7 @@
     if (applyPendingFocus()) return;
     const scene = currentScene();
     if (state.activeStage !== "arrival" && !state.arrival) {
-      state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
+      if (!selectedHotspot() && scene?.hotspots.length) selectHotspot(scene.id, 0);
     }
     state.placement = null;
     render();
@@ -3630,9 +3713,18 @@
     }
     const plannedPlacesChanged = syncPlannedPlacesToDraft();
     const sharedArrivalChanged = propagateArrivalViewsByTarget();
-    const scene = currentScene();
-    if (state.activeStage !== "arrival") {
-      state.selected = scene?.hotspots.length ? { sceneId: scene.id, hotspotIndex: 0 } : null;
+    const selected = selectedHotspot();
+    if (state.activeStage === "links" && selected && api.viewer.getScene() !== selected.scene.id) {
+      state.pendingFocus = {
+        ...state.selected,
+        stage: "links",
+        place: state.linkStep === "place" && selected.hotspot.positionConfirmed === false,
+        lookAtHotspot: false
+      };
+      api.viewer.loadScene(selected.scene.id);
+    } else if (state.activeStage !== "arrival") {
+      const scene = currentScene();
+      if (!selected && scene?.hotspots.length) selectHotspot(scene.id, 0);
     } else {
       resetArrivalQueue();
       focusNextArrivalTask("Open the destination and choose its first view");

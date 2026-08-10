@@ -474,8 +474,7 @@ async function main() {
     await page.locator('.editor-add-route-option[data-add-route-target="scene-003"]').click();
     await page.waitForFunction(() => {
       const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
-      if (snapshot?.selected?.sceneId !== "scene-001" || snapshot.selected.hotspotIndex !== 1) return false;
-      return window.__TOUR_EDITOR_API.sceneById["scene-001"]?.hotspots?.[1]?.target === "scene-003";
+      return snapshot?.selected?.sceneId === "scene-001" && snapshot.selected.target === "scene-003";
     });
     const routeAddedOnPlacementStep = await page.evaluate(() => {
       const scene = window.__TOUR_EDITOR_API.sceneById["scene-001"];
@@ -487,89 +486,115 @@ async function main() {
       };
     });
     assert(JSON.stringify(routeAddedOnPlacementStep.targets) === JSON.stringify(["scene-002", "scene-003"]), `Step 4 did not add the missed route to the current source: ${JSON.stringify(routeAddedOnPlacementStep)}`);
-    assert(routeAddedOnPlacementStep.selected?.sceneId === "scene-001" && routeAddedOnPlacementStep.selected?.hotspotIndex === 1, `The new Step 4 route was not selected for placement: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    assert(routeAddedOnPlacementStep.selected?.sceneId === "scene-001" && routeAddedOnPlacementStep.selected?.target === "scene-003", `The new Step 4 route was not selected for placement: ${JSON.stringify(routeAddedOnPlacementStep)}`);
     assert(routeAddedOnPlacementStep.addMenuHidden === true, `The Add walking button picker stayed open after choosing a route: ${JSON.stringify(routeAddedOnPlacementStep)}`);
     assert(routeAddedOnPlacementStep.advancedOpen === false, `Advanced placement actions are open on the default surface: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    await page.waitForFunction(async () => {
+      const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
+      const draft = await response.json();
+      return draft.uiState?.stage === "links" &&
+        draft.uiState?.selected?.sceneId === "scene-001" &&
+        draft.uiState?.selected?.target === "scene-003";
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
+      const status = document.querySelector("#editorStatus")?.textContent || "";
+      return document.body.dataset.editorStage === "links" &&
+        status !== "Loading project" &&
+        snapshot?.selected?.sceneId === "scene-001" &&
+        snapshot.selected.target === "scene-003";
+    });
+    await assertOneTask(page, "Place the walking buttons");
+    const restoredRouteSelection = await page.evaluate(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
+      return {
+        stage: document.body.dataset.editorStage,
+        selected: snapshot.selected,
+        activeSceneId: snapshot.activeSceneId
+      };
+    });
+    assert(restoredRouteSelection.stage === "links" && restoredRouteSelection.selected?.sceneId === "scene-001" && restoredRouteSelection.selected?.target === "scene-003", `Reload did not restore the same walking target: ${JSON.stringify(restoredRouteSelection)}`);
+    await page.getByRole("button", { name: "Back" }).click();
+    await assertOneTask(page, "Choose the look");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await assertOneTask(page, "Place the walking buttons");
     await page.locator('.editor-saved-movement[data-saved-movement-target="scene-002"]').click();
     await page.waitForFunction(() => {
-      const button = document.querySelector("#editorConfirmCentre");
-      return button && !button.disabled;
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
+      const marker = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+      return Boolean(marker &&
+        snapshot?.activeSceneId === "scene-001" &&
+        snapshot.selected?.sceneId === "scene-001" &&
+        snapshot.selected.target === "scene-002" &&
+        snapshot.viewerLoaded);
     });
     const sourceSceneId = await page.evaluate(() => window.__TOUR_EDITOR_API.viewer.getScene());
 
-    await dragViewer(page, 130);
-    const firstPose = await viewerPose(page);
-    const firstTarget = await elementCenter(page, ".editor-centre-target");
-    await page.getByRole("button", { name: "Save point here" }).click();
+    const firstStart = (await addedHotspots(page, sourceSceneId)).find((hotspot) => hotspot.target === "scene-002");
+    const draggedFirst = await dragElementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 92, 34);
     await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Next walking button" }).waitFor();
-    await waitForMarkerAt(page, firstTarget);
     const firstMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
-    assertNear(firstMarker.x, firstTarget.x, 8, "The first walking button did not stay under the centre target after save");
-    assertNear(firstMarker.y, firstTarget.y, 8, "The first walking button did not stay under the centre target after save");
-    let first = (await addedHotspots(page, sourceSceneId))[0];
-    assert(first?.kind === "doorway" && first.positionConfirmed, `The first walking button was not saved: ${JSON.stringify(first)}`);
-    assertNear(first.pitch, firstPose.pitch, 1, "The first walking button pitch did not match the centre target");
-    assertNear(first.yaw, firstPose.yaw, 1, "The first walking button yaw did not match the centre target");
-    const draggedFirst = await dragElementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 92, 34);
-    const firstAfterDrag = (await addedHotspots(page, sourceSceneId))[0];
-    if (firstAfterDrag.pitch === first.pitch && firstAfterDrag.yaw === first.yaw) {
-      const dragDiagnostics = await page.evaluate(() => ({
-        status: document.querySelector("#editorStatus")?.textContent,
-        snapshot: window.__RAINDIGIT_STUDIO_DEBUG__.snapshot(),
-        topAtMarker: (() => {
-          const element = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
-          const box = element?.getBoundingClientRect();
-          if (!box) return null;
-          const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-          return {
+    assertNear(firstMarker.x, draggedFirst.end.x, 24, "The first walking button did not stay near the release pointer");
+    assertNear(firstMarker.y, draggedFirst.end.y, 24, "The first walking button did not stay near the release pointer");
+    let first = (await addedHotspots(page, sourceSceneId)).find((hotspot) => hotspot.target === "scene-002");
+    if (!(first?.kind === "doorway" && first.positionConfirmed)) {
+      const diagnostics = await page.evaluate(() => {
+        const marker = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+        const box = marker?.getBoundingClientRect();
+        const top = box ? document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) : null;
+        return {
+          snapshot: window.__RAINDIGIT_STUDIO_DEBUG__.snapshot(),
+          selectedHotspot: (() => {
+            const selected = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot().selected;
+            return selected ? window.__TOUR_EDITOR_API.sceneById[selected.sceneId]?.hotspots[selected.hotspotIndex] : null;
+          })(),
+          marker: box && { x: box.left + box.width / 2, y: box.top + box.height / 2 },
+          top: {
             tag: top?.tagName || null,
             className: top?.className?.baseVal || top?.className || null,
             hotspotId: top?.closest?.("[data-editor-hotspot-id]")?.dataset?.editorHotspotId || null
-          };
-        })()
-      }));
-      throw new Error(`Dragging a selected walking button did not change its coordinates: ${JSON.stringify({ first, firstAfterDrag, draggedFirst, dragDiagnostics })}`);
+          },
+          status: document.querySelector("#editorStatus")?.textContent
+        };
+      });
+      const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
+      const logs = (await logResponse.json()).entries.slice(-20).map((entry) => ({ event: entry.event, details: entry.details, inventory: entry.inventory?.selected }));
+      throw new Error(`The first walking button was not saved: ${JSON.stringify({ first, diagnostics, logs })}`);
     }
-    const draggedMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
-    assertNear(draggedMarker.x, draggedFirst.end.x, 24, "Dragged walking button did not stay near the release pointer");
-    assertNear(draggedMarker.y, draggedFirst.end.y, 24, "Dragged walking button did not stay near the release pointer");
-    first = firstAfterDrag;
-    await page.getByRole("button", { name: "Move this button" }).click();
-    await page.getByRole("button", { name: "Update point here" }).waitFor();
-    const currentTargetWhileAdjusting = await elementCenter(page, ".editor-centre-target");
-    await waitForMarkerAt(page, currentTargetWhileAdjusting);
-    const currentMarkerWhileAdjusting = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
-    assertNear(currentMarkerWhileAdjusting.x, currentTargetWhileAdjusting.x, 8, "Editing an existing point did not show the selected marker under the centre target");
-    assertNear(currentMarkerWhileAdjusting.y, currentTargetWhileAdjusting.y, 8, "Editing an existing point did not show the selected marker under the centre target");
-    await page.getByRole("button", { name: "Update point here" }).click();
-    await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
-    first = (await addedHotspots(page, sourceSceneId))[0];
+    assert(first.pitch !== firstStart.pitch || first.yaw !== firstStart.yaw, "Dragging the first walking button did not change its stored coordinates.");
+    const reviewMoveState = await page.evaluate(() => ({
+      centreHidden: document.querySelector(".editor-centre-target")?.hidden,
+      confirmHidden: document.querySelector("#editorConfirmCentre")?.hidden,
+      continueLabel: document.querySelector("#editorContinue")?.textContent.trim()
+    }));
+    assert(reviewMoveState.centreHidden === true && reviewMoveState.confirmHidden === true && reviewMoveState.continueLabel === "Next walking button", `Movement placement still exposes centre-cross controls: ${JSON.stringify(reviewMoveState)}`);
     await page.getByRole("button", { name: "Next walking button" }).click();
 
-    await dragViewer(page, -170);
-    const secondPose = await viewerPose(page);
-    const secondTarget = await elementCenter(page, ".editor-centre-target");
-    await page.getByRole("button", { name: "Save point here" }).click();
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
+      return Boolean(document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot") &&
+        snapshot?.activeSceneId === "scene-001" &&
+        snapshot.selected?.sceneId === "scene-001" &&
+        snapshot.selected.target === "scene-003" &&
+        snapshot.viewerLoaded);
+    });
+    const draggedSecond = await dragElementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", -112, 28);
     await page.getByText("Check the walking button on the photo.", { exact: true }).waitFor();
-    await waitForMarkerAt(page, secondTarget);
     const secondMarker = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
-    assertNear(secondMarker.x, secondTarget.x, 8, "The second walking button did not stay under the centre target after save");
-    assertNear(secondMarker.y, secondTarget.y, 8, "The second walking button did not stay under the centre target after save");
+    assertNear(secondMarker.x, draggedSecond.end.x, 24, "The second walking button did not stay near the release pointer");
+    assertNear(secondMarker.y, draggedSecond.end.y, 24, "The second walking button did not stay near the release pointer");
     const both = await addedHotspots(page, sourceSceneId);
-    assert(both.length === 2 && both.every((hotspot) => hotspot.positionConfirmed), `Two independent points were not preserved: ${JSON.stringify(both)}`);
-    assert(JSON.stringify(both[0]) === JSON.stringify(first), `Placing the second point changed the first point: ${JSON.stringify({ first, both })}`);
-    assert(both[0].pitch !== both[1].pitch || both[0].yaw !== both[1].yaw, "Two points collapsed onto the same panorama coordinate.");
-    assertNear(both[1].pitch, secondPose.pitch, 1, "The second walking button pitch did not match the centre target");
-    assertNear(both[1].yaw, secondPose.yaw, 1, "The second walking button yaw did not match the centre target");
+    const firstAfterSecond = both.find((hotspot) => hotspot.target === "scene-002");
+    const second = both.find((hotspot) => hotspot.target === "scene-003");
+    assert(both.length === 2 && firstAfterSecond?.positionConfirmed && second?.positionConfirmed, `Two independent points were not preserved: ${JSON.stringify(both)}`);
+    assert(JSON.stringify(firstAfterSecond) === JSON.stringify(first), `Placing the second point changed the first point: ${JSON.stringify({ first, both })}`);
+    assert(firstAfterSecond.pitch !== second.pitch || firstAfterSecond.yaw !== second.yaw, "Two points collapsed onto the same panorama coordinate.");
     await page.getByRole("button", { name: "Next walking button" }).click();
-    while (await page.getByRole("button", { name: "Save point here" }).isVisible().catch(() => false)) {
-      await page.waitForFunction(() => {
-        const button = document.querySelector("#editorConfirmCentre");
-        return button && !button.disabled;
-      });
-      await dragViewer(page, 70);
-      await page.getByRole("button", { name: "Save point here" }).click();
+    while (await page.evaluate(() => document.body.dataset.editorStage === "links" && window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).some((hotspot) => hotspot.positionConfirmed === false))) {
+      await page.waitForFunction(() => Boolean(document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot")));
+      await dragElementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 66, 20);
       await page.getByRole("button", { name: /Next walking button|Choose first views/ }).waitFor();
       if (await page.getByRole("button", { name: "Next walking button" }).isVisible().catch(() => false)) {
         await page.getByRole("button", { name: "Next walking button" }).click();
@@ -638,7 +663,7 @@ async function main() {
         const hotspot = window.__TOUR_EDITOR_API.sceneById[selected.sceneId].hotspots[selected.hotspotIndex];
         return { source: selected.sceneId, hotspotIndex: selected.hotspotIndex, target: hotspot.target };
       });
-      const taskKey = `${route.source}::${route.hotspotIndex}`;
+      const taskKey = `${route.source}::${route.target}`;
       assert(!visitedArrivalTasks.has(taskKey), `First-view flow selected the same movement twice: ${taskKey}`);
       visitedArrivalTasks.add(taskKey);
       assert(typeof route.target === "string" && route.source !== route.target, `Movement has an invalid destination: ${JSON.stringify(route)}`);
@@ -674,7 +699,7 @@ async function main() {
           const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
           if (document.body.dataset.editorStage === "export") return true;
           if (!snapshot.selected) return false;
-          return `${snapshot.selected.sceneId}::${snapshot.selected.hotspotIndex}` !== previousTaskKey;
+          return `${snapshot.selected.sceneId}::${snapshot.selected.target}` !== previousTaskKey;
         }, taskKey);
       }
     }
@@ -690,7 +715,7 @@ async function main() {
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
     const events = new Set(logBody.entries.map((entry) => entry.event));
-    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "movement-centre-confirmed", "movement-drag-screen-check", "operator-step", "draft-save-success"]) {
+    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "movement-drag-end-coordinate", "movement-drag-screen-check", "operator-step", "draft-save-success"]) {
       assert(events.has(required), `Diagnostic journal is missing ${required}.`);
     }
     const logPath = join(root, "workspace", "studio-debug.ndjson");
