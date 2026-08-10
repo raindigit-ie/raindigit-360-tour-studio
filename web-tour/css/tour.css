@@ -2311,6 +2311,28 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   outline: none;
 }
 
+.editor-card-remove {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 138, 110, 0.42);
+  border-radius: 4px;
+  color: #fff9ec;
+  background: rgba(74, 28, 22, 0.9);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.editor-card-remove:hover,
+.editor-card-remove:focus-visible {
+  border-color: #ff8a6e;
+  outline: none;
+}
+
 .editor-card-preview--inline {
   position: static;
   align-self: stretch;

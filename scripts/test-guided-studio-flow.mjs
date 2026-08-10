@@ -157,7 +157,7 @@ async function main() {
 
   try {
     const fixtures = [];
-    for (const [index, colors] of [["#193746", "#d6af5c"], ["#385b48", "#e8d7a6"], ["#4b334f", "#8bc6b1"]].entries()) {
+    for (const [index, colors] of [["#193746", "#d6af5c"], ["#385b48", "#e8d7a6"], ["#4b334f", "#8bc6b1"], ["#5b4033", "#d8c7a9"]].entries()) {
       const path = join(root, `photo-${index + 1}.jpg`);
       await runMagick(["-size", "1800x900", `gradient:${colors[0]}-${colors[1]}`, "-quality", "90", path]);
       fixtures.push(path);
@@ -170,6 +170,7 @@ async function main() {
     const requestFailures = [];
     page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
     page.on("requestfailed", (request) => requestFailures.push(`${request.url()} - ${request.failure()?.errorText || "failed"}`));
+    page.on("dialog", async (dialog) => { await dialog.accept(); });
 
     await page.goto(`${baseUrl}/?edit=1`);
     await assertOneTask(page, "Start a tour");
@@ -177,7 +178,7 @@ async function main() {
     await page.getByRole("button", { name: "Create new tour" }).click();
     await assertOneTask(page, "Add 360 photos");
     await page.locator("#editorImportFiles").setInputFiles(fixtures);
-    await page.getByText("3 photos ready", { exact: true }).waitFor({ timeout: 90_000 });
+    await page.getByText("4 photos ready", { exact: true }).waitFor({ timeout: 90_000 });
     await page.evaluate(() => window.sessionStorage.clear());
     await page.goto(`${baseUrl}/?edit=1&workspace=1`);
     await assertOneTask(page, "Start a tour");
@@ -211,6 +212,11 @@ async function main() {
     await roomNames.nth(1).press("Tab");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-001"] input').inputValue() === "Kitchen view 1", "The first auto-named photo still looked like a generic View.");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-002"] input').inputValue() === "Kitchen view 2", "The second auto-named photo still looked like a generic View.");
+    await page.getByRole("button", { name: "Remove Kitchen view 4" }).click();
+    await assertOneTask(page, "Set up rooms and walking routes");
+    await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 3);
+    assert(await page.locator('.editor-room-photo[data-scene-id="scene-004"]').count() === 0, "The removed duplicate photo was still visible on the room board.");
+    assert(await roomNames.nth(0).inputValue() === "Kitchen" && await roomNames.nth(1).inputValue() === "Hall", "Removing a photo lost the current room names.");
 
     await page.getByRole("button", { name: "Preview Kitchen view 1" }).click();
     await page.getByRole("dialog", { name: "Kitchen view 1" }).waitFor({ state: "visible" });
