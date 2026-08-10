@@ -41,6 +41,7 @@
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
   const hasSessionStage = stageOrder.includes(restoredStage) && restoredStage !== "start";
   const roundCoordinate = (value) => Math.round(value * 10) / 10;
+  const hotspotDragStartDistance = 10;
   const state = {
     activeStage: hasSessionStage ? restoredStage : "start",
     selected: null,
@@ -582,6 +583,22 @@
     return { scene, hotspot, hotspotIndex };
   }
 
+  function lookAtSelectedMovement(reason = "movement-focused") {
+    const selected = selectedHotspot();
+    if (!selected || api.viewer.getScene() !== selected.scene.id || !api.viewer.isLoaded()) return false;
+    const hfov = Math.min(api.viewer.getHfov(), 86);
+    api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, hfov, 0);
+    studioLog(reason, {
+      sceneId: selected.scene.id,
+      target: selected.hotspot.target,
+      hotspotIndex: selected.hotspotIndex,
+      pitch: roundCoordinate(selected.hotspot.pitch),
+      yaw: roundCoordinate(selected.hotspot.yaw),
+      hfov: roundCoordinate(hfov)
+    }, true);
+    return true;
+  }
+
   function rerenderRoomsPanelPreservingScroll() {
     const scroll = {
       top: panelContent.scrollTop,
@@ -1017,7 +1034,7 @@
     state.placement = focus.place ? { type: "hotspot" } : null;
     const selected = selectedHotspot();
     if (selected && (focus.lookAtHotspot || selected.hotspot.positionConfirmed === false)) {
-      api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
+      lookAtSelectedMovement("pending-movement-focused");
     }
     render();
     return true;
@@ -2194,16 +2211,16 @@
     selectHotspot(source.id, hotspotIndex);
     state.linkStep = hotspot.positionConfirmed ? "review" : "place";
     if (api.viewer.getScene() !== source.id) {
-      state.pendingFocus = { ...state.selected, stage: "links", place: false, lookAtHotspot: hotspot.positionConfirmed === false };
+      state.pendingFocus = { ...state.selected, stage: "links", place: false, lookAtHotspot: true };
       api.viewer.loadScene(source.id);
       setStatus(`Opening ${source.title}...`);
       render();
       return;
     }
+    lookAtSelectedMovement("movement-row-focused");
     if (hotspot.positionConfirmed) {
       setStatus(`Selected ${target?.title || "this place"}. Drag the walking person only if it needs to move.`);
     } else {
-      api.viewer.lookAt(hotspot.pitch, hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
       setStatus(`Place the walking button for ${target?.title || "this place"}`);
     }
     render();
@@ -2906,7 +2923,7 @@
       return true;
     }
     selectHotspot(sceneId, index);
-    state.linkStep = "review";
+    state.linkStep = api.sceneById[sceneId]?.hotspots[index]?.positionConfirmed ? "review" : "place";
     state.placement = null;
     hotspotDrag = {
       pointerId: event.pointerId ?? "mouse",
@@ -2914,10 +2931,15 @@
       hotspotIndex: index,
       startX: event.clientX,
       startY: event.clientY,
-      moved: false
+      moved: false,
+      dragLogged: false
     };
     marker.setPointerCapture?.(event.pointerId);
-    logOperatorStep("point-drag-start", { hotspotId: api.hotspotId(sceneId, index) });
+    studioLog("movement-marker-selected", {
+      sceneId,
+      hotspotIndex: index,
+      target: api.sceneById[sceneId]?.hotspots[index]?.target || null
+    }, true);
     render();
     return true;
   }
@@ -2926,8 +2948,12 @@
     if (!hotspotDrag) return false;
     if (event.pointerId !== undefined && hotspotDrag.pointerId !== event.pointerId) return false;
     if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
-    if (Math.hypot(event.clientX - hotspotDrag.startX, event.clientY - hotspotDrag.startY) > 3) hotspotDrag.moved = true;
+    if (!hotspotDrag.moved && Math.hypot(event.clientX - hotspotDrag.startX, event.clientY - hotspotDrag.startY) > hotspotDragStartDistance) hotspotDrag.moved = true;
     if (!hotspotDrag.moved) return true;
+    if (!hotspotDrag.dragLogged) {
+      hotspotDrag.dragLogged = true;
+      logOperatorStep("point-drag-start", { hotspotId: api.hotspotId(hotspotDrag.sceneId, hotspotDrag.hotspotIndex) });
+    }
     if (moveHotspotToPointer(hotspotDrag.sceneId, hotspotDrag.hotspotIndex, event, "movement-drag-update")) {
       selectHotspot(hotspotDrag.sceneId, hotspotDrag.hotspotIndex);
       state.linkStep = "review";
@@ -2955,6 +2981,10 @@
           marker: selectedMarkerScreenCenter()
         }, true);
       });
+    } else {
+      const selected = selectedHotspot();
+      setStatus(`Selected ${api.sceneById[selected?.hotspot.target]?.title || "this walking button"}. Drag it only if it needs to move.`);
+      render();
     }
     return true;
   }

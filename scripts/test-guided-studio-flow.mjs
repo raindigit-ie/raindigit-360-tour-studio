@@ -621,6 +621,34 @@ async function main() {
     assert(both.length === 2 && firstAfterSecond?.positionConfirmed && second?.positionConfirmed, `Two independent points were not preserved: ${JSON.stringify(both)}`);
     assert(JSON.stringify(firstAfterSecond) === JSON.stringify(first), `Placing the second point changed the first point: ${JSON.stringify({ first, both })}`);
     assert(firstAfterSecond.pitch !== second.pitch || firstAfterSecond.yaw !== second.yaw, "Two points collapsed onto the same panorama coordinate.");
+    await page.locator('.editor-saved-movement[data-saved-movement-target="scene-002"]').click();
+    await page.waitForFunction((expected) => {
+      const viewer = window.__TOUR_EDITOR_API.viewer;
+      const yawDelta = Math.abs((((viewer.getYaw() - expected.yaw + 540) % 360) - 180));
+      return Math.abs(viewer.getPitch() - expected.pitch) < 0.2 && yawDelta < 0.2;
+    }, firstAfterSecond);
+    const focusedFromList = await page.evaluate(() => {
+      const row = document.querySelector('.editor-saved-movement[data-saved-movement-target="scene-002"]');
+      const list = document.querySelector("#editorHotspotList");
+      const rowBox = row?.getBoundingClientRect();
+      const listBox = list?.getBoundingClientRect();
+      return {
+        rowSelected: row?.classList.contains("is-selected") || false,
+        rowVisible: Boolean(rowBox && listBox && rowBox.top >= listBox.top - 1 && rowBox.bottom <= listBox.bottom + 1),
+        selected: window.__RAINDIGIT_STUDIO_DEBUG__.snapshot().selected
+      };
+    });
+    assert(focusedFromList.rowSelected && focusedFromList.rowVisible && focusedFromList.selected?.target === "scene-002", `Selecting a saved route row did not focus its marker and row: ${JSON.stringify(focusedFromList)}`);
+    await page.evaluate((expected) => window.__TOUR_EDITOR_API.viewer.lookAt(expected.pitch, expected.yaw, Math.min(window.__TOUR_EDITOR_API.viewer.getHfov(), 86), 0), second);
+    await page.locator('[data-editor-hotspot-id="scene-001::1"] .nav-hotspot').click();
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
+      const row = document.querySelector('.editor-saved-movement[data-saved-movement-target="scene-003"]');
+      return snapshot?.selected?.target === "scene-003" && row?.classList.contains("is-selected");
+    });
+    const afterMarkerClick = await addedHotspots(page, sourceSceneId);
+    assert(JSON.stringify(afterMarkerClick.find((hotspot) => hotspot.target === "scene-002")) === JSON.stringify(firstAfterSecond), "Clicking a walking person changed the first point coordinates.");
+    assert(JSON.stringify(afterMarkerClick.find((hotspot) => hotspot.target === "scene-003")) === JSON.stringify(second), "Clicking a walking person changed the selected point coordinates.");
     await page.getByRole("button", { name: "Next walking button" }).click();
     while (await page.evaluate(() => document.body.dataset.editorStage === "links" && window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).some((hotspot) => hotspot.positionConfirmed === false))) {
       await page.waitForFunction(() => Boolean(document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot")));
