@@ -397,6 +397,18 @@ async function writeWorkspaceProject(project) {
   await writeJsonAtomic(workspaceProjectPath, project);
 }
 
+async function clearWorkspace() {
+  await rm(workspaceRoot, { recursive: true, force: true });
+}
+
+function clearWorkspaceAfterResponse(response) {
+  response.on("finish", () => {
+    void clearWorkspace().catch((error) => {
+      console.error(`Could not clear completed tour workspace: ${error.message}`);
+    });
+  });
+}
+
 async function createProjectBackup() {
   const project = await readWorkspaceProject();
   if (!project || project.scenes.length === 0) throw new Error("Add at least one 360 photo before downloading a saved tour.");
@@ -876,6 +888,7 @@ const server = createServer(async (request, response) => {
         replyJson(response, 404, { error: "Build the current workspace before downloading it." });
         return;
       }
+      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("application/zip"),
         "content-disposition": "attachment; filename=raindigit-360-tour.zip",
@@ -890,6 +903,7 @@ const server = createServer(async (request, response) => {
         replyJson(response, 404, { error: "Build the current workspace before downloading it." });
         return;
       }
+      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("text/html; charset=utf-8"),
         "content-disposition": "attachment; filename=raindigit-360-tour.html",
@@ -904,6 +918,7 @@ const server = createServer(async (request, response) => {
         replyJson(response, 404, { error: "Build the current workspace before downloading paste-in code." });
         return;
       }
+      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("text/html; charset=utf-8"),
         "content-disposition": "attachment; filename=raindigit-360-tour-embed.html",

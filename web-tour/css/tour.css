@@ -2450,14 +2450,44 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   white-space: nowrap;
 }
 
+.editor-photo-preview__modes {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-photo-preview__modes .editor-button.is-active {
+  color: #17130d;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.editor-photo-preview__viewport {
+  min-height: min(64vh, 640px);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #060706;
+}
+
 .editor-photo-preview__dialog img {
   display: block;
   width: 100%;
-  max-height: min(64vh, 640px);
-  border-radius: 4px;
+  height: min(64vh, 640px);
   object-fit: contain;
-  background: #060706;
 }
+
+.editor-photo-preview__dialog img[hidden] { display: none; }
+
+.editor-photo-preview__viewer {
+  width: 100%;
+  height: min(64vh, 640px);
+  min-height: 360px;
+}
+
+.editor-photo-preview__viewer[hidden] { display: none; }
+
+.editor-photo-preview__viewer.pnlm-container,
+.editor-photo-preview__viewer .pnlm-container { background: #060706; }
 
 .editor-photo-preview__dialog p {
   margin: 0;
@@ -2499,5 +2529,10 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   .editor-room-count .editor-field { width: 100%; }
   .editor-photo-preview { padding: 10px; }
   .editor-photo-preview__dialog { max-height: 92vh; }
-  .editor-photo-preview__dialog img { max-height: 62vh; }
+  .editor-photo-preview__viewport,
+  .editor-photo-preview__dialog img,
+  .editor-photo-preview__viewer {
+    height: 62vh;
+    min-height: 280px;
+  }
 }

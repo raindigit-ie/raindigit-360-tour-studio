@@ -5,7 +5,9 @@
   if (!api) return;
 
   const endpoint = "__tour-editor";
-  const workspaceMode = new URLSearchParams(window.location.search).get("workspace") === "1";
+  const viewParams = new URLSearchParams(window.location.search);
+  const workspaceMode = viewParams.get("workspace") === "1";
+  const resumeMode = viewParams.get("resume") === "1";
   const stageOrder = ["start", "upload", "rooms", "light", "links", "arrival", "export"];
   const stageLabels = {
     start: "Start",
@@ -91,7 +93,8 @@
             <button class="editor-button editor-button--wide" id="editorContinueWorkspace" type="button" disabled>Continue current tour</button>
           </section>
           <section class="editor-start-block">
-            <strong>New tour</strong>
+            <strong id="editorNewProjectHeading">New tour</strong>
+            <p class="editor-start-copy" id="editorNewProjectHelp">Create one active working tour. Finished exports clear the workspace.</p>
             <label class="editor-field editor-field--stacked">
               <span>Tour name</span>
               <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 360 Tour" />
@@ -257,19 +260,30 @@
         </div>
         <button class="editor-button editor-button--icon" id="editorPreviewClose" type="button" aria-label="Close preview" title="Close preview">&times;</button>
       </header>
-      <img id="editorPreviewImage" alt="" />
-      <p>Use this large preview to check which doors, room openings or other camera points are visible before choosing walking routes.</p>
+      <div class="editor-photo-preview__modes" role="group" aria-label="Preview mode">
+        <button class="editor-button editor-button--small is-active" id="editorPreviewFlat" type="button">Photo</button>
+        <button class="editor-button editor-button--small" id="editorPreview360" type="button">360 view</button>
+      </div>
+      <div class="editor-photo-preview__viewport">
+        <img id="editorPreviewImage" alt="" />
+        <div class="editor-photo-preview__viewer" id="editorPreviewViewer" hidden></div>
+      </div>
+      <p id="editorPreviewHelp">Use the photo view to compare duplicates, then use 360 view to inspect the room naturally.</p>
     </div>
   `;
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
     close: previewDialog.querySelector("#editorPreviewClose"),
+    flat: previewDialog.querySelector("#editorPreviewFlat"),
+    sphere: previewDialog.querySelector("#editorPreview360"),
     image: previewDialog.querySelector("#editorPreviewImage"),
+    viewer: previewDialog.querySelector("#editorPreviewViewer"),
+    help: previewDialog.querySelector("#editorPreviewHelp"),
     room: previewDialog.querySelector("#editorPreviewRoom"),
     title: previewDialog.querySelector("#editorPreviewTitle")
   };
@@ -309,6 +323,8 @@
   let roomPointerDrag = null;
   let suppressRoomPhotoClick = false;
   let floorplanDrag = null;
+  let photoPreviewViewer = null;
+  let photoPreviewMode = "flat";
 
   function trackRoomDragMove(event) {
     if (!roomPointerDrag) return;
@@ -338,6 +354,8 @@
   document.addEventListener("mousemove", trackRoomDragMove);
   document.addEventListener("pointerup", finishRoomDrag);
   document.addEventListener("mouseup", finishRoomDrag);
+  previewElements.flat.addEventListener("click", () => setPhotoPreviewMode("flat"));
+  previewElements.sphere.addEventListener("click", () => setPhotoPreviewMode("sphere"));
   previewElements.close.addEventListener("click", closePhotoPreview);
   previewDialog.addEventListener("click", (event) => {
     if (event.target === previewDialog) closePhotoPreview();
@@ -447,8 +465,8 @@
     return `${endpoint}/${path}${workspace ? "?workspace=1" : ""}`;
   }
 
-  function workspaceEditorUrl() {
-    return `${window.location.pathname}?edit=1&workspace=1`;
+  function workspaceEditorUrl(resume = false) {
+    return `${window.location.pathname}?edit=1&workspace=1${resume ? "&resume=1" : ""}`;
   }
 
   function currentScene() {
@@ -550,23 +568,75 @@
     });
   }
 
-  function openPhotoPreview(sceneId) {
+  function destroyPhotoPreviewViewer() {
+    if (photoPreviewViewer?.destroy) photoPreviewViewer.destroy();
+    photoPreviewViewer = null;
+    previewElements.viewer.replaceChildren();
+  }
+
+  function renderPhotoPreviewMode() {
+    const scene = state.workspaceProject?.scenes.find((candidate) => candidate.id === state.previewSceneId);
+    if (!scene) return;
+    const is360 = photoPreviewMode === "sphere";
+    previewElements.flat.classList.toggle("is-active", !is360);
+    previewElements.sphere.classList.toggle("is-active", is360);
+    previewElements.flat.setAttribute("aria-pressed", String(!is360));
+    previewElements.sphere.setAttribute("aria-pressed", String(is360));
+    previewElements.image.hidden = is360;
+    previewElements.viewer.hidden = !is360;
+    previewElements.help.textContent = is360
+      ? "Drag inside the 360 view to inspect the room naturally."
+      : "Use this full photo view to compare duplicates and choose the clearest camera points.";
+    if (!is360) {
+      destroyPhotoPreviewViewer();
+      return;
+    }
+    const pannellumApi = window.pannellum || (typeof pannellum !== "undefined" ? pannellum : null);
+    if (photoPreviewViewer || typeof pannellumApi?.viewer !== "function") return;
+    photoPreviewViewer = pannellumApi.viewer(previewElements.viewer, {
+      type: "equirectangular",
+      panorama: workspaceAsset(scene.panorama || scene.thumb),
+      autoLoad: true,
+      showFullscreenCtrl: false,
+      showZoomCtrl: true,
+      compass: false,
+      keyboardZoom: true,
+      mouseZoom: true,
+      pitch: scene.pitch,
+      yaw: scene.yaw,
+      hfov: scene.hfov,
+      minHfov: 58,
+      maxHfov: 112
+    });
+    studioLog("photo-preview-360-opened", { sceneId: scene.id });
+  }
+
+  function setPhotoPreviewMode(mode) {
+    photoPreviewMode = mode === "sphere" ? "sphere" : "flat";
+    renderPhotoPreviewMode();
+  }
+
+  function openPhotoPreview(sceneId, mode = "flat") {
     const scene = state.workspaceProject?.scenes.find((candidate) => candidate.id === sceneId);
     if (!scene) return;
     state.previewSceneId = scene.id;
+    photoPreviewMode = mode === "sphere" ? "sphere" : "flat";
+    destroyPhotoPreviewViewer();
     previewElements.title.textContent = scene.title;
     previewElements.room.textContent = scene.spaceLabel || "360 photo";
     previewElements.image.src = workspaceAsset(scene.panorama || scene.thumb);
     previewElements.image.alt = scene.title;
     previewDialog.hidden = false;
     document.body.classList.add("is-photo-preview-open");
+    renderPhotoPreviewMode();
     previewElements.close.focus();
-    studioLog("photo-preview-opened", { sceneId: scene.id });
+    studioLog("photo-preview-opened", { sceneId: scene.id, mode: photoPreviewMode });
   }
 
   function closePhotoPreview() {
     if (previewDialog.hidden) return;
     previewDialog.hidden = true;
+    destroyPhotoPreviewViewer();
     previewElements.image.removeAttribute("src");
     document.body.classList.remove("is-photo-preview-open");
     studioLog("photo-preview-closed", { sceneId: state.previewSceneId });
@@ -830,9 +900,15 @@
     const project = state.workspaceProject;
     const saved = state.savedAt ? new Date(state.savedAt).toLocaleString() : "not saved yet";
     elements.CurrentProject.textContent = project
-      ? `${project.title}: ${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"}, ${projectRooms(project).length} room${projectRooms(project).length === 1 ? "" : "s"}; saved ${saved}.`
+      ? `Unfinished tour: ${project.title}. ${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"}, ${projectRooms(project).length} room${projectRooms(project).length === 1 ? "" : "s"}; saved ${saved}.`
       : "No local tour is open.";
     elements.ContinueWorkspace.disabled = !project;
+    elements.ContinueWorkspace.textContent = project ? "Continue unfinished tour" : "Continue current tour";
+    elements.NewProjectHeading.textContent = project ? "Start over" : "New tour";
+    elements.NewProjectHelp.textContent = project
+      ? "This deletes the unfinished working copy and starts a clean tour."
+      : "Create one active working tour. Finished exports clear the workspace.";
+    elements.CreateWorkspace.textContent = project ? "Start new tour" : "Create new tour";
   }
 
   function renderUploadPanel() {
@@ -1810,6 +1886,25 @@
     }
   }
 
+  function watchFinishedExport(kind) {
+    if (!workspaceMode || !state.release.ready) return;
+    studioLog("release-download-started", { kind }, true);
+    window.setTimeout(async () => {
+      try {
+        await refreshWorkspaceProject();
+        if (!state.workspaceProject) {
+          state.release = { ready: false };
+          window.sessionStorage.removeItem(stageStorageKey);
+          state.activeStage = "start";
+          setStatus("Tour exported. Working files cleared.");
+          render();
+        }
+      } catch (error) {
+        studioLog("release-download-cleanup-check-failed", { kind, message: error.message }, true);
+      }
+    }, 1800);
+  }
+
   function syncSelectedMarker() {
     const activeId = state.selected ? api.hotspotId(state.selected.sceneId, state.selected.hotspotIndex) : "";
     viewerElement.querySelectorAll("[data-editor-hotspot-id]").forEach((element) => {
@@ -2447,18 +2542,15 @@
   }
 
   elements.CreateWorkspace.addEventListener("click", async () => {
-    studioLog("project-create-requested", { title: elements.ProjectTitle.value });
-    try { await createWorkspace(false); } catch (error) { setStatus(error.message); }
+    const replace = Boolean(state.workspaceProject);
+    studioLog(replace ? "project-start-over-requested" : "project-create-requested", { title: elements.ProjectTitle.value });
+    try { await createWorkspace(replace); } catch (error) { setStatus(error.message); }
   });
   elements.ContinueWorkspace.addEventListener("click", () => {
     if (!state.workspaceProject) return;
     logOperatorStep("continue-current-tour", { title: state.workspaceProject.title });
-    window.sessionStorage.setItem(stageStorageKey, "upload");
-    if (workspaceMode) {
-      setStage("upload");
-      return;
-    }
-    window.location.assign(workspaceEditorUrl());
+    window.sessionStorage.removeItem(stageStorageKey);
+    window.location.assign(workspaceEditorUrl(true));
   });
   elements.ProjectBackup.addEventListener("change", () => {
     const file = elements.ProjectBackup.files[0];
@@ -2512,6 +2604,9 @@
   elements.InstallUrl.addEventListener("input", updateEmbedCode);
   elements.CopyEmbed.addEventListener("click", copyEmbedCode);
   elements.CopyEmbedBlock.addEventListener("click", copyEmbedBlock);
+  elements.DownloadSingle.addEventListener("click", () => watchFinishedExport("single-html"));
+  elements.DownloadEmbed.addEventListener("click", () => watchFinishedExport("paste-in-html"));
+  elements.DownloadZip.addEventListener("click", () => watchFinishedExport("zip"));
   panel.querySelector("#editorClose").addEventListener("click", () => document.body.classList.remove("is-editor-open"));
   editorToggle.addEventListener("click", () => {
     const isOpen = document.body.classList.toggle("is-editor-open");
@@ -2834,6 +2929,10 @@
     await waitForViewerSettled();
     state.viewerSettled = true;
     applyDraft(draft);
+    if (resumeMode && workspaceMode && state.workspaceProject && state.activeStage === "start") {
+      state.activeStage = "upload";
+      studioLog("resume-fallback-upload", { projectTitle: state.workspaceProject.title }, true);
+    }
     const plannedPlacesChanged = syncPlannedPlacesToDraft();
     const sharedArrivalChanged = propagateArrivalViewsByTarget();
     const scene = currentScene();

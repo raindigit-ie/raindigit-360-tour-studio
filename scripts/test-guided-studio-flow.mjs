@@ -188,6 +188,14 @@ async function main() {
     const uploadPreviewImage = page.locator("#editorPreviewImage");
     await page.waitForFunction(() => document.querySelector("#editorPreviewImage")?.complete === true);
     assert((await uploadPreviewImage.getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Upload preview must use the full panorama, not only a thumbnail.");
+    await page.getByRole("button", { name: "360 view" }).click();
+    await page.locator("#editorPreviewViewer canvas").waitFor({ state: "visible", timeout: 10_000 });
+    const uploadPreviewMode = await page.evaluate(() => ({
+      imageHidden: document.querySelector("#editorPreviewImage")?.hidden,
+      viewerHidden: document.querySelector("#editorPreviewViewer")?.hidden,
+      hasCanvas: Boolean(document.querySelector("#editorPreviewViewer .pnlm-render-container canvas"))
+    }));
+    assert(uploadPreviewMode.imageHidden && !uploadPreviewMode.viewerHidden && uploadPreviewMode.hasCanvas, `360 preview did not render correctly: ${JSON.stringify(uploadPreviewMode)}`);
     await page.keyboard.press("Escape");
     await page.locator(".editor-photo-preview__dialog").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Continue" }).click();
@@ -413,7 +421,10 @@ async function main() {
       const draft = await response.json();
       return draft.uiState?.stage === "arrival";
     });
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}/?edit=1`, { waitUntil: "domcontentloaded" });
+    await assertOneTask(page, "Start a tour");
+    await page.getByText("Unfinished tour: Guided Staff Journey", { exact: false }).waitFor();
+    await page.getByRole("button", { name: "Continue unfinished tour" }).click();
     await page.waitForFunction(() => {
       const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
       return document.body.dataset.editorStage === "arrival" &&
@@ -491,10 +502,6 @@ async function main() {
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Build the tour" }).click();
     await page.getByRole("link", { name: "Download website file" }).waitFor({ timeout: 90_000 });
-    const href = await page.getByRole("link", { name: "Download website file" }).getAttribute("href");
-    const releaseResponse = await page.request.get(new URL(href, baseUrl).href);
-    assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The customer website file was not built correctly.");
-
     await page.evaluate(() => window.__RAINDIGIT_STUDIO_DEBUG__.flush());
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
@@ -508,6 +515,17 @@ async function main() {
     assert(!/data:image|blob:/i.test(logText), "The diagnostic journal contains media payloads.");
     assert(consoleErrors.length === 0, `Studio console errors: ${consoleErrors.join(" | ")}`);
 
+    const href = await page.getByRole("link", { name: "Download website file" }).getAttribute("href");
+    const releaseResponse = await page.request.get(new URL(href, baseUrl).href);
+    assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The customer website file was not built correctly.");
+    await page.waitForFunction(async () => {
+      const response = await fetch("/__tour-editor/status", { cache: "no-store" });
+      const status = await response.json();
+      return status.workspaceAvailable === false;
+    }, null, { timeout: 5_000 });
+    const postExportStatus = await page.request.get(`${baseUrl}/__tour-editor/status`);
+    assert((await postExportStatus.json()).workspaceAvailable === false, "Finished export did not clear the active working tour.");
+
     console.log(JSON.stringify({
       passed: true,
       photos: 3,
@@ -518,6 +536,7 @@ async function main() {
       backNavigation: true,
       firstViews: visitedArrivalTasks.size,
       releaseBuilt: true,
+      exportClearsWorkspace: true,
       mobile: true,
       diagnosticEvents: events.size
     }, null, 2));
