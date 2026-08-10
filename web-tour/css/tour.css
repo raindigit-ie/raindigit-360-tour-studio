@@ -705,6 +705,19 @@ body.is-editor-open .toolbar {
 .editor-upload-zone input,
 .editor-file-picker input { width: min(100%, 360px); color: var(--text-muted); font-size: 10px; }
 
+.editor-upload-zone--compact {
+  min-height: 0;
+  place-items: start;
+  gap: 5px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  text-align: left;
+}
+
+.editor-upload-zone--compact input {
+  width: 100%;
+}
+
 .editor-upload-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

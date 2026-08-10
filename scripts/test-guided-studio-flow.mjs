@@ -257,6 +257,24 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 3);
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-004"]').count() === 0, "The removed duplicate photo was still visible on the room board.");
     assert(await roomNames.nth(0).inputValue() === "Kitchen" && await roomNames.nth(1).inputValue() === "Hall", "Removing a photo lost the current room names.");
+    await page.locator("#editorRoomImportFiles").setInputFiles(fixtures[3]);
+    await assertOneTask(page, "Set up spaces and walking routes");
+    await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 4);
+    const addedRoomState = await page.evaluate(async () => ({
+      rooms: Array.from(document.querySelectorAll("#editorRoomList input")).map((input) => input.value),
+      selectedSource: document.querySelector(".editor-photo-choice.is-selected span")?.textContent,
+      added: {
+        title: document.querySelector('.editor-room-photo[data-scene-id="scene-004"] input')?.value,
+        space: document.querySelector('.editor-room-photo[data-scene-id="scene-004"] select')?.selectedOptions[0]?.textContent,
+        floor: document.querySelectorAll('.editor-room-photo[data-scene-id="scene-004"] select')[1]?.selectedOptions[0]?.textContent
+      },
+      project: (await (await fetch("/__tour-editor/workspace-project", { cache: "no-store" })).json()).project
+    }));
+    assert(addedRoomState.rooms.join("|") === "Kitchen|Hall", `Adding a missing photo on Step 2 lost the room setup: ${JSON.stringify(addedRoomState)}`);
+    assert(addedRoomState.added.title === "Kitchen view 4" && addedRoomState.added.space === "Kitchen" && addedRoomState.added.floor === "First floor", `The Step 2 upload did not inherit the current photo location: ${JSON.stringify(addedRoomState)}`);
+    assert(addedRoomState.selectedSource === "Kitchen view 4", `The newly added Step 2 photo was not selected for route setup: ${JSON.stringify(addedRoomState)}`);
+    await page.getByRole("button", { name: "Remove Kitchen view 4" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 3);
 
     await page.getByRole("button", { name: "Preview Kitchen view 1" }).click();
     await page.getByRole("dialog", { name: "Kitchen view 1" }).waitFor({ state: "visible" });

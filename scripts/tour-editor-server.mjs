@@ -855,8 +855,13 @@ const server = createServer(async (request, response) => {
       const existingRoom = project.rooms?.find((room) => room.id === requestedRoomId) || project.scenes.find((scene) => scene.space === requestedRoomId);
       const spaceLabel = existingRoom?.label || existingRoom?.spaceLabel || requestedRoomLabel || fileNameToTitle(fileName);
       const space = existingRoom?.space || existingRoom?.id || roomId(spaceLabel, requestedRoomId);
+      const requestedFloorLabel = cleanHeader(request.headers["x-tour-floor-label"]).slice(0, 80);
+      const requestedFloorId = cleanHeader(request.headers["x-tour-floor-id"]);
       const fallbackFloor = project.floors?.[0] || { id: "floor-1", label: "First floor" };
       if (!project.floors?.length) project.floors = [fallbackFloor];
+      const existingFloor = project.floors.find((floor) => floor.id === requestedFloorId) || project.scenes.find((scene) => scene.floor === requestedFloorId);
+      const floor = existingFloor?.floor || existingFloor?.id || fallbackFloor.id;
+      const floorLabel = existingFloor?.floorLabel || existingFloor?.label || requestedFloorLabel || fallbackFloor.label;
       const panorama = `panoramas/${id}.jpg`;
       const thumb = `thumbnails/${id}.jpg`;
       const outputPanorama = join(workspaceRoot, panorama);
@@ -878,8 +883,8 @@ const server = createServer(async (request, response) => {
         subtitle: "360 photo",
         space,
         spaceLabel,
-        floor: fallbackFloor.id,
-        floorLabel: fallbackFloor.label,
+        floor,
+        floorLabel,
         thumb,
         panorama,
         pitch: -8,

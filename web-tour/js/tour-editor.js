@@ -157,6 +157,11 @@
         </section>
         <section class="editor-setup-section">
           <div class="editor-setup-section__heading"><span>2</span><div><strong>Photos</strong><small>Drag each photo into its space.</small></div></div>
+          <label class="editor-upload-zone editor-upload-zone--compact">
+            <strong>Add missing 360 photo</strong>
+            <span>Add a forgotten room photo without leaving this setup step.</span>
+            <input id="editorRoomImportFiles" type="file" accept="image/jpeg,.jpg,.jpeg" multiple data-return-stage="rooms" />
+          </label>
           <div class="editor-room-board" id="editorProjectOrder" aria-label="Photos grouped by space"></div>
           <p class="editor-task-progress" id="editorAssignmentStatus"></p>
         </section>
@@ -298,7 +303,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -1811,21 +1816,40 @@
     window.location.assign(body.scenes.length ? workspaceEditorUrl() : `${window.location.pathname}?edit=1`);
   }
 
-  async function importPanoramas() {
-    const files = [...elements.ImportFiles.files];
+  async function importPanoramas(event) {
+    const input = event?.currentTarget || elements.ImportFiles;
+    const files = [...input.files];
     if (!files.length || !state.workspaceProject) return;
     const invalid = files.find((file) => !/\.jpe?g$/i.test(file.name) && file.type !== "image/jpeg");
     if (invalid) {
       setStatus(`Use ready stitched JPG photos. ${invalid.name} is not supported.`);
-      elements.ImportFiles.value = "";
+      input.value = "";
       return;
     }
-    const roomLabel = "Unassigned";
-    const roomId = "room-unassigned";
+    const returnStage = input.dataset.returnStage || state.activeStage || "upload";
+    const selectedScene = state.workspaceProject.scenes.find((scene) => scene.id === state.roomPlanSceneId);
+    const fallbackRoom = projectRooms(state.workspaceProject)[0] || null;
+    const fallbackFloor = projectFloors(state.workspaceProject)[0] || null;
+    const targetRoom = returnStage === "rooms" ? selectedScene || fallbackRoom : null;
+    const roomLabel = targetRoom?.spaceLabel || targetRoom?.label || "Unassigned";
+    const roomId = targetRoom?.space || targetRoom?.id || "room-unassigned";
+    const floorLabel = returnStage === "rooms" ? selectedScene?.floorLabel || fallbackFloor?.label || "" : "";
+    const floorId = returnStage === "rooms" ? selectedScene?.floor || fallbackFloor?.id || "" : "";
+    if (returnStage === "rooms") {
+      try {
+        await flushWorkspaceStructureSave("structure-before-photo-import");
+        await persistWorkspaceStructure();
+      } catch (error) {
+        setStatus(error.message || "Save space names before adding another photo.");
+        input.value = "";
+        return;
+      }
+    }
     state.importing = true;
     state.importProgress = { current: 0, total: files.length };
     renderProjectPanel();
     let imported = 0;
+    let lastImportedSceneId = null;
     try {
       for (const [index, file] of files.entries()) {
         state.importProgress.current = index + 1;
@@ -1837,26 +1861,31 @@
             "content-type": "image/jpeg",
             "x-tour-file-name": encodeURIComponent(file.name),
             "x-tour-room-id": encodeURIComponent(roomId),
-            "x-tour-room-label": encodeURIComponent(roomLabel)
+            "x-tour-room-label": encodeURIComponent(roomLabel),
+            "x-tour-floor-id": encodeURIComponent(floorId),
+            "x-tour-floor-label": encodeURIComponent(floorLabel)
           },
           body: file
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || `Import failed (${response.status})`);
         state.workspaceProject = body.project;
+        lastImportedSceneId = body.scene?.id || null;
         syncStructureRevision();
         imported += 1;
       }
       setStatus(`${imported} photo${imported === 1 ? "" : "s"} added`);
-      window.sessionStorage.setItem(stageStorageKey, "upload");
+      if (lastImportedSceneId && returnStage === "rooms") window.sessionStorage.setItem("raindigit-tour-room-plan-scene", lastImportedSceneId);
+      window.sessionStorage.setItem(stageStorageKey, returnStage === "rooms" ? "rooms" : "upload");
       window.location.assign(workspaceEditorUrl());
     } catch (error) {
       setStatus(imported ? `${imported} imported; ${error.message}` : error.message);
       await refreshWorkspaceProject();
       state.importing = false;
       state.importProgress = { current: 0, total: 0 };
-      elements.ImportFiles.value = "";
+      input.value = "";
       renderUploadPanel();
+      if (returnStage === "rooms") renderRoomsPanel();
     }
   }
 
@@ -3025,6 +3054,7 @@
   });
   elements.RestoreProject.addEventListener("click", () => restoreProject(false));
   elements.ImportFiles.addEventListener("change", importPanoramas);
+  elements.RoomImportFiles.addEventListener("change", importPanoramas);
   elements.ApplyRoomCount.addEventListener("click", setRoomCount);
   elements.ApplyFloorCount.addEventListener("click", setFloorCount);
   elements.RoomCount.addEventListener("change", setRoomCount);
@@ -3409,6 +3439,11 @@
       focusNextArrivalTask("Open the destination and choose its first view");
     }
     state.initializing = false;
+    const restoredRoomPlanSceneId = window.sessionStorage.getItem("raindigit-tour-room-plan-scene");
+    if (restoredRoomPlanSceneId && state.workspaceProject?.scenes?.some((scene) => scene.id === restoredRoomPlanSceneId)) {
+      state.roomPlanSceneId = restoredRoomPlanSceneId;
+    }
+    window.sessionStorage.removeItem("raindigit-tour-room-plan-scene");
     setStatus(state.activeStage === "start"
       ? "Choose how to begin"
       : !state.workspaceProject
