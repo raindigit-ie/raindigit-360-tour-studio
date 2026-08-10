@@ -2453,6 +2453,11 @@
   elements.ContinueWorkspace.addEventListener("click", () => {
     if (!state.workspaceProject) return;
     logOperatorStep("continue-current-tour", { title: state.workspaceProject.title });
+    window.sessionStorage.setItem(stageStorageKey, "upload");
+    if (workspaceMode) {
+      setStage("upload");
+      return;
+    }
     window.location.assign(workspaceEditorUrl());
   });
   elements.ProjectBackup.addEventListener("change", () => {
