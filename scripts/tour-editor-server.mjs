@@ -407,6 +407,89 @@ async function writeWorkspaceProject(project) {
   await writeJsonAtomic(workspaceProjectPath, project);
 }
 
+function workspaceReachableSceneIds(project, draft) {
+  const sceneIds = new Set((project?.scenes || []).map((scene) => scene.id));
+  const firstSceneId = sceneIds.has(project?.firstScene) ? project.firstScene : project?.scenes?.[0]?.id;
+  const graph = new Map((project?.scenes || []).map((scene) => [scene.id, new Set()]));
+  for (const scene of project?.scenes || []) {
+    for (const target of scene.plannedTargets || []) {
+      if (sceneIds.has(target)) graph.get(scene.id).add(target);
+    }
+  }
+  for (const [sourceId, hotspots] of Object.entries(draft?.addedHotspots || {})) {
+    if (!sceneIds.has(sourceId) || !Array.isArray(hotspots)) continue;
+    hotspots.forEach((hotspot) => {
+      if (sceneIds.has(hotspot?.target)) graph.get(sourceId).add(hotspot.target);
+    });
+  }
+  const reachable = new Set();
+  const queue = firstSceneId ? [firstSceneId] : [];
+  while (queue.length > 0) {
+    const sceneId = queue.shift();
+    if (reachable.has(sceneId)) continue;
+    reachable.add(sceneId);
+    for (const target of graph.get(sceneId) || []) {
+      if (!reachable.has(target)) queue.push(target);
+    }
+  }
+  return reachable;
+}
+
+async function pruneUnreachableWorkspaceScenes(project) {
+  const draft = await readDraft(workspaceDraftPath);
+  if (!project || project.scenes.length <= 1) return { project, draft, removed: [] };
+  const reachable = workspaceReachableSceneIds(project, draft);
+  const removed = project.scenes.filter((scene) => !reachable.has(scene.id));
+  if (!removed.length) return { project, draft, removed };
+  const removedIds = new Set(removed.map((scene) => scene.id));
+  const keptIds = new Set(project.scenes.filter((scene) => reachable.has(scene.id)).map((scene) => scene.id));
+  await Promise.all(removed.flatMap((scene) => [
+    rm(join(workspaceRoot, scene.panorama), { force: true }),
+    rm(join(workspaceRoot, scene.thumb), { force: true })
+  ]));
+  project.scenes = project.scenes
+    .filter((scene) => keptIds.has(scene.id))
+    .map((scene) => ({
+      ...scene,
+      hotspots: scene.hotspots.filter((hotspot) => keptIds.has(hotspot.target)),
+      plannedTargets: (scene.plannedTargets || []).filter((target) => keptIds.has(target))
+    }));
+  project.firstScene = project.scenes[0]?.id || null;
+  const usedRooms = new Set(project.scenes.map((scene) => scene.space));
+  const usedFloors = new Set(project.scenes.map((scene) => scene.floor));
+  project.rooms = (project.rooms || []).filter((room) => usedRooms.has(room.id));
+  project.floors = (project.floors || []).filter((floor) => usedFloors.has(floor.id));
+  if (project.map?.pins) {
+    project.map.pins = Object.fromEntries(Object.entries(project.map.pins).filter(([sceneId]) => keptIds.has(sceneId)));
+  }
+  Object.keys(draft.overrides || {}).forEach((key) => {
+    const [sceneId] = key.split("::");
+    if (removedIds.has(sceneId)) delete draft.overrides[key];
+  });
+  for (const collection of ["sceneMetadata", "sceneViews", "sceneAdjustments", "localAdjustments"]) {
+    if (!draft[collection]) continue;
+    removedIds.forEach((sceneId) => delete draft[collection][sceneId]);
+  }
+  if (draft.addedHotspots) {
+    removedIds.forEach((sceneId) => delete draft.addedHotspots[sceneId]);
+    Object.keys(draft.addedHotspots).forEach((sourceId) => {
+      draft.addedHotspots[sourceId] = draft.addedHotspots[sourceId].filter((hotspot) => keptIds.has(hotspot.target));
+    });
+  }
+  if (draft.uiState?.selected && removedIds.has(draft.uiState.selected.sceneId)) {
+    draft.uiState.selected = null;
+  }
+  await writeWorkspaceProject(project);
+  await writeJsonAtomic(workspaceDraftPath, draft);
+  await appendStudioLogs([{
+    time: new Date().toISOString(),
+    sessionId: "server",
+    event: "workspace-unreachable-scenes-pruned",
+    details: { removed: removed.map((scene) => ({ id: scene.id, title: scene.title })) }
+  }]);
+  return { project, draft, removed };
+}
+
 async function clearWorkspace() {
   await rm(workspaceRoot, { recursive: true, force: true });
 }
@@ -910,13 +993,14 @@ const server = createServer(async (request, response) => {
         replyJson(response, 409, { error: "Add at least one 360 photo before building the tour." });
         return;
       }
+      const { removed } = await pruneUnreachableWorkspaceScenes(project);
       const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
       await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--embed", releaseEmbedPath, "--replace"], {
         cwd: projectRoot,
         maxBuffer: 4 * 1024 * 1024,
         timeout: 10 * 60 * 1000
       });
-      replyJson(response, 200, await releaseStatus());
+      replyJson(response, 200, { ...await releaseStatus(), prunedScenes: removed.map((scene) => ({ id: scene.id, title: scene.title })) });
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-status` && request.method === "GET") {

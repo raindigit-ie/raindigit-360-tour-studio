@@ -171,14 +171,53 @@ function applyDraft(project, draft) {
   return project;
 }
 
-function assertReleaseReady(project, draft) {
+function reachableSceneIds(project) {
   const sceneIds = new Set(project.scenes.map((scene) => scene.id));
-  for (const [sourceId, hotspots] of Object.entries(draft?.addedHotspots || {})) {
-    assert(sceneIds.has(sourceId), `Transition source does not exist: ${sourceId}.`);
-    for (const hotspot of hotspots) {
-      assert(sceneIds.has(hotspot.target), `Transition destination does not exist: ${hotspot.target}.`);
+  const firstSceneId = sceneIds.has(project.firstScene) ? project.firstScene : project.scenes[0]?.id;
+  const reachable = new Set();
+  const queue = firstSceneId ? [firstSceneId] : [];
+  while (queue.length > 0) {
+    const sceneId = queue.shift();
+    if (reachable.has(sceneId)) continue;
+    reachable.add(sceneId);
+    const scene = project.scenes.find((candidate) => candidate.id === sceneId);
+    for (const hotspot of scene?.hotspots || []) {
+      if (sceneIds.has(hotspot.target) && !reachable.has(hotspot.target)) queue.push(hotspot.target);
+    }
+  }
+  return reachable;
+}
+
+function pruneUnreachableScenes(project) {
+  if (project.scenes.length <= 1) return [];
+  const reachable = reachableSceneIds(project);
+  const removed = project.scenes.filter((scene) => !reachable.has(scene.id));
+  if (!removed.length) return [];
+  const keptIds = new Set(project.scenes.filter((scene) => reachable.has(scene.id)).map((scene) => scene.id));
+  project.scenes = project.scenes
+    .filter((scene) => keptIds.has(scene.id))
+    .map((scene) => ({
+      ...scene,
+      hotspots: scene.hotspots.filter((hotspot) => keptIds.has(hotspot.target))
+    }));
+  project.firstScene = project.scenes[0]?.id || null;
+  const usedRooms = new Set(project.scenes.map((scene) => scene.space));
+  const usedFloors = new Set(project.scenes.map((scene) => scene.floor));
+  if (Array.isArray(project.rooms)) project.rooms = project.rooms.filter((room) => usedRooms.has(room.id));
+  if (Array.isArray(project.floors)) project.floors = project.floors.filter((floor) => usedFloors.has(floor.id));
+  if (project.map?.pins) {
+    project.map.pins = Object.fromEntries(Object.entries(project.map.pins).filter(([sceneId]) => keptIds.has(sceneId)));
+  }
+  return removed;
+}
+
+function assertReleaseReady(project) {
+  const sceneIds = new Set(project.scenes.map((scene) => scene.id));
+  for (const source of project.scenes) {
+    for (const hotspot of source.hotspots || []) {
       assert(hotspot.positionConfirmed !== false, `Place every transition point before publishing (${hotspot.label}).`);
       assert(hotspot.arrivalConfirmed !== false, `Save every arrival view before publishing (${hotspot.label}).`);
+      assert(sceneIds.has(hotspot.target), `Transition destination does not exist: ${hotspot.target}.`);
     }
   }
 }
@@ -409,7 +448,8 @@ async function main() {
   const workspace = options.workspace;
   const draft = await readJson(join(workspace, "draft.json"), null);
   const project = applyDraft(normaliseProject(await readJson(join(workspace, "tour-project.json"))), draft);
-  assertReleaseReady(project, draft);
+  const prunedScenes = pruneUnreachableScenes(project);
+  assertReleaseReady(project);
   stripEditorMetadata(project);
   if (existsSync(options.output)) {
     if (!options.replace) throw new Error(`Release directory already exists: ${options.output}. Use --replace to regenerate it.`);
@@ -438,7 +478,7 @@ async function main() {
       singleHtml = await createSingleHtml(options.output, project, singleTarget);
     }
     if (options.embed) await createEmbedHtml(singleHtml, options.embed);
-    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, mediaBytes: totalBytes, quality: options.quality }, null, 2));
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality }, null, 2));
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
     throw error;
