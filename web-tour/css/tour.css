@@ -2200,8 +2200,19 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
+}
+
+.editor-room-name-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr);
+  gap: 8px;
+  align-items: end;
+  padding: 8px;
+  border: 1px solid rgba(255, 249, 236, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 249, 236, 0.025);
 }
 
 .editor-room-board {
@@ -2280,7 +2291,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-photo__select span {
   position: absolute;
-  right: 6px;
+  left: 6px;
   bottom: 6px;
   padding: 4px 6px;
   border-radius: 3px;
@@ -2289,20 +2300,30 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   font-weight: 800;
 }
 
-.editor-card-preview {
+.editor-card-actions {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.editor-card-preview,
+.editor-card-remove {
   min-height: 28px;
   padding: 0 8px;
-  border: 1px solid rgba(255, 249, 236, 0.22);
   border-radius: 4px;
   color: #fff9ec;
-  background: rgba(14, 16, 15, 0.88);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
   cursor: pointer;
   font-size: 9px;
   font-weight: 900;
+}
+
+.editor-card-preview {
+  border: 1px solid rgba(255, 249, 236, 0.22);
+  background: rgba(14, 16, 15, 0.88);
 }
 
 .editor-card-preview:hover,
@@ -2312,19 +2333,8 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 }
 
 .editor-card-remove {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  min-height: 28px;
-  padding: 0 8px;
   border: 1px solid rgba(255, 138, 110, 0.42);
-  border-radius: 4px;
-  color: #fff9ec;
   background: rgba(74, 28, 22, 0.9);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-  cursor: pointer;
-  font-size: 9px;
-  font-weight: 900;
 }
 
 .editor-card-remove:hover,
@@ -2547,6 +2557,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
     border-top: 0;
     border-radius: 0 0 4px 4px;
   }
+  .editor-room-name-card { grid-template-columns: 1fr; }
   .editor-room-count { align-items: stretch; flex-direction: column; }
   .editor-room-count .editor-field { width: 100%; }
   .editor-photo-preview { padding: 10px; }

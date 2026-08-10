@@ -12,12 +12,30 @@
   const stageLabels = {
     start: "Start",
     upload: "Photos",
-    rooms: "Rooms",
+    rooms: "Spaces",
     light: "Look",
     links: "Walking buttons",
     arrival: "First views",
     export: "Publish"
   };
+  const spaceNameTemplates = [
+    "Driveway",
+    "Front of house",
+    "Entrance hall",
+    "Hallway",
+    "Stairs / landing",
+    "Living room",
+    "Kitchen",
+    "Dining area",
+    "Bedroom",
+    "Bathroom",
+    "Ensuite",
+    "Utility room",
+    "Home office",
+    "Garage",
+    "Patio / terrace",
+    "Back garden"
+  ];
   const stageStorageKey = "raindigit-tour-studio-stage";
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
   const hasSessionStage = stageOrder.includes(restoredStage) && restoredStage !== "start";
@@ -122,18 +140,18 @@
         <div class="editor-upload-list" id="editorUploadList" aria-label="Uploaded 360 photos"></div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="rooms">
-        <div class="editor-step-heading"><span>Step 2</span><h2>Set up rooms and walking routes</h2></div>
+        <div class="editor-step-heading"><span>Step 2</span><h2>Set up spaces and walking routes</h2></div>
         <section class="editor-setup-section">
-          <div class="editor-setup-section__heading"><span>1</span><div><strong>Rooms</strong><small>Name the rooms in this tour.</small></div></div>
+          <div class="editor-setup-section__heading"><span>1</span><div><strong>Spaces</strong><small>Name rooms, floors and outside areas in this tour.</small></div></div>
           <div class="editor-room-count">
-            <label class="editor-field editor-field--stacked"><span>Number of rooms</span><input id="editorRoomCount" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" /></label>
-            <button class="editor-button" id="editorApplyRoomCount" type="button">Update rooms</button>
+            <label class="editor-field editor-field--stacked"><span>Number of spaces</span><input id="editorRoomCount" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" /></label>
+            <button class="editor-button" id="editorApplyRoomCount" type="button">Update spaces</button>
           </div>
           <div class="editor-room-list" id="editorRoomList"></div>
         </section>
         <section class="editor-setup-section">
-          <div class="editor-setup-section__heading"><span>2</span><div><strong>Photos</strong><small>Drag each photo into its room.</small></div></div>
-          <div class="editor-room-board" id="editorProjectOrder" aria-label="Photos grouped by room"></div>
+          <div class="editor-setup-section__heading"><span>2</span><div><strong>Photos</strong><small>Drag each photo into its space.</small></div></div>
+          <div class="editor-room-board" id="editorProjectOrder" aria-label="Photos grouped by space"></div>
           <p class="editor-task-progress" id="editorAssignmentStatus"></p>
         </section>
         <section class="editor-setup-section editor-place-planner">
@@ -169,7 +187,7 @@
           <strong>Put the walking button under the door or camera point.</strong>
           <span>Drag the 360 photo, then save the walking button.</span>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorConfirmCentre" type="button">Save point here</button>
-          <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Change rooms and routes</button>
+          <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Change spaces and routes</button>
           <div class="editor-placement-tools"><button class="editor-button" id="editorInspectSource" type="button">Inspect source photo</button><button class="editor-button" id="editorUseRoomHeight" type="button">Use room height</button><label><input id="editorGuideSnap" type="checkbox" checked /> Snap to room height</label></div>
           <details class="editor-disclosure editor-disclosure--compact"><summary>Placement details</summary><p id="editorGuideReadout"></p></details>
         </div>
@@ -900,7 +918,7 @@
     const project = state.workspaceProject;
     const saved = state.savedAt ? new Date(state.savedAt).toLocaleString() : "not saved yet";
     elements.CurrentProject.textContent = project
-      ? `Unfinished tour: ${project.title}. ${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"}, ${projectRooms(project).length} room${projectRooms(project).length === 1 ? "" : "s"}; saved ${saved}.`
+      ? `Unfinished tour: ${project.title}. ${project.scenes.length} photo${project.scenes.length === 1 ? "" : "s"}, ${projectRooms(project).length} space${projectRooms(project).length === 1 ? "" : "s"}; saved ${saved}.`
       : "No local tour is open.";
     elements.ContinueWorkspace.disabled = !project;
     elements.ContinueWorkspace.textContent = project ? "Continue unfinished tour" : "Continue current tour";
@@ -992,7 +1010,7 @@
     }
     refreshAutoSceneTitles(project);
     elements.RoomCount.value = String(count);
-    setStatus(`${count} room${count === 1 ? "" : "s"} ready`);
+    setStatus(`${count} space${count === 1 ? "" : "s"} ready`);
     studioLog("room-count-changed", { count });
     renderRoomsPanel();
   }
@@ -1074,17 +1092,21 @@
     elements.RoomCount.value = String(rooms.length);
 
     for (const room of rooms) {
-      const field = document.createElement("label");
-      field.className = "editor-field editor-field--stacked";
-      field.innerHTML = `<span>Room name</span><input type="text" maxlength="80" autocomplete="off" />`;
+      const field = document.createElement("div");
+      field.className = "editor-room-name-card";
+      field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Space name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Quick name</span><select></select></label>`;
       const input = field.querySelector("input");
+      const templateSelect = field.querySelector("select");
       input.value = room.label;
       input.setAttribute("aria-label", `Name for ${room.label}`);
+      templateSelect.setAttribute("aria-label", `Quick name for ${room.label}`);
+      templateSelect.add(new Option("Choose a common space", ""));
+      spaceNameTemplates.forEach((label) => templateSelect.add(new Option(label, label)));
       const commitRoomName = (rerender) => {
         const nextLabel = input.value.trim();
         if (!nextLabel) {
           input.value = room.label;
-          setStatus("Every room needs a name");
+          setStatus("Every space needs a name");
           return;
         }
         room.label = nextLabel;
@@ -1103,6 +1125,11 @@
       };
       input.addEventListener("input", () => commitRoomName(false));
       input.addEventListener("change", () => commitRoomName(true));
+      templateSelect.addEventListener("change", () => {
+        if (!templateSelect.value) return;
+        input.value = templateSelect.value;
+        commitRoomName(true);
+      });
       elements.RoomList.appendChild(field);
 
       const column = document.createElement("section");
@@ -1145,7 +1172,7 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Room</span><select></select></label>`;
+        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
         const choose = card.querySelector("button");
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
@@ -1194,7 +1221,7 @@
           updateSceneLabelDom(scene);
         });
         const roomSelect = card.querySelector("select");
-        roomSelect.setAttribute("aria-label", `Room for ${scene.title}`);
+        roomSelect.setAttribute("aria-label", `Space for ${scene.title}`);
         rooms.forEach((candidate) => roomSelect.add(new Option(candidate.label, candidate.id)));
         roomSelect.value = room.id;
         roomSelect.addEventListener("change", () => assignSceneToRoom(scene.id, roomSelect.value));
@@ -1270,7 +1297,7 @@
       elements.PlannedPlaces.appendChild(summary);
     }
     const totalPlaces = project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0);
-    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} room${rooms.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}`;
+    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} space${rooms.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}`;
   }
 
   function renderProjectPanel() {
@@ -1308,9 +1335,9 @@
   function workspaceStructurePayload(project = state.workspaceProject) {
     if (!project?.scenes?.length) throw new Error("Add at least one 360 photo first.");
     const rooms = projectRooms(project).filter((room) => room.label.trim());
-    if (!rooms.length) throw new Error("Create at least one room.");
+    if (!rooms.length) throw new Error("Create at least one space.");
     const roomIds = new Set(rooms.map((room) => room.id));
-    if (project.scenes.some((scene) => !roomIds.has(scene.space))) throw new Error("Choose a room for every photo.");
+    if (project.scenes.some((scene) => !roomIds.has(scene.space))) throw new Error("Choose a space for every photo.");
     return {
       action: "structure",
       title: project.title,
@@ -1335,7 +1362,7 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify(workspaceStructurePayload())
     });
-    if (!response.ok) throw new Error((await response.json()).error || `Could not save room structure (${response.status})`);
+    if (!response.ok) throw new Error((await response.json()).error || `Could not save space structure (${response.status})`);
     state.workspaceProject = await response.json();
     return state.workspaceProject;
   }
@@ -1344,7 +1371,7 @@
     const project = state.workspaceProject;
     if (!project?.scenes?.length) throw new Error("Add at least one 360 photo first.");
     await persistWorkspaceStructure();
-    setStatus("Room structure saved");
+    setStatus("Space structure saved");
     if (workspaceMode) {
       window.sessionStorage.setItem(stageStorageKey, nextStage || "rooms");
       window.location.reload();
@@ -1361,7 +1388,7 @@
       try {
         await persistWorkspaceStructure();
       } catch (error) {
-        setStatus(error.message || "Save room names before removing this photo.");
+        setStatus(error.message || "Save space names before removing this photo.");
         return;
       }
     }
@@ -1516,7 +1543,7 @@
       elements.PlaceAtCentre.querySelector("span").textContent = "If it is in the right place, continue. If not, adjust it.";
       elements.ConfirmCentre.textContent = "Adjust point";
       elements.ConfirmCentre.classList.remove("editor-button--primary");
-      elements.CancelCentre.textContent = "Change rooms and routes";
+      elements.CancelCentre.textContent = "Change spaces and routes";
       const warnings = placementWarnings(selected.scene, selected.hotspot);
       elements.LinkGuidance.textContent = `Check ${selected.scene.title} to ${target?.title || "the selected place"}.${warnings.length ? ` ${warnings.join(" ")}` : ""}`;
       studioLog("movement-review-shown", { sceneId: selected.scene.id, target: selected.hotspot.target, warnings }, true);
@@ -1525,7 +1552,7 @@
       elements.PlaceAtCentre.querySelector("span").textContent = "Drag the 360 photo until the target is under the cross, then save.";
       elements.ConfirmCentre.textContent = selected.hotspot.positionConfirmed ? "Update point here" : "Save point here";
       elements.ConfirmCentre.classList.add("editor-button--primary");
-      elements.CancelCentre.textContent = "Change rooms and routes";
+      elements.CancelCentre.textContent = "Change spaces and routes";
       elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}. Place the button on the real route, not on furniture or a wall.`;
     } else {
       elements.LinkGuidance.textContent = "Every walking button has an exact position.";
@@ -1740,7 +1767,7 @@
       const adjustment = api.getSceneAdjustment(scene.id);
       return adjustment.brightness !== 100 || adjustment.contrast !== 100 || adjustment.saturation !== 100 || adjustment.warmth !== 0 || api.getLocalAdjustments(scene.id).length > 0;
     }).length;
-    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Rooms</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Places</span></div><div><strong>${adjusted}</strong><span>Picture changes</span></div>`;
+    elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Spaces</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Places</span></div><div><strong>${adjusted}</strong><span>Picture changes</span></div>`;
     const readiness = releaseReadiness();
     elements.Readiness.classList.toggle("is-ready", readiness.ready);
     elements.Readiness.textContent = readiness.ready
@@ -2313,7 +2340,7 @@
     const roomIds = new Set(rooms.map((room) => room.id));
     const unnamedRoom = rooms.find((room) => !room.label.trim());
     if (unnamedRoom) {
-      setStatus("Name every room before continuing");
+      setStatus("Name every space before continuing");
       return false;
     }
     const incompleteScene = project.scenes.find((scene) => !scene.title.trim() || !roomIds.has(scene.space));
@@ -2665,7 +2692,7 @@
   elements.CancelCentre.addEventListener("click", () => {
     state.linkStep = "choose";
     state.selected = null;
-    setStatus("Change the room board or selected places");
+    setStatus("Change the space board or selected places");
     setStage("rooms");
   });
   elements.InspectSource.addEventListener("click", () => {

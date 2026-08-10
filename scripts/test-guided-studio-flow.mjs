@@ -202,18 +202,18 @@ async function main() {
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.setViewportSize({ width: 390, height: 605 });
-    await assertOneTask(page, "Set up rooms and walking routes");
-    await page.getByLabel("Number of rooms").fill("2");
-    await page.getByRole("button", { name: "Update rooms" }).click();
+    await assertOneTask(page, "Set up spaces and walking routes");
+    await page.getByLabel("Number of spaces").fill("2");
+    await page.getByRole("button", { name: "Update spaces" }).click();
     const roomNames = page.locator("#editorRoomList input");
-    await roomNames.nth(0).fill("Kitchen");
-    await roomNames.nth(0).press("Tab");
+    const spaceTemplates = page.locator("#editorRoomList select");
+    await spaceTemplates.nth(0).selectOption("Kitchen");
     await roomNames.nth(1).fill("Hall");
     await roomNames.nth(1).press("Tab");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-001"] input').inputValue() === "Kitchen view 1", "The first auto-named photo still looked like a generic View.");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-002"] input').inputValue() === "Kitchen view 2", "The second auto-named photo still looked like a generic View.");
     await page.getByRole("button", { name: "Remove Kitchen view 4" }).click();
-    await assertOneTask(page, "Set up rooms and walking routes");
+    await assertOneTask(page, "Set up spaces and walking routes");
     await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 3);
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-004"]').count() === 0, "The removed duplicate photo was still visible on the room board.");
     assert(await roomNames.nth(0).inputValue() === "Kitchen" && await roomNames.nth(1).inputValue() === "Hall", "Removing a photo lost the current room names.");
