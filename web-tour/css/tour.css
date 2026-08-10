@@ -2200,7 +2200,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -2222,7 +2222,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-name-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr) auto;
+  grid-template-columns: minmax(120px, 0.72fr) minmax(210px, 1.28fr) 38px;
   gap: 8px;
   align-items: end;
   padding: 8px;
@@ -2233,21 +2233,29 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-floor-name-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 38px;
   gap: 8px;
   align-items: end;
 }
 
 .editor-small-danger {
-  min-height: 40px;
-  padding: 0 10px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
   border: 1px solid rgba(255, 138, 110, 0.38);
   border-radius: 4px;
   color: #fff9ec;
   background: rgba(74, 28, 22, 0.72);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 0;
   font-weight: 900;
+}
+
+.editor-small-danger::before {
+  content: "×";
+  font-size: 20px;
+  line-height: 1;
 }
 
 .editor-small-danger:hover,
@@ -2343,7 +2351,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-photo__select span {
   position: absolute;
-  left: 76px;
+  left: 120px;
   bottom: 6px;
   padding: 4px 6px;
   border-radius: 3px;
@@ -2352,7 +2360,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   font-weight: 800;
 }
 
-.editor-room-photo__order {
+.editor-room-photo__move-controls {
   position: absolute;
   left: 6px;
   bottom: 6px;
@@ -2360,8 +2368,8 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   gap: 4px;
 }
 
-.editor-room-photo__order button {
-  width: 31px;
+.editor-room-photo__move-controls button {
+  width: 24px;
   height: 28px;
   border: 1px solid rgba(214, 175, 92, 0.78);
   border-radius: 4px;
@@ -2374,14 +2382,14 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   letter-spacing: 0;
 }
 
-.editor-room-photo__order button:hover,
-.editor-room-photo__order button:focus-visible {
+.editor-room-photo__move-controls button:hover,
+.editor-room-photo__move-controls button:focus-visible {
   border-color: var(--accent);
   outline: none;
   background: rgba(31, 34, 30, 0.96);
 }
 
-.editor-room-photo__order button:disabled {
+.editor-room-photo__move-controls button:disabled {
   cursor: not-allowed;
   opacity: 0.38;
 }

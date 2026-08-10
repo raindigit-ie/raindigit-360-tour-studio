@@ -635,6 +635,18 @@
     panel.querySelectorAll(`[data-scene-preview-for="${scene.id}"]`).forEach((node) => {
       node.setAttribute("aria-label", `Preview ${scene.title}`);
     });
+    panel.querySelectorAll(`[data-scene-remove-for="${scene.id}"]`).forEach((node) => {
+      node.setAttribute("aria-label", `Remove ${scene.title}`);
+    });
+    panel.querySelectorAll(`[data-scene-choose-for="${scene.id}"]`).forEach((node) => {
+      node.setAttribute("aria-label", `Choose routes from ${scene.title}`);
+    });
+    panel.querySelectorAll(`[data-scene-space-move-for="${scene.id}"]`).forEach((node) => {
+      node.setAttribute("aria-label", `Move ${scene.title} to ${Number(node.dataset.spaceDirection) < 0 ? "previous" : "next"} space`);
+    });
+    panel.querySelectorAll(`[data-scene-order-move-for="${scene.id}"]`).forEach((node) => {
+      node.setAttribute("aria-label", `Move ${scene.title} ${Number(node.dataset.orderDirection) < 0 ? "up" : "down"}`);
+    });
   }
 
   function destroyPhotoPreviewViewer() {
@@ -1242,6 +1254,17 @@
     renderRoomsPanel();
   }
 
+  function moveSceneToAdjacentRoom(sceneId, direction) {
+    const project = state.workspaceProject;
+    const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
+    const rooms = projectRooms(project);
+    if (!project || !scene || ![-1, 1].includes(direction)) return;
+    const roomIndex = rooms.findIndex((room) => room.id === scene.space);
+    const targetRoom = rooms[roomIndex + direction];
+    if (!targetRoom) return;
+    moveSceneToRoomPosition(scene.id, targetRoom.id);
+  }
+
   function renderRoomsPanel() {
     const project = state.workspaceProject;
     elements.RoomList.replaceChildren();
@@ -1274,7 +1297,7 @@
     elements.RoomCount.value = String(rooms.length);
     elements.FloorCount.value = String(floors.length);
 
-    for (const room of rooms) {
+    for (const [roomIndex, room] of rooms.entries()) {
       const field = document.createElement("div");
       field.className = "editor-room-name-card";
       field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Space name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Quick name</span><select></select></label><button class="editor-small-danger" type="button">Remove</button>`;
@@ -1358,7 +1381,7 @@
       elements.FloorList.appendChild(field);
     }
 
-    for (const room of rooms) {
+    for (const [roomIndex, room] of rooms.entries()) {
       const column = document.createElement("section");
       column.className = "editor-room-column";
       column.dataset.roomId = room.id;
@@ -1399,9 +1422,10 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-room-photo__order"><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">↑</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">↓</button></div><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
+        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-room-photo__move-controls"><button type="button" data-space-direction="-1" aria-label="Move ${scene.title} to previous space">←</button><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">↑</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">↓</button><button type="button" data-space-direction="1" aria-label="Move ${scene.title} to next space">→</button></div><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
         const choose = card.querySelector(".editor-room-photo__select");
+        choose.dataset.sceneChooseFor = scene.id;
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
         choose.draggable = false;
         choose.addEventListener("click", () => {
@@ -1410,8 +1434,9 @@
           setStatus(`Choose where people can walk from ${scene.title}`);
           rerenderRoomsPanelPreservingScroll();
         });
-        const orderButtons = card.querySelectorAll(".editor-room-photo__order button");
+        const orderButtons = card.querySelectorAll("[data-order-direction]");
         orderButtons.forEach((button) => {
+          button.dataset.sceneOrderMoveFor = scene.id;
           const direction = Number(button.dataset.orderDirection);
           button.disabled = direction < 0 ? roomSceneIndex === 0 : roomSceneIndex === roomScenes.length - 1;
           button.addEventListener("click", (event) => {
@@ -1419,11 +1444,22 @@
             moveSceneWithinRoom(scene.id, direction);
           });
         });
+        const spaceButtons = card.querySelectorAll("[data-space-direction]");
+        spaceButtons.forEach((button) => {
+          button.dataset.sceneSpaceMoveFor = scene.id;
+          const direction = Number(button.dataset.spaceDirection);
+          button.disabled = direction < 0 ? roomIndex === 0 : roomIndex === rooms.length - 1;
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            moveSceneToAdjacentRoom(scene.id, direction);
+          });
+        });
         const preview = card.querySelector(".editor-card-preview");
         preview.dataset.scenePreviewFor = scene.id;
         preview.setAttribute("aria-label", `Preview ${scene.title}`);
         preview.addEventListener("click", () => openPhotoPreview(scene.id));
         const remove = card.querySelector(".editor-card-remove");
+        remove.dataset.sceneRemoveFor = scene.id;
         remove.setAttribute("aria-label", `Remove ${scene.title}`);
         remove.addEventListener("click", (event) => {
           event.stopPropagation();
