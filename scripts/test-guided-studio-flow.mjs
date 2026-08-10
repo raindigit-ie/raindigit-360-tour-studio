@@ -178,6 +178,13 @@ async function main() {
     await assertOneTask(page, "Add 360 photos");
     await page.locator("#editorImportFiles").setInputFiles(fixtures);
     await page.getByText("3 photos ready", { exact: true }).waitFor({ timeout: 90_000 });
+    await page.getByRole("button", { name: "Preview View 1" }).click();
+    await page.getByRole("dialog", { name: "View 1" }).waitFor({ state: "visible" });
+    const uploadPreviewImage = page.locator("#editorPreviewImage");
+    await page.waitForFunction(() => document.querySelector("#editorPreviewImage")?.complete === true);
+    assert((await uploadPreviewImage.getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Upload preview must use the full panorama, not only a thumbnail.");
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "View 1" }).waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.setViewportSize({ width: 390, height: 605 });

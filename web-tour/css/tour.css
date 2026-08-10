@@ -715,7 +715,7 @@ body.is-editor-open .toolbar {
 .editor-upload-item {
   min-width: 0;
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 30px;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   padding: 8px;
@@ -723,7 +723,25 @@ body.is-editor-open .toolbar {
   background: rgba(255, 249, 236, 0.035);
 }
 
-.editor-upload-item img {
+.editor-upload-item__preview {
+  display: block;
+  width: 92px;
+  padding: 0;
+  border: 1px solid rgba(214, 175, 92, 0.32);
+  border-radius: 3px;
+  background: #060706;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.editor-upload-item__preview:hover,
+.editor-upload-item__preview:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.editor-upload-item__preview img {
+  display: block;
   width: 92px;
   aspect-ratio: 2 / 1;
   object-fit: cover;
@@ -734,6 +752,19 @@ body.is-editor-open .toolbar {
 .editor-upload-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-upload-item strong { color: #fff9ec; font-size: 10px; }
 .editor-upload-item span { color: var(--text-muted); font-size: 9px; }
+
+.editor-upload-item__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: end;
+  align-items: center;
+}
+
+.editor-button--small {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 9px;
+}
 
 .editor-add-room {
   display: grid;
@@ -807,8 +838,11 @@ body[data-editor-stage="start"] #editorClose { display: none; }
   .editor-start-options { grid-template-columns: minmax(0, 1fr); gap: 0; }
 
   .editor-upload-list { grid-template-columns: minmax(0, 1fr); }
-  .editor-upload-item { grid-template-columns: 76px minmax(0, 1fr) 30px; }
-  .editor-upload-item img { width: 76px; }
+  .editor-upload-item { grid-template-columns: 76px minmax(0, 1fr) auto; }
+  .editor-upload-item__preview,
+  .editor-upload-item__preview img { width: 76px; }
+  .editor-upload-item__actions { gap: 5px; }
+  .editor-upload-item__actions .editor-button--small { padding-inline: 8px; }
   .editor-progress { padding: 8px 10px 10px; }
 }
 

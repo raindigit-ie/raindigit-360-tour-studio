@@ -847,23 +847,38 @@
     for (const scene of project.scenes) {
       const row = document.createElement("article");
       row.className = "editor-upload-item";
+      const thumbButton = document.createElement("button");
+      thumbButton.className = "editor-upload-item__preview";
+      thumbButton.type = "button";
+      thumbButton.setAttribute("aria-label", `Open full preview for ${scene.title}`);
       const thumb = document.createElement("img");
       thumb.src = workspaceAsset(scene.thumb);
       thumb.alt = "";
+      thumbButton.appendChild(thumb);
       const details = document.createElement("div");
       const title = document.createElement("strong");
       title.textContent = scene.title;
       const dimensions = document.createElement("span");
       dimensions.textContent = "360 photo ready";
       details.append(title, dimensions);
+      const actions = document.createElement("div");
+      actions.className = "editor-upload-item__actions";
+      const preview = document.createElement("button");
+      preview.className = "editor-button editor-button--small";
+      preview.type = "button";
+      preview.textContent = "Preview";
+      preview.setAttribute("aria-label", `Preview ${scene.title}`);
       const remove = document.createElement("button");
       remove.className = "editor-button editor-button--icon editor-button--danger";
       remove.type = "button";
       remove.textContent = "×";
       remove.title = "Remove 360 photo";
       remove.setAttribute("aria-label", `Remove ${scene.title}`);
+      thumbButton.addEventListener("click", () => openPhotoPreview(scene.id));
+      preview.addEventListener("click", () => openPhotoPreview(scene.id));
       remove.addEventListener("click", () => removeWorkspaceScene(scene.id, scene.title, "upload"));
-      row.append(thumb, details, remove);
+      actions.append(preview, remove);
+      row.append(thumbButton, details, actions);
       elements.UploadList.appendChild(row);
     }
   }
