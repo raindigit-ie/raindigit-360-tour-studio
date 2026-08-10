@@ -36,6 +36,7 @@
     { label: "Patio / terrace", hint: "терраса" },
     { label: "Back garden", hint: "задний двор" }
   ];
+  const defaultFloorNames = ["Ground floor", "First floor", "Second floor", "Third floor", "Fourth floor"];
   const stageStorageKey = "raindigit-tour-studio-stage";
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
   const hasSessionStage = stageOrder.includes(restoredStage) && restoredStage !== "start";
@@ -146,8 +147,13 @@
           <div class="editor-room-count">
             <label class="editor-field editor-field--stacked"><span>Number of spaces</span><input id="editorRoomCount" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" /></label>
             <button class="editor-button" id="editorApplyRoomCount" type="button">Update spaces</button>
+            <label class="editor-field editor-field--stacked"><span>Number of floors</span><input id="editorFloorCount" type="number" min="1" max="20" step="1" value="1" inputmode="numeric" /></label>
+            <button class="editor-button" id="editorApplyFloorCount" type="button">Update floors</button>
           </div>
-          <div class="editor-room-list" id="editorRoomList"></div>
+          <div class="editor-room-configs">
+            <div><strong>Space names</strong><div class="editor-room-list" id="editorRoomList"></div></div>
+            <div><strong>Floor names</strong><div class="editor-room-list editor-floor-list" id="editorFloorList"></div></div>
+          </div>
         </section>
         <section class="editor-setup-section">
           <div class="editor-setup-section__heading"><span>2</span><div><strong>Photos</strong><small>Drag each photo into its space.</small></div></div>
@@ -292,7 +298,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "RoomList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -557,6 +563,31 @@
     return project.rooms;
   }
 
+  function defaultFloorLabel(index) {
+    return defaultFloorNames[index] || `Floor ${index + 1}`;
+  }
+
+  function floorMap(project = state.workspaceProject) {
+    const floors = new Map();
+    for (const floor of project?.floors || []) floors.set(floor.id, { ...floor, scenes: [] });
+    for (const scene of project?.scenes || []) {
+      const floorId = scene.floor || "floor-1";
+      const floorLabel = scene.floorLabel || defaultFloorLabel(0);
+      if (!floors.has(floorId)) floors.set(floorId, { id: floorId, label: floorLabel, scenes: [] });
+      floors.get(floorId).scenes.push(scene);
+    }
+    return floors;
+  }
+
+  function projectFloors(project = state.workspaceProject) {
+    if (!project) return [];
+    if (!Array.isArray(project.floors)) {
+      project.floors = [...floorMap(project).values()]
+        .map(({ id, label }) => ({ id, label }));
+    }
+    return project.floors;
+  }
+
   function isAutoSceneTitle(scene) {
     return scene?.titleAutoGenerated === true || /^View\s+\d+$/i.test((scene?.title || "").trim());
   }
@@ -577,6 +608,7 @@
   function updateSceneLabelDom(scene) {
     panel.querySelectorAll(`[data-scene-title-for="${scene.id}"]`).forEach((node) => { node.textContent = scene.title; });
     panel.querySelectorAll(`[data-scene-room-for="${scene.id}"]`).forEach((node) => { node.textContent = scene.spaceLabel; });
+    panel.querySelectorAll(`[data-scene-floor-for="${scene.id}"]`).forEach((node) => { node.textContent = scene.floorLabel || ""; });
     panel.querySelectorAll(`[data-scene-title-input-for="${scene.id}"]`).forEach((node) => {
       if (document.activeElement !== node) node.value = scene.title;
       node.setAttribute("aria-label", `Name for ${scene.title}`);
@@ -988,6 +1020,18 @@
     });
   }
 
+  function ensureInitialFloor() {
+    const project = state.workspaceProject;
+    const floors = projectFloors(project);
+    if (!project?.scenes?.length || floors.length) return;
+    const floor = { id: "floor-1", label: defaultFloorLabel(0) };
+    project.floors.push(floor);
+    project.scenes.forEach((scene) => {
+      scene.floor = floor.id;
+      scene.floorLabel = floor.label;
+    });
+  }
+
   function setRoomCount() {
     const project = state.workspaceProject;
     if (!project) return;
@@ -1015,8 +1059,46 @@
     renderRoomsPanel();
   }
 
+  function setFloorCount() {
+    const project = state.workspaceProject;
+    if (!project) return;
+    const count = Math.max(1, Math.min(20, Number.parseInt(elements.FloorCount.value, 10) || 1));
+    const floors = projectFloors(project);
+    while (floors.length < count) {
+      const index = floors.length;
+      floors.push({ id: `floor-${Date.now().toString(36)}-${index + 1}`, label: defaultFloorLabel(index) });
+    }
+    if (floors.length > count) {
+      const kept = floors.slice(0, count);
+      const keptIds = new Set(kept.map((floor) => floor.id));
+      const fallback = kept[0];
+      project.scenes.forEach((scene) => {
+        if (keptIds.has(scene.floor)) return;
+        scene.floor = fallback.id;
+        scene.floorLabel = fallback.label;
+      });
+      project.floors = kept;
+    }
+    elements.FloorCount.value = String(count);
+    setStatus(`${count} floor${count === 1 ? "" : "s"} ready`);
+    studioLog("floor-count-changed", { count });
+    renderRoomsPanel();
+  }
+
   function assignSceneToRoom(sceneId, roomId) {
     moveSceneToRoomPosition(sceneId, roomId);
+  }
+
+  function assignSceneToFloor(sceneId, floorId) {
+    const project = state.workspaceProject;
+    const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
+    const floor = projectFloors(project).find((candidate) => candidate.id === floorId);
+    if (!scene || !floor) return;
+    scene.floor = floor.id;
+    scene.floorLabel = floor.label;
+    setStatus(`${scene.title} set to ${floor.label}`);
+    studioLog("floor-selected", { floorId: floor.id, sceneId: scene.id });
+    renderRoomsPanel();
   }
 
   function moveSceneToRoomPosition(sceneId, roomId, beforeSceneId = null) {
@@ -1072,24 +1154,34 @@
   function renderRoomsPanel() {
     const project = state.workspaceProject;
     elements.RoomList.replaceChildren();
+    elements.FloorList.replaceChildren();
     elements.ProjectOrder.replaceChildren();
     elements.RoomChoices.replaceChildren();
     elements.PlaceChoices.replaceChildren();
     elements.PlannedPlaces.replaceChildren();
     if (!project) return;
     ensureInitialRoom();
+    ensureInitialFloor();
     const rooms = projectRooms(project);
+    const floors = projectFloors(project);
     const roomIds = new Set(rooms.map((room) => room.id));
+    const floorIds = new Set(floors.map((floor) => floor.id));
     const fallbackRoom = rooms[0];
+    const fallbackFloor = floors[0];
     project.scenes.forEach((scene) => {
       if (!roomIds.has(scene.space)) {
         scene.space = fallbackRoom.id;
         scene.spaceLabel = fallbackRoom.label;
       }
+      if (!floorIds.has(scene.floor)) {
+        scene.floor = fallbackFloor.id;
+        scene.floorLabel = fallbackFloor.label;
+      }
       plannedTargets(scene);
     });
     refreshAutoSceneTitles(project);
     elements.RoomCount.value = String(rooms.length);
+    elements.FloorCount.value = String(floors.length);
 
     for (const room of rooms) {
       const field = document.createElement("div");
@@ -1131,7 +1223,39 @@
         commitRoomName(true);
       });
       elements.RoomList.appendChild(field);
+    }
 
+    for (const floor of floors) {
+      const field = document.createElement("label");
+      field.className = "editor-field editor-field--stacked editor-floor-name-card";
+      field.innerHTML = `<span>Floor name</span><input type="text" maxlength="80" autocomplete="off" />`;
+      const input = field.querySelector("input");
+      input.value = floor.label;
+      input.setAttribute("aria-label", `Name for ${floor.label}`);
+      const commitFloorName = (rerender) => {
+        const nextLabel = input.value.trim();
+        if (!nextLabel) {
+          input.value = floor.label;
+          setStatus("Every floor needs a name");
+          return;
+        }
+        floor.label = nextLabel;
+        project.scenes.filter((scene) => scene.floor === floor.id).forEach((scene) => { scene.floorLabel = nextLabel; });
+        studioLog("floor-name-edited", { floorId: floor.id, label: nextLabel });
+        if (rerender) renderRoomsPanel();
+        else {
+          elements.ProjectOrder.querySelectorAll(".editor-room-photo select").forEach((select) => {
+            Array.from(select.options).filter((option) => option.value === floor.id).forEach((option) => { option.textContent = nextLabel; });
+          });
+          project.scenes.filter((scene) => scene.floor === floor.id).forEach(updateSceneLabelDom);
+        }
+      };
+      input.addEventListener("input", () => commitFloorName(false));
+      input.addEventListener("change", () => commitFloorName(true));
+      elements.FloorList.appendChild(field);
+    }
+
+    for (const room of rooms) {
       const column = document.createElement("section");
       column.className = "editor-room-column";
       column.dataset.roomId = room.id;
@@ -1172,7 +1296,7 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label>`;
+        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
         const choose = card.querySelector("button");
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
@@ -1220,11 +1344,15 @@
           }
           updateSceneLabelDom(scene);
         });
-        const roomSelect = card.querySelector("select");
+        const [roomSelect, floorSelect] = card.querySelectorAll("select");
         roomSelect.setAttribute("aria-label", `Space for ${scene.title}`);
         rooms.forEach((candidate) => roomSelect.add(new Option(candidate.label, candidate.id)));
         roomSelect.value = room.id;
         roomSelect.addEventListener("change", () => assignSceneToRoom(scene.id, roomSelect.value));
+        floorSelect.setAttribute("aria-label", `Floor for ${scene.title}`);
+        floors.forEach((candidate) => floorSelect.add(new Option(candidate.label, candidate.id)));
+        floorSelect.value = scene.floor;
+        floorSelect.addEventListener("change", () => assignSceneToFloor(scene.id, floorSelect.value));
         const beginDrag = (event) => {
           roomPointerDrag = null;
           event.dataTransfer.effectAllowed = "move";
@@ -1277,7 +1405,7 @@
         targetTitle.textContent = target.title;
         const targetRoom = button.querySelector("small");
         targetRoom.dataset.sceneRoomFor = target.id;
-        targetRoom.textContent = target.spaceLabel;
+        targetRoom.textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
         button.querySelector("i").textContent = selected ? "✓" : "+";
         button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
         const preview = document.createElement("button");
@@ -1297,7 +1425,7 @@
       elements.PlannedPlaces.appendChild(summary);
     }
     const totalPlaces = project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0);
-    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} space${rooms.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}`;
+    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} space${rooms.length === 1 ? "" : "s"} across ${floors.length} floor${floors.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}`;
   }
 
   function renderProjectPanel() {
@@ -1336,21 +1464,28 @@
     if (!project?.scenes?.length) throw new Error("Add at least one 360 photo first.");
     const rooms = projectRooms(project).filter((room) => room.label.trim());
     if (!rooms.length) throw new Error("Create at least one space.");
+    const floors = projectFloors(project).filter((floor) => floor.label.trim());
+    if (!floors.length) throw new Error("Create at least one floor.");
     const roomIds = new Set(rooms.map((room) => room.id));
+    const floorIds = new Set(floors.map((floor) => floor.id));
     if (project.scenes.some((scene) => !roomIds.has(scene.space))) throw new Error("Choose a space for every photo.");
+    if (project.scenes.some((scene) => !floorIds.has(scene.floor))) throw new Error("Choose a floor for every photo.");
     return {
       action: "structure",
       title: project.title,
       rooms,
+      floors,
       firstScene: project.scenes[0]?.id || null,
       sceneIds: project.scenes.map((scene) => scene.id),
-      scenes: project.scenes.map(({ id, title, titleAutoGenerated, subtitle, space, spaceLabel, plannedTargets: targets }) => ({
+      scenes: project.scenes.map(({ id, title, titleAutoGenerated, subtitle, space, spaceLabel, floor, floorLabel, plannedTargets: targets }) => ({
         id,
         title,
         titleAutoGenerated: titleAutoGenerated === true,
         subtitle,
         space,
         spaceLabel,
+        floor,
+        floorLabel,
         plannedTargets: Array.isArray(targets) ? targets : []
       }))
     };
@@ -2337,15 +2472,22 @@
     const project = state.workspaceProject;
     if (!project?.scenes?.length) return false;
     const rooms = projectRooms(project);
+    const floors = projectFloors(project);
     const roomIds = new Set(rooms.map((room) => room.id));
+    const floorIds = new Set(floors.map((floor) => floor.id));
     const unnamedRoom = rooms.find((room) => !room.label.trim());
     if (unnamedRoom) {
       setStatus("Name every space before continuing");
       return false;
     }
-    const incompleteScene = project.scenes.find((scene) => !scene.title.trim() || !roomIds.has(scene.space));
+    const unnamedFloor = floors.find((floor) => !floor.label.trim());
+    if (unnamedFloor) {
+      setStatus("Name every floor before continuing");
+      return false;
+    }
+    const incompleteScene = project.scenes.find((scene) => !scene.title.trim() || !roomIds.has(scene.space) || !floorIds.has(scene.floor));
     if (incompleteScene) {
-      setStatus(!incompleteScene.title.trim() ? "Name every photo before continuing" : "Put every photo in a room");
+      setStatus(!incompleteScene.title.trim() ? "Name every photo before continuing" : "Choose a space and floor for every photo");
       return false;
     }
     if (project.scenes.length > 1) {
@@ -2359,6 +2501,7 @@
     }
     studioLog("tour-setup-complete", {
       rooms: rooms.length,
+      floors: floors.length,
       scenes: project.scenes.length,
       places: project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0)
     });
@@ -2611,6 +2754,7 @@
   elements.RestoreProject.addEventListener("click", () => restoreProject(false));
   elements.ImportFiles.addEventListener("change", importPanoramas);
   elements.ApplyRoomCount.addEventListener("click", setRoomCount);
+  elements.ApplyFloorCount.addEventListener("click", setFloorCount);
   elements.RoomCount.addEventListener("change", setRoomCount);
   elements.Home.addEventListener("click", () => {
     logOperatorStep("home");

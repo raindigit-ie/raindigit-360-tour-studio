@@ -127,7 +127,9 @@ async function main() {
       title: ["Kitchen entrance", "Kitchen window", "Hall overview"][index],
       subtitle: ["Near the door", "Window side", "Hallway"][index],
       space: scene.space,
-      spaceLabel: scene.space === "room-kitchen" ? "Kitchen" : "Hall"
+      spaceLabel: scene.space === "room-kitchen" ? "Kitchen" : "Hall",
+      floor: index === 2 ? "floor-2" : "floor-1",
+      floorLabel: index === 2 ? "First floor" : "Ground floor"
     }));
     const structured = await requestJson(`${baseUrl}/__tour-editor/workspace-project`, {
       method: "POST",
@@ -136,6 +138,7 @@ async function main() {
         action: "structure",
         title: "Product QA Tour",
         rooms: [{ id: "room-kitchen", label: "Kitchen" }, { id: "room-hall", label: "Hall" }],
+        floors: [{ id: "floor-1", label: "Ground floor" }, { id: "floor-2", label: "First floor" }],
         firstScene: "scene-001",
         sceneIds: ["scene-002", "scene-001", "scene-003"],
         scenes: structuredScenes
@@ -293,11 +296,12 @@ async function main() {
       headers: { "content-type": "application/zip" },
       body: projectBackup
     });
-    assert(restored.project.scenes.length === 3 && restored.project.rooms.length === 2, "Editable project backup must restore rooms, scenes and settings.");
+    assert(restored.project.scenes.length === 3 && restored.project.rooms.length === 2 && restored.project.floors.length === 2, "Editable project backup must restore rooms, floors, scenes and settings.");
 
     console.log(JSON.stringify({
       passed: true,
       rooms: 2,
+      floors: 2,
       viewpoints: 3,
       transitions: 1,
       singlePanorama: true,

@@ -205,8 +205,13 @@ async function main() {
     await assertOneTask(page, "Set up spaces and walking routes");
     await page.getByLabel("Number of spaces").fill("2");
     await page.getByRole("button", { name: "Update spaces" }).click();
+    await page.getByLabel("Number of floors").fill("2");
+    await page.getByRole("button", { name: "Update floors" }).click();
     const roomNames = page.locator("#editorRoomList input");
+    const floorNames = page.locator("#editorFloorList input");
     const spaceTemplates = page.locator("#editorRoomList select");
+    assert(await floorNames.nth(0).inputValue() === "Ground floor", "The first default floor name was not Ground floor.");
+    assert(await floorNames.nth(1).inputValue() === "First floor", "The second default floor name was not First floor.");
     const kitchenTemplateText = await spaceTemplates.nth(0).locator("option", { hasText: "Kitchen - кухня" }).textContent();
     assert(kitchenTemplateText === "Kitchen - кухня", "The quick-name list did not show the Russian space hint.");
     await spaceTemplates.nth(0).selectOption("Kitchen");
@@ -247,8 +252,12 @@ async function main() {
     const kitchenRoomId = await page.locator(".editor-room-column").nth(0).getAttribute("data-room-id");
     const hallRoomId = await hallColumn.getAttribute("data-room-id");
     const thirdRoomSelect = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
-    assert(await thirdRoomSelect.inputValue() === hallRoomId, "The room selector did not follow the drag operation.");
-    await thirdRoomSelect.selectOption(kitchenRoomId);
+    assert(await thirdRoomSelect.nth(0).inputValue() === hallRoomId, "The room selector did not follow the drag operation.");
+    const thirdSelectors = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
+    assert(await thirdSelectors.nth(1).locator("option", { hasText: "First floor" }).count() === 1, "The photo card did not offer the second floor.");
+    await thirdSelectors.nth(1).selectOption({ label: "First floor" });
+    assert(await thirdSelectors.nth(1).inputValue() !== await thirdSelectors.nth(0).inputValue(), "The floor selector was not independent from the space selector.");
+    await thirdSelectors.nth(0).selectOption(kitchenRoomId);
     assert(await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").count() === 3, "The accessible Room menu could not move a photo.");
     await page.locator('.editor-room-photo[data-scene-id="scene-001"]').scrollIntoViewIfNeeded();
     await page.evaluate(() => {
@@ -277,7 +286,7 @@ async function main() {
     });
     const restoredKitchenScenes = await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").evaluateAll((cards) => cards.map((card) => card.dataset.sceneId));
     assert(JSON.stringify(restoredKitchenScenes) === JSON.stringify(["scene-001", "scene-002", "scene-003"]), `Could not restore room order after reorder test: ${JSON.stringify(restoredKitchenScenes)}`);
-    await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').selectOption(hallRoomId);
+    await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(0).selectOption(hallRoomId);
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, "The Room menu did not move the photo back to Hall.");
 
     await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
