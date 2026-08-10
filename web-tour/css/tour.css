@@ -2222,13 +2222,43 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-name-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr);
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr) auto;
   gap: 8px;
   align-items: end;
   padding: 8px;
   border: 1px solid rgba(255, 249, 236, 0.12);
   border-radius: 4px;
   background: rgba(255, 249, 236, 0.025);
+}
+
+.editor-floor-name-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.editor-small-danger {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 138, 110, 0.38);
+  border-radius: 4px;
+  color: #fff9ec;
+  background: rgba(74, 28, 22, 0.72);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.editor-small-danger:hover,
+.editor-small-danger:focus-visible {
+  border-color: #ff8a6e;
+  outline: none;
+}
+
+.editor-small-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .editor-room-board {
@@ -2579,7 +2609,8 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
     border-top: 0;
     border-radius: 0 0 4px 4px;
   }
-  .editor-room-name-card { grid-template-columns: 1fr; }
+  .editor-room-name-card,
+  .editor-floor-name-card { grid-template-columns: 1fr; }
   .editor-room-configs,
   .editor-photo-meta-grid { grid-template-columns: 1fr; }
   .editor-room-count { align-items: stretch; flex-direction: column; }

@@ -1101,6 +1101,51 @@
     renderRoomsPanel();
   }
 
+  function removeRoom(roomId) {
+    const project = state.workspaceProject;
+    const rooms = projectRooms(project);
+    const index = rooms.findIndex((room) => room.id === roomId);
+    if (!project || index < 0) return;
+    if (rooms.length <= 1) {
+      setStatus("Keep at least one space");
+      return;
+    }
+    const removed = rooms[index];
+    const fallback = rooms[index - 1] || rooms[index + 1];
+    project.rooms = rooms.filter((room) => room.id !== roomId);
+    project.scenes.forEach((scene) => {
+      if (scene.space !== roomId) return;
+      scene.space = fallback.id;
+      scene.spaceLabel = fallback.label;
+    });
+    refreshAutoSceneTitles(project, fallback.id);
+    setStatus(`${removed.label} removed. Photos moved to ${fallback.label}`);
+    studioLog("room-removed", { roomId, fallbackRoomId: fallback.id });
+    renderRoomsPanel();
+  }
+
+  function removeFloor(floorId) {
+    const project = state.workspaceProject;
+    const floors = projectFloors(project);
+    const index = floors.findIndex((floor) => floor.id === floorId);
+    if (!project || index < 0) return;
+    if (floors.length <= 1) {
+      setStatus("Keep at least one floor");
+      return;
+    }
+    const removed = floors[index];
+    const fallback = floors[index - 1] || floors[index + 1];
+    project.floors = floors.filter((floor) => floor.id !== floorId);
+    project.scenes.forEach((scene) => {
+      if (scene.floor !== floorId) return;
+      scene.floor = fallback.id;
+      scene.floorLabel = fallback.label;
+    });
+    setStatus(`${removed.label} removed. Photos moved to ${fallback.label}`);
+    studioLog("floor-removed", { floorId, fallbackFloorId: fallback.id });
+    renderRoomsPanel();
+  }
+
   function moveSceneToRoomPosition(sceneId, roomId, beforeSceneId = null) {
     const project = state.workspaceProject;
     const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
@@ -1186,14 +1231,17 @@
     for (const room of rooms) {
       const field = document.createElement("div");
       field.className = "editor-room-name-card";
-      field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Space name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Quick name</span><select></select></label>`;
+      field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Space name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Quick name</span><select></select></label><button class="editor-small-danger" type="button">Remove</button>`;
       const input = field.querySelector("input");
       const templateSelect = field.querySelector("select");
+      const remove = field.querySelector("button");
       input.value = room.label;
       input.setAttribute("aria-label", `Name for ${room.label}`);
       templateSelect.setAttribute("aria-label", `Quick name for ${room.label}`);
       templateSelect.add(new Option("Choose a common space", ""));
       spaceNameTemplates.forEach(({ label, hint }) => templateSelect.add(new Option(`${label} - ${hint}`, label)));
+      remove.setAttribute("aria-label", `Remove ${room.label}`);
+      remove.disabled = rooms.length <= 1;
       const commitRoomName = (rerender) => {
         const nextLabel = input.value.trim();
         if (!nextLabel) {
@@ -1222,16 +1270,20 @@
         input.value = templateSelect.value;
         commitRoomName(true);
       });
+      remove.addEventListener("click", () => removeRoom(room.id));
       elements.RoomList.appendChild(field);
     }
 
     for (const floor of floors) {
-      const field = document.createElement("label");
-      field.className = "editor-field editor-field--stacked editor-floor-name-card";
-      field.innerHTML = `<span>Floor name</span><input type="text" maxlength="80" autocomplete="off" />`;
+      const field = document.createElement("div");
+      field.className = "editor-floor-name-card";
+      field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Floor name</span><input type="text" maxlength="80" autocomplete="off" /></label><button class="editor-small-danger" type="button">Remove</button>`;
       const input = field.querySelector("input");
+      const remove = field.querySelector("button");
       input.value = floor.label;
       input.setAttribute("aria-label", `Name for ${floor.label}`);
+      remove.setAttribute("aria-label", `Remove ${floor.label}`);
+      remove.disabled = floors.length <= 1;
       const commitFloorName = (rerender) => {
         const nextLabel = input.value.trim();
         if (!nextLabel) {
@@ -1252,6 +1304,7 @@
       };
       input.addEventListener("input", () => commitFloorName(false));
       input.addEventListener("change", () => commitFloorName(true));
+      remove.addEventListener("click", () => removeFloor(floor.id));
       elements.FloorList.appendChild(field);
     }
 
