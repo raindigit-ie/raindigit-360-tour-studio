@@ -334,6 +334,11 @@ async function main() {
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(1).locator("option:checked").textContent() === "Second floor", `Reload lost the photo floor assignment: ${JSON.stringify(reloadState)}`);
 
     await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
+    await page.getByRole("button", { name: "Preview source Kitchen window" }).click();
+    await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "visible" });
+    assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Source route preview must use the full panorama.");
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "hidden" });
     await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();
     const roomRouteScrollTop = await page.evaluate(() => document.querySelector(".editor-panel__content")?.scrollTop || 0);
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen door" }).click();

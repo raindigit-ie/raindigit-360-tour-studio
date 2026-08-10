@@ -2454,10 +2454,15 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   padding-bottom: 4px;
 }
 
-.editor-photo-choice {
+.editor-photo-choice-card {
   display: grid;
   width: 108px;
   min-width: 108px;
+  gap: 4px;
+}
+
+.editor-photo-choice {
+  display: grid;
   gap: 5px;
   padding: 6px;
   border: 1px solid rgba(255, 249, 236, 0.16);
@@ -2477,6 +2482,12 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 }
 
 .editor-photo-choice.is-selected { border-color: var(--accent); background: rgba(214, 175, 92, 0.14); }
+
+.editor-card-preview--source {
+  position: static;
+  min-height: 28px;
+  box-shadow: none;
+}
 
 .editor-place-choices {
   display: grid;

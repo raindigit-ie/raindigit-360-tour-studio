@@ -657,6 +657,9 @@
     panel.querySelectorAll(`[data-scene-preview-for="${scene.id}"]`).forEach((node) => {
       node.setAttribute("aria-label", `Preview ${scene.title}`);
     });
+    panel.querySelectorAll(`[data-scene-source-preview-for="${scene.id}"]`).forEach((node) => {
+      node.setAttribute("aria-label", `Preview source ${scene.title}`);
+    });
     panel.querySelectorAll(`[data-scene-remove-for="${scene.id}"]`).forEach((node) => {
       node.setAttribute("aria-label", `Remove ${scene.title}`);
     });
@@ -1552,6 +1555,8 @@
       state.roomPlanSceneId = project.scenes[0]?.id || null;
     }
     project.scenes.forEach((scene) => {
+      const card = document.createElement("article");
+      card.className = "editor-photo-choice-card";
       const button = document.createElement("button");
       button.className = `editor-photo-choice${scene.id === state.roomPlanSceneId ? " is-selected" : ""}`;
       button.type = "button";
@@ -1565,7 +1570,15 @@
         state.roomPlanSceneId = scene.id;
         rerenderRoomsPanelPreservingScroll();
       });
-      elements.RoomChoices.appendChild(button);
+      const preview = document.createElement("button");
+      preview.className = "editor-card-preview editor-card-preview--source";
+      preview.type = "button";
+      preview.textContent = "Preview";
+      preview.dataset.sceneSourcePreviewFor = scene.id;
+      preview.setAttribute("aria-label", `Preview source ${scene.title}`);
+      preview.addEventListener("click", () => openPhotoPreview(scene.id));
+      card.append(button, preview);
+      elements.RoomChoices.appendChild(card);
     });
 
     const source = project.scenes.find((scene) => scene.id === state.roomPlanSceneId);
