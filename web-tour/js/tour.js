@@ -681,26 +681,43 @@ function updateFullscreenButton() {
   fullscreenButton.title = isActive ? "Exit fullscreen" : "Fullscreen";
 }
 
-function toggleFullscreenFallback() {
-  if (window.parent !== window) {
-    window.parent.postMessage({ type: "raindigit-tour-fullscreen-fallback" }, "*");
-    return;
-  }
-  document.body.classList.toggle("is-cinema-fullscreen");
-  updateFullscreenButton();
+function resizeTourAfterFullscreenChange() {
+  window.requestAnimationFrame(() => window.requestAnimationFrame(() => viewer.resize()));
 }
 
-fullscreenButton.addEventListener("click", () => {
+function toggleFullscreenFallback() {
+  const action = document.body.classList.contains("is-cinema-fullscreen") ? "exit" : "enter";
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: "raindigit-tour-fullscreen-fallback", action }, "*");
+    return;
+  }
+  document.body.classList.toggle("is-cinema-fullscreen", action === "enter");
+  updateFullscreenButton();
+  resizeTourAfterFullscreenChange();
+}
+
+function requestTourFullscreen() {
+  if (window.parent !== window && window.matchMedia("(max-width: 760px)").matches) {
+    toggleFullscreenFallback();
+    return;
+  }
   viewer.toggleFullscreen();
   window.setTimeout(() => {
-    if (!isFullscreenActive()) {
-      toggleFullscreenFallback();
-    }
+    if (!isFullscreenActive()) toggleFullscreenFallback();
   }, 450);
-});
+}
+
+fullscreenButton.addEventListener("click", requestTourFullscreen);
 
 ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"].forEach((eventName) => {
   document.addEventListener(eventName, updateFullscreenButton);
+});
+
+window.addEventListener("message", (event) => {
+  if (event.data?.type !== "raindigit-tour-fullscreen-state") return;
+  document.body.classList.toggle("is-cinema-fullscreen", Boolean(event.data.active));
+  updateFullscreenButton();
+  resizeTourAfterFullscreenChange();
 });
 
 viewer.on("scenechange", (sceneId) => {
