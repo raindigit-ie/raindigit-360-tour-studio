@@ -471,6 +471,11 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 760 });
     await assertOneTask(page, "Place the walking buttons");
     await page.getByRole("button", { name: "Add walking button" }).click();
+    await page.locator('.editor-add-route-preview[data-add-route-preview-target="scene-003"]').click();
+    await page.locator(".editor-photo-preview__dialog").waitFor({ state: "visible" });
+    assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Step 4 add-route preview must open the full panorama.");
+    await page.keyboard.press("Escape");
+    await page.locator(".editor-photo-preview__dialog").waitFor({ state: "hidden" });
     await page.locator('.editor-add-route-option[data-add-route-target="scene-003"]').click();
     await page.waitForFunction(() => {
       const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
@@ -495,6 +500,25 @@ async function main() {
       height: image.naturalHeight
     })));
     assert(movementThumbnails.length === 2 && movementThumbnails.every((image) => image.src && image.width > 0 && image.height > 0), `Step 4 movement rows do not show destination thumbnails: ${JSON.stringify(movementThumbnails)}`);
+    await page.locator('.editor-saved-movement[data-saved-movement-target="scene-003"] .editor-saved-movement__preview').click();
+    await page.locator(".editor-photo-preview__dialog").waitFor({ state: "visible" });
+    assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Step 4 saved-route preview must open the full panorama.");
+    await page.keyboard.press("Escape");
+    await page.locator(".editor-photo-preview__dialog").waitFor({ state: "hidden" });
+    await page.locator('.editor-saved-movement[data-saved-movement-target="scene-003"] .editor-saved-movement__remove').click();
+    await page.waitForFunction(() => {
+      const scene = window.__TOUR_EDITOR_API.sceneById["scene-001"];
+      const projectScene = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot().workspaceProject?.scenes?.find((candidate) => candidate.id === "scene-001");
+      return !scene.hotspots.some((hotspot) => hotspot.target === "scene-003") &&
+        !projectScene?.plannedTargets?.includes("scene-003") &&
+        document.querySelectorAll('.editor-saved-movement[data-saved-movement-target="scene-003"]').length === 0;
+    });
+    await page.getByRole("button", { name: "Add walking button" }).click();
+    await page.locator('.editor-add-route-option[data-add-route-target="scene-003"]').click();
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
+      return snapshot?.selected?.sceneId === "scene-001" && snapshot.selected.target === "scene-003";
+    });
     await page.waitForFunction(async () => {
       const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
       const draft = await response.json();
@@ -721,7 +745,7 @@ async function main() {
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
     const events = new Set(logBody.entries.map((entry) => entry.event));
-    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "movement-drag-end-coordinate", "movement-drag-screen-check", "operator-step", "draft-save-success"]) {
+    for (const required of ["tour-setup-complete", "planned-place-toggled", "planned-places-synchronised", "walking-button-removed-from-placement", "movement-drag-end-coordinate", "movement-drag-screen-check", "operator-step", "draft-save-success"]) {
       assert(events.has(required), `Diagnostic journal is missing ${required}.`);
     }
     const logPath = join(root, "workspace", "studio-debug.ndjson");

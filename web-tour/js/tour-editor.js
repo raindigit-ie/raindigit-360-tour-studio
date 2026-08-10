@@ -2140,6 +2140,46 @@
     }
   }
 
+  async function removeWalkingRouteFromLinks(sourceSceneId, targetSceneId) {
+    const source = api.sceneById[sourceSceneId];
+    const target = api.sceneById[targetSceneId];
+    const projectScene = state.workspaceProject?.scenes.find((scene) => scene.id === sourceSceneId);
+    if (!source || !target || !projectScene) {
+      setStatus("Could not remove this walking button");
+      studioLog("walking-button-remove-missing", { sourceSceneId, targetSceneId }, true);
+      return;
+    }
+    const targets = plannedTargets(projectScene);
+    if (!targets.includes(target.id)) {
+      setStatus("This walking button is already removed");
+      render();
+      return;
+    }
+    projectScene.plannedTargets = targets.filter((id) => id !== target.id);
+    const removedSelected = sameHotspotReference(state.selected, { sceneId: source.id, target: target.id });
+    const sceneIndex = api.scenes.findIndex((scene) => scene.id === source.id);
+    if (sceneIndex >= 0) state.linkSceneIndex = sceneIndex;
+    await queueWorkspaceStructureSave("walking-button-removed-from-placement");
+    syncPlannedPlacesToDraft();
+    if (removedSelected) {
+      const nextHotspot = source.hotspots[0];
+      if (nextHotspot) {
+        selectHotspot(source.id, 0);
+        state.linkStep = nextHotspot.positionConfirmed ? "review" : "place";
+      } else {
+        state.selected = null;
+        state.linkStep = "choose";
+      }
+      state.pendingFocus = null;
+      state.placement = null;
+    }
+    state.release = { ready: false };
+    studioLog("walking-button-removed-from-placement", { sourceSceneId: source.id, targetSceneId: target.id }, true);
+    queueDraftSave("walking-button-removed-from-placement");
+    setStatus(`Removed walking button to ${target.title}`);
+    render();
+  }
+
   function selectMovementTarget(sourceSceneId, targetSceneId) {
     const source = api.sceneById[sourceSceneId];
     const hotspotIndex = resolveHotspotIndex(sourceSceneId, { target: targetSceneId });
@@ -2186,6 +2226,8 @@
       return;
     }
     targets.forEach((target) => {
+      const card = document.createElement("div");
+      card.className = "editor-add-route-card";
       const button = document.createElement("button");
       button.className = "editor-add-route-option";
       button.type = "button";
@@ -2195,7 +2237,15 @@
       button.querySelector("strong").textContent = target.title;
       button.querySelector("small").textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
       button.addEventListener("click", () => addWalkingRouteFromLinks(source.id, target.id));
-      elements.AddRouteOptions.appendChild(button);
+      const preview = document.createElement("button");
+      preview.className = "editor-add-route-preview";
+      preview.type = "button";
+      preview.textContent = "Preview";
+      preview.dataset.addRoutePreviewTarget = target.id;
+      preview.setAttribute("aria-label", `Preview ${target.title}`);
+      preview.addEventListener("click", () => openPhotoPreview(target.id));
+      card.append(button, preview);
+      elements.AddRouteOptions.appendChild(card);
     });
   }
 
@@ -2234,22 +2284,45 @@
     if (window.RainDigitWalkingButtonList?.renderWalkingButtonList) {
       window.RainDigitWalkingButtonList.renderWalkingButtonList(elements.HotspotList, {
         rows,
-        onSelect: (row) => selectMovementTarget(row.sourceId, row.targetId)
+        onSelect: (row) => selectMovementTarget(row.sourceId, row.targetId),
+        onPreview: (row) => openPhotoPreview(row.targetId),
+        onRemove: (row) => removeWalkingRouteFromLinks(row.sourceId, row.targetId)
       });
     } else {
       rows.forEach((row) => {
-        const button = document.createElement("button");
+        const button = document.createElement("div");
         button.className = `editor-saved-movement${row.selected ? " is-selected" : ""}${row.positioned ? "" : " is-pending"}`;
-        button.type = "button";
+        button.tabIndex = 0;
+        button.setAttribute("role", "button");
+        button.setAttribute("aria-label", `Select movement to ${row.title}`);
         button.dataset.savedMovementSource = row.sourceId;
         button.dataset.savedMovementTarget = row.targetId;
         button.dataset.savedMovementIndex = String(row.hotspotIndex);
-        button.innerHTML = `<span class="editor-saved-movement__thumb"><img alt="" loading="lazy" decoding="async" /><i aria-hidden="true">${walkingIconMarkup()}</i></span><span class="editor-saved-movement__copy"><strong></strong><em></em></span><small></small>`;
+        button.innerHTML = `<span class="editor-saved-movement__thumb"><img alt="" loading="lazy" decoding="async" /><i aria-hidden="true">${walkingIconMarkup()}</i></span><span class="editor-saved-movement__copy"><strong></strong><em></em></span><span class="editor-saved-movement__meta"><small></small><span class="editor-saved-movement__actions"><button class="editor-saved-movement__preview" type="button"></button><button class="editor-saved-movement__remove" type="button"></button></span></span>`;
         button.querySelector("img").src = row.thumbnail;
         button.querySelector("strong").textContent = row.title;
         button.querySelector("em").textContent = row.subtitle;
         button.querySelector("small").textContent = row.status;
+        const preview = button.querySelector(".editor-saved-movement__preview");
+        const remove = button.querySelector(".editor-saved-movement__remove");
+        preview.textContent = "Preview";
+        preview.setAttribute("aria-label", `Preview ${row.title}`);
+        preview.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openPhotoPreview(row.targetId);
+        });
+        remove.textContent = "Remove";
+        remove.setAttribute("aria-label", `Remove walking button to ${row.title}`);
+        remove.addEventListener("click", (event) => {
+          event.stopPropagation();
+          removeWalkingRouteFromLinks(row.sourceId, row.targetId);
+        });
         button.addEventListener("click", () => selectMovementTarget(row.sourceId, row.targetId));
+        button.addEventListener("keydown", (event) => {
+          if (!["Enter", " "].includes(event.key)) return;
+          event.preventDefault();
+          selectMovementTarget(row.sourceId, row.targetId);
+        });
         elements.HotspotList.appendChild(button);
       });
     }

@@ -3,17 +3,27 @@
 
   export let rows: MovementRow[] = [];
   export let onSelect: (row: MovementRow) => void = () => {};
+  export let onPreview: (row: MovementRow) => void = () => {};
+  export let onRemove: (row: MovementRow) => void = () => {};
+
+  function handleRowKeydown(event: KeyboardEvent, row: MovementRow): void {
+    if (!["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    onSelect(row);
+  }
 </script>
 
 {#each rows as row (`${row.sourceId}:${row.targetId}`)}
-  <button
+  <div
     class={`editor-saved-movement${row.selected ? " is-selected" : ""}${row.positioned ? "" : " is-pending"}`}
-    type="button"
+    role="button"
+    tabindex="0"
     data-saved-movement-source={row.sourceId}
     data-saved-movement-target={row.targetId}
     data-saved-movement-index={row.hotspotIndex}
     aria-label={`Select movement to ${row.title}`}
     on:click={() => onSelect(row)}
+    on:keydown={(event) => handleRowKeydown(event, row)}
   >
     <span class="editor-saved-movement__thumb">
       {#if row.thumbnail}
@@ -35,6 +45,22 @@
         <em>{row.subtitle}</em>
       {/if}
     </span>
-    <small>{row.status}</small>
-  </button>
+    <span class="editor-saved-movement__meta">
+      <small>{row.status}</small>
+      <span class="editor-saved-movement__actions">
+        <button
+          class="editor-saved-movement__preview"
+          type="button"
+          aria-label={`Preview ${row.title}`}
+          on:click|stopPropagation={() => onPreview(row)}
+        >Preview</button>
+        <button
+          class="editor-saved-movement__remove"
+          type="button"
+          aria-label={`Remove walking button to ${row.title}`}
+          on:click|stopPropagation={() => onRemove(row)}
+        >Remove</button>
+      </span>
+    </span>
+  </div>
 {/each}

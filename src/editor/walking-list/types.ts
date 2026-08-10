@@ -15,4 +15,6 @@ export interface MovementRow {
 export interface WalkingButtonListProps {
   rows: MovementRow[];
   onSelect: (row: MovementRow) => void;
+  onPreview: (row: MovementRow) => void;
+  onRemove: (row: MovementRow) => void;
 }

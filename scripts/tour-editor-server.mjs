@@ -371,7 +371,7 @@ async function appendStudioLogs(entries) {
 async function readStudioLogTail() {
   try {
     const contents = await readFile(studioLogPath, "utf8");
-    return contents.trim().split(/\r?\n/).filter(Boolean).slice(-500).map((line) => {
+    return contents.trim().split(/\r?\n/).filter(Boolean).slice(-2000).map((line) => {
       try {
         return JSON.parse(line);
       } catch {
