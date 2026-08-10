@@ -489,6 +489,12 @@ async function main() {
     assert(routeAddedOnPlacementStep.selected?.sceneId === "scene-001" && routeAddedOnPlacementStep.selected?.target === "scene-003", `The new Step 4 route was not selected for placement: ${JSON.stringify(routeAddedOnPlacementStep)}`);
     assert(routeAddedOnPlacementStep.addMenuHidden === true, `The Add walking button picker stayed open after choosing a route: ${JSON.stringify(routeAddedOnPlacementStep)}`);
     assert(routeAddedOnPlacementStep.advancedOpen === false, `Advanced placement actions are open on the default surface: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    const movementThumbnails = await page.evaluate(() => Array.from(document.querySelectorAll(".editor-saved-movement__thumb img")).map((image) => ({
+      src: image.getAttribute("src"),
+      width: image.naturalWidth,
+      height: image.naturalHeight
+    })));
+    assert(movementThumbnails.length === 2 && movementThumbnails.every((image) => image.src && image.width > 0 && image.height > 0), `Step 4 movement rows do not show destination thumbnails: ${JSON.stringify(movementThumbnails)}`);
     await page.waitForFunction(async () => {
       const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
       const draft = await response.json();

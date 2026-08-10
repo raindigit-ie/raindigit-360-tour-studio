@@ -2140,6 +2140,35 @@
     }
   }
 
+  function selectMovementTarget(sourceSceneId, targetSceneId) {
+    const source = api.sceneById[sourceSceneId];
+    const hotspotIndex = resolveHotspotIndex(sourceSceneId, { target: targetSceneId });
+    const hotspot = source?.hotspots[hotspotIndex];
+    const target = hotspot ? api.sceneById[hotspot.target] : null;
+    if (!source || !hotspot || hotspotIndex < 0) {
+      setStatus("Could not find this walking button");
+      studioLog("movement-select-missing", { sourceSceneId, targetSceneId }, true);
+      return;
+    }
+    state.pendingFocus = null;
+    selectHotspot(source.id, hotspotIndex);
+    state.linkStep = hotspot.positionConfirmed ? "review" : "place";
+    if (api.viewer.getScene() !== source.id) {
+      state.pendingFocus = { ...state.selected, stage: "links", place: false, lookAtHotspot: hotspot.positionConfirmed === false };
+      api.viewer.loadScene(source.id);
+      setStatus(`Opening ${source.title}...`);
+      render();
+      return;
+    }
+    if (hotspot.positionConfirmed) {
+      setStatus(`Selected ${target?.title || "this place"}. Drag the walking person only if it needs to move.`);
+    } else {
+      api.viewer.lookAt(hotspot.pitch, hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
+      setStatus(`Place the walking button for ${target?.title || "this place"}`);
+    }
+    render();
+  }
+
   function renderAddRoutePicker(source) {
     if (state.activeStage !== "links") return;
     elements.AddRoutePanel.hidden = !source || api.scenes.length <= 1;
@@ -2188,38 +2217,44 @@
       ? `Walking button ${selectedTaskIndex + 1} of ${allTasks.length}`
       : `${allTasks.length} walking button${allTasks.length === 1 ? "" : "s"} placed`;
     elements.HotspotList.replaceChildren();
-    source.hotspots.forEach((hotspot, hotspotIndex) => {
+    const rows = source.hotspots.map((hotspot, hotspotIndex) => {
       const target = api.sceneById[hotspot.target];
-      const row = document.createElement("button");
-      const isSelected = sameHotspotReference(state.selected, { sceneId: source.id, hotspotIndex, target: hotspot.target });
-      row.className = `editor-saved-movement${isSelected ? " is-selected" : ""}`;
-      row.type = "button";
-      row.dataset.savedMovementSource = source.id;
-      row.dataset.savedMovementTarget = hotspot.target;
-      row.dataset.savedMovementIndex = String(hotspotIndex);
-      row.innerHTML = `<span>${walkingIconMarkup()}</span><strong></strong><small></small>`;
-      row.querySelector("strong").textContent = target?.title || hotspot.label;
-      row.querySelector("small").textContent = hotspot.positionConfirmed ? "Position saved" : "Needs a position";
-      row.addEventListener("click", () => {
-        state.pendingFocus = null;
-        selectHotspot(source.id, hotspotIndex);
-        state.linkStep = hotspot.positionConfirmed ? "review" : "place";
-        if (api.viewer.getScene() !== source.id) {
-          state.pendingFocus = { ...state.selected, stage: "links", place: false, lookAtHotspot: hotspot.positionConfirmed === false };
-          api.viewer.loadScene(source.id);
-          setStatus(`Opening ${source.title}...`);
-          render();
-          return;
-        }
-        if (hotspot.positionConfirmed) {
-          setStatus(`Selected ${target?.title || "this place"}. Drag the walking person only if it needs to move.`);
-        } else {
-          api.viewer.lookAt(hotspot.pitch, hotspot.yaw, Math.min(api.viewer.getHfov(), 86), 0);
-          setStatus(`Place the walking button for ${target?.title || "this place"}`);
-        }
-        render();
+      return {
+        sourceId: source.id,
+        hotspotIndex,
+        targetId: hotspot.target,
+        title: target?.title || hotspot.label,
+        subtitle: [target?.spaceLabel, target?.floorLabel].filter(Boolean).join(" · "),
+        status: hotspot.positionConfirmed ? "Position saved" : "Needs a position",
+        thumbnail: editorAsset(target?.thumb || ""),
+        selected: sameHotspotReference(state.selected, { sceneId: source.id, hotspotIndex, target: hotspot.target }),
+        positioned: hotspot.positionConfirmed === true
+      };
+    });
+    if (window.RainDigitWalkingButtonList?.renderWalkingButtonList) {
+      window.RainDigitWalkingButtonList.renderWalkingButtonList(elements.HotspotList, {
+        rows,
+        onSelect: (row) => selectMovementTarget(row.sourceId, row.targetId)
       });
-      elements.HotspotList.appendChild(row);
+    } else {
+      rows.forEach((row) => {
+        const button = document.createElement("button");
+        button.className = `editor-saved-movement${row.selected ? " is-selected" : ""}${row.positioned ? "" : " is-pending"}`;
+        button.type = "button";
+        button.dataset.savedMovementSource = row.sourceId;
+        button.dataset.savedMovementTarget = row.targetId;
+        button.dataset.savedMovementIndex = String(row.hotspotIndex);
+        button.innerHTML = `<span class="editor-saved-movement__thumb"><img alt="" loading="lazy" decoding="async" /><i aria-hidden="true">${walkingIconMarkup()}</i></span><span class="editor-saved-movement__copy"><strong></strong><em></em></span><small></small>`;
+        button.querySelector("img").src = row.thumbnail;
+        button.querySelector("strong").textContent = row.title;
+        button.querySelector("em").textContent = row.subtitle;
+        button.querySelector("small").textContent = row.status;
+        button.addEventListener("click", () => selectMovementTarget(row.sourceId, row.targetId));
+        elements.HotspotList.appendChild(button);
+      });
+    }
+    window.requestAnimationFrame(() => {
+      elements.HotspotList.querySelector(".editor-saved-movement.is-selected")?.scrollIntoView({ block: "nearest" });
     });
     elements.HotspotList.hidden = source.hotspots.length <= 1;
     renderAddRoutePicker(source);

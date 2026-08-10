@@ -25,7 +25,10 @@
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");
     await loadScript("js/tour.js?v=20260802-wizard-v1");
-    if (editing) await loadScript("js/tour-editor.js?v=20260810-stable-route-selection-v1");
+    if (editing) {
+      await loadScript("js/generated/editor-walking-button-list.js?v=20260810-svelte-route-thumbs-v1");
+      await loadScript("js/tour-editor.js?v=20260810-svelte-route-thumbs-v1");
+    }
     if (previewing) await loadScript("js/tour-preview.js?v=20260802-wizard-v1");
   })().catch((error) => {
     console.error(error);
