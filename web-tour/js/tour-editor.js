@@ -66,6 +66,7 @@
     arrivalQueueTotal: 0,
     arrivalLoading: false,
     arrivalSaving: false,
+    addRouteOpen: false,
     placementGuides: {},
     guidePreferences: { visible: true, snapEnabled: true, snapToleranceDeg: 2.2 },
     showOriginalLook: false,
@@ -196,13 +197,18 @@
         <p class="editor-task-progress" id="editorLinkTaskProgress"></p>
         <p class="editor-guidance" id="editorLinkGuidance"></p>
         <div class="editor-hotspot-list" id="editorHotspotList" aria-label="Saved movements"></div>
+        <div class="editor-add-route" id="editorAddRoutePanel">
+          <button class="editor-button editor-button--wide" id="editorAddRouteToggle" type="button">Add walking button</button>
+          <div class="editor-add-route-menu" id="editorAddRouteMenu" hidden>
+            <strong>Choose where this photo should go</strong>
+            <div class="editor-add-route-options" id="editorAddRouteOptions"></div>
+          </div>
+        </div>
         <div class="editor-place-at-centre" id="editorPlaceAtCentre" hidden>
           <strong>Put the walking button under the door or camera point.</strong>
           <span>Drag the 360 photo, then save the walking button.</span>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorConfirmCentre" type="button">Save point here</button>
-          <button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Change spaces and routes</button>
-          <div class="editor-placement-tools"><button class="editor-button" id="editorInspectSource" type="button">Inspect source photo</button><button class="editor-button" id="editorUseRoomHeight" type="button">Use room height</button><label><input id="editorGuideSnap" type="checkbox" checked /> Snap to room height</label></div>
-          <details class="editor-disclosure editor-disclosure--compact"><summary>Placement details</summary><p id="editorGuideReadout"></p></details>
+          <details class="editor-disclosure editor-disclosure--compact editor-placement-advanced"><summary>Other actions</summary><button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Back to rooms setup</button><div class="editor-placement-tools"><button class="editor-button" id="editorInspectSource" type="button">Preview this photo</button><button class="editor-button" id="editorUseRoomHeight" type="button">Align to room height</button><label><input id="editorGuideSnap" type="checkbox" checked /> Keep the same height</label></div><p id="editorGuideReadout"></p></details>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
@@ -305,7 +311,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -771,6 +777,12 @@
     return `/${endpoint}/workspace/${path}`;
   }
 
+  function editorAsset(path) {
+    if (!path) return "";
+    if (/^(?:https?:|data:|blob:|\/)/.test(path)) return path;
+    return workspaceAsset(path);
+  }
+
   function setStage(stage) {
     if (!stageOrder.includes(stage)) return;
     const previousStage = state.activeStage;
@@ -783,6 +795,7 @@
       state.arrivalQueueIndex = 0;
       state.arrivalQueueTotal = 0;
     }
+    if (stage !== "links") state.addRouteOpen = false;
     if (stage === "rooms" && previousStage === "upload") state.roomPlanSceneId = state.workspaceProject?.scenes?.[0]?.id || null;
     if (stage === "light" && previousStage === "rooms") state.lookSceneIndex = 0;
     if (stage === "links" && previousStage === "light") {
@@ -2030,10 +2043,85 @@
     });
   }
 
+  function linkSourceScene(scene) {
+    const selected = selectedHotspot();
+    return selected?.scene || api.scenes[state.linkSceneIndex] || scene;
+  }
+
+  function missingRouteTargets(source) {
+    if (!source) return [];
+    const existingTargets = new Set(source.hotspots.map((hotspot) => hotspot.target));
+    return api.scenes.filter((target) => target.id !== source.id && !existingTargets.has(target.id));
+  }
+
+  async function addWalkingRouteFromLinks(sourceSceneId, targetSceneId) {
+    const source = api.sceneById[sourceSceneId];
+    const target = api.sceneById[targetSceneId];
+    const projectScene = state.workspaceProject?.scenes.find((scene) => scene.id === sourceSceneId);
+    if (!source || !target || !projectScene || source.id === target.id) {
+      setStatus("Choose another loaded photo first");
+      return;
+    }
+    const targets = plannedTargets(projectScene);
+    if (!targets.includes(target.id)) projectScene.plannedTargets = [...targets, target.id];
+    state.addRouteOpen = false;
+    await queueWorkspaceStructureSave("walking-button-added-from-placement");
+    syncPlannedPlacesToDraft();
+    const hotspotIndex = source.hotspots.findIndex((hotspot) => hotspot.target === target.id);
+    if (hotspotIndex < 0) {
+      setStatus("Could not add this walking button");
+      return;
+    }
+    const sceneIndex = api.scenes.findIndex((scene) => scene.id === source.id);
+    if (sceneIndex >= 0) state.linkSceneIndex = sceneIndex;
+    state.selected = { sceneId: source.id, hotspotIndex };
+    state.linkStep = "place";
+    state.placement = null;
+    state.release = { ready: false };
+    studioLog("walking-button-added-from-placement", { sourceSceneId: source.id, targetSceneId: target.id, hotspotIndex }, true);
+    queueDraftSave("walking-button-added-from-placement");
+    setStatus(`New walking button to ${target.title}. Place it on the photo.`);
+    if (api.viewer.getScene() !== source.id) {
+      focusHotspotTask({ sceneId: source.id, hotspotIndex }, "links");
+    } else {
+      render();
+    }
+  }
+
+  function renderAddRoutePicker(source) {
+    if (state.activeStage !== "links") return;
+    elements.AddRoutePanel.hidden = !source || api.scenes.length <= 1;
+    elements.AddRouteMenu.hidden = !state.addRouteOpen;
+    elements.AddRouteToggle.setAttribute("aria-expanded", String(state.addRouteOpen));
+    elements.AddRouteToggle.textContent = state.addRouteOpen ? "Close add button" : "Add walking button";
+    elements.AddRouteOptions.replaceChildren();
+    if (!source) return;
+    const targets = missingRouteTargets(source);
+    if (!targets.length) {
+      const empty = document.createElement("p");
+      empty.className = "editor-empty";
+      empty.textContent = "Every loaded photo is already listed from this photo.";
+      elements.AddRouteOptions.appendChild(empty);
+      return;
+    }
+    targets.forEach((target) => {
+      const button = document.createElement("button");
+      button.className = "editor-add-route-option";
+      button.type = "button";
+      button.dataset.addRouteTarget = target.id;
+      button.innerHTML = `<img alt="" /><span><strong></strong><small></small></span><i aria-hidden="true">+</i>`;
+      button.querySelector("img").src = editorAsset(target.thumb);
+      button.querySelector("strong").textContent = target.title;
+      button.querySelector("small").textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
+      button.addEventListener("click", () => addWalkingRouteFromLinks(source.id, target.id));
+      elements.AddRouteOptions.appendChild(button);
+    });
+  }
+
   function renderHotspotList(scene) {
     if (state.activeStage !== "links") return;
     const selected = selectedHotspot();
-    const source = selected?.scene || api.scenes[state.linkSceneIndex] || scene;
+    const source = linkSourceScene(scene);
     const allTasks = api.scenes.flatMap((candidate) => candidate.hotspots.map((hotspot, hotspotIndex) => ({ scene: candidate, hotspot, hotspotIndex })));
     const selectedTaskIndex = state.selected
       ? allTasks.findIndex((task) => task.scene.id === state.selected.sceneId && task.hotspotIndex === state.selected.hotspotIndex)
@@ -2048,6 +2136,9 @@
       const isSelected = state.selected?.sceneId === source.id && state.selected.hotspotIndex === hotspotIndex;
       row.className = `editor-saved-movement${isSelected ? " is-selected" : ""}`;
       row.type = "button";
+      row.dataset.savedMovementSource = source.id;
+      row.dataset.savedMovementTarget = hotspot.target;
+      row.dataset.savedMovementIndex = String(hotspotIndex);
       row.innerHTML = `<span>${walkingIconMarkup()}</span><strong></strong><small></small>`;
       row.querySelector("strong").textContent = target?.title || hotspot.label;
       row.querySelector("small").textContent = hotspot.positionConfirmed ? "Position saved" : "Needs a position";
@@ -2065,6 +2156,7 @@
       elements.HotspotList.appendChild(row);
     });
     elements.HotspotList.hidden = source.hotspots.length <= 1;
+    renderAddRoutePicker(source);
     const showPlacementPanel = Boolean(selected && ["place", "review"].includes(state.linkStep));
     const viewerReady = Boolean(selected && api.viewer.getScene() === source.id && api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
     elements.PlaceAtCentre.hidden = !showPlacementPanel;
@@ -2077,9 +2169,9 @@
     if (selected && state.linkStep === "review") {
       elements.PlaceAtCentre.querySelector("strong").textContent = "Check the walking button on the photo.";
       elements.PlaceAtCentre.querySelector("span").textContent = "If it is in the right place, continue. If not, adjust it.";
-      elements.ConfirmCentre.textContent = "Adjust point";
+      elements.ConfirmCentre.textContent = "Move this button";
       elements.ConfirmCentre.classList.remove("editor-button--primary");
-      elements.CancelCentre.textContent = "Change spaces and routes";
+      elements.CancelCentre.textContent = "Back to rooms setup";
       const warnings = placementWarnings(selected.scene, selected.hotspot);
       elements.LinkGuidance.textContent = `Check ${selected.scene.title} to ${target?.title || "the selected place"}.${warnings.length ? ` ${warnings.join(" ")}` : ""}`;
       studioLog("movement-review-shown", { sceneId: selected.scene.id, target: selected.hotspot.target, warnings }, true);
@@ -2088,7 +2180,7 @@
       elements.PlaceAtCentre.querySelector("span").textContent = "Drag the 360 photo until the target is under the cross, then save.";
       elements.ConfirmCentre.textContent = selected.hotspot.positionConfirmed ? "Update point here" : "Save point here";
       elements.ConfirmCentre.classList.add("editor-button--primary");
-      elements.CancelCentre.textContent = "Change spaces and routes";
+      elements.CancelCentre.textContent = "Back to rooms setup";
       elements.LinkGuidance.textContent = `From ${selected.scene.title} to ${target?.title || "the selected place"}. Place the button on the real route, not on furniture or a wall.`;
     } else {
       elements.LinkGuidance.textContent = "Every walking button has an exact position.";
@@ -3213,6 +3305,11 @@
   });
   panel.querySelector("#editorPreviousScene").addEventListener("click", () => moveScene(-1));
   panel.querySelector("#editorNextScene").addEventListener("click", () => moveScene(1));
+  elements.AddRouteToggle.addEventListener("click", () => {
+    state.addRouteOpen = !state.addRouteOpen;
+    logOperatorStep(state.addRouteOpen ? "add-walking-button-opened" : "add-walking-button-closed");
+    render();
+  });
   elements.ConfirmCentre.addEventListener("click", () => {
     const selected = selectedHotspot();
     if (state.activeStage === "links" && state.linkStep === "review" && selected?.hotspot.positionConfirmed) {

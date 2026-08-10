@@ -422,9 +422,7 @@ async function main() {
     assert(lastSelectedDestination.title === "Kitchen door" && lastSelectedDestination.status === "Selected destination", `The lower destination block did not keep the last selected card visible: ${JSON.stringify(lastSelectedDestination)}`);
     const roomRouteScrollAfterClick = await page.evaluate(() => document.querySelector(".editor-panel__content")?.scrollTop || 0);
     assert(roomRouteScrollAfterClick >= roomRouteScrollTop - 24, `Choosing a walking route jumped to the top: ${JSON.stringify({ roomRouteScrollTop, roomRouteScrollAfterClick })}`);
-    await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
-    await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
-    assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
+    assert(await page.locator(".editor-place-choice.is-selected").count() === 1, "The room board did not keep the selected destination visible.");
     const incomingOnlySourceState = await page.evaluate(() => (
       Array.from(document.querySelectorAll(".editor-photo-choice")).map((button) => ({
         title: button.querySelector("strong")?.textContent,
@@ -472,6 +470,27 @@ async function main() {
 
     await page.setViewportSize({ width: 1280, height: 760 });
     await assertOneTask(page, "Place the walking buttons");
+    await page.getByRole("button", { name: "Add walking button" }).click();
+    await page.locator('.editor-add-route-option[data-add-route-target="scene-003"]').click();
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
+      if (snapshot?.selected?.sceneId !== "scene-001" || snapshot.selected.hotspotIndex !== 1) return false;
+      return window.__TOUR_EDITOR_API.sceneById["scene-001"]?.hotspots?.[1]?.target === "scene-003";
+    });
+    const routeAddedOnPlacementStep = await page.evaluate(() => {
+      const scene = window.__TOUR_EDITOR_API.sceneById["scene-001"];
+      return {
+        targets: scene.hotspots.map((hotspot) => hotspot.target),
+        selected: window.__RAINDIGIT_STUDIO_DEBUG__.snapshot().selected,
+        addMenuHidden: document.querySelector("#editorAddRouteMenu")?.hidden,
+        advancedOpen: document.querySelector(".editor-placement-advanced")?.open
+      };
+    });
+    assert(JSON.stringify(routeAddedOnPlacementStep.targets) === JSON.stringify(["scene-002", "scene-003"]), `Step 4 did not add the missed route to the current source: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    assert(routeAddedOnPlacementStep.selected?.sceneId === "scene-001" && routeAddedOnPlacementStep.selected?.hotspotIndex === 1, `The new Step 4 route was not selected for placement: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    assert(routeAddedOnPlacementStep.addMenuHidden === true, `The Add walking button picker stayed open after choosing a route: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    assert(routeAddedOnPlacementStep.advancedOpen === false, `Advanced placement actions are open on the default surface: ${JSON.stringify(routeAddedOnPlacementStep)}`);
+    await page.locator('.editor-saved-movement[data-saved-movement-target="scene-002"]').click();
     await page.waitForFunction(() => {
       const button = document.querySelector("#editorConfirmCentre");
       return button && !button.disabled;
@@ -516,7 +535,7 @@ async function main() {
     assertNear(draggedMarker.x, draggedFirst.end.x, 24, "Dragged walking button did not stay near the release pointer");
     assertNear(draggedMarker.y, draggedFirst.end.y, 24, "Dragged walking button did not stay near the release pointer");
     first = firstAfterDrag;
-    await page.getByRole("button", { name: "Adjust point" }).click();
+    await page.getByRole("button", { name: "Move this button" }).click();
     await page.getByRole("button", { name: "Update point here" }).waitFor();
     const currentTargetWhileAdjusting = await elementCenter(page, ".editor-centre-target");
     await waitForMarkerAt(page, currentTargetWhileAdjusting);

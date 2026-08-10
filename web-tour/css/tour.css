@@ -1079,6 +1079,99 @@ body:not(.is-editor-open) .editor-panel { display: none; }
   overflow-y: auto;
 }
 
+.editor-add-route {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.editor-add-route-menu {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(214, 175, 92, 0.36);
+  border-radius: 5px;
+  background: rgba(214, 175, 92, 0.08);
+}
+
+.editor-add-route-menu[hidden] {
+  display: none;
+}
+
+.editor-add-route-menu > strong {
+  color: #fff9ec;
+  font-size: 11px;
+}
+
+.editor-add-route-options {
+  display: grid;
+  gap: 6px;
+  max-height: min(28svh, 260px);
+  overflow-y: auto;
+}
+
+.editor-add-route-option {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 26px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(255, 249, 236, 0.16);
+  border-radius: 4px;
+  color: #fff9ec;
+  background: rgba(10, 11, 10, 0.42);
+  cursor: pointer;
+  text-align: left;
+}
+
+.editor-add-route-option:hover,
+.editor-add-route-option:focus-visible {
+  border-color: var(--accent);
+  background: rgba(214, 175, 92, 0.12);
+}
+
+.editor-add-route-option img {
+  width: 82px;
+  aspect-ratio: 2 / 1;
+  border-radius: 2px;
+  object-fit: cover;
+}
+
+.editor-add-route-option span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.editor-add-route-option strong,
+.editor-add-route-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-add-route-option strong {
+  font-size: 11px;
+}
+
+.editor-add-route-option small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.editor-add-route-option i {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent-ink);
+  background: var(--accent);
+  font-style: normal;
+  font-weight: 900;
+}
+
 .editor-hotspot {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2158,6 +2251,16 @@ body[data-editor-stage="export"] .editor-panel__footer {
 }
 
 .editor-placement-tools input { accent-color: var(--accent); }
+.editor-placement-advanced {
+  margin-top: 8px;
+}
+
+.editor-placement-advanced > p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
 .editor-image-warning { min-height: 16px; margin: 8px 0 0; color: #f4c978; font-size: 10px; line-height: 1.4; }
 .editor-start-copy { min-height: 30px; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; }
 
