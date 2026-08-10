@@ -334,6 +334,17 @@ async function main() {
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(1).locator("option:checked").textContent() === "Second floor", `Reload lost the photo floor assignment: ${JSON.stringify(reloadState)}`);
 
     await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
+    const sourceDestinationState = await page.evaluate(() => ({
+      sourceCards: document.querySelectorAll(".editor-photo-choice-card").length,
+      destinationCards: document.querySelectorAll(".editor-place-choice-card").length,
+      currentCards: Array.from(document.querySelectorAll(".editor-place-choice-card.is-current-source")).map((card) => ({
+        title: card.querySelector("strong")?.textContent,
+        note: card.querySelector("small")?.textContent,
+        disabled: card.querySelector(".editor-place-choice")?.disabled
+      }))
+    }));
+    assert(sourceDestinationState.destinationCards === sourceDestinationState.sourceCards, `The destination list hid the current source instead of showing it disabled: ${JSON.stringify(sourceDestinationState)}`);
+    assert(sourceDestinationState.currentCards.length === 1 && sourceDestinationState.currentCards[0].title === "Kitchen window" && sourceDestinationState.currentCards[0].note === "Current photo" && sourceDestinationState.currentCards[0].disabled, `The current source was not shown as a disabled destination: ${JSON.stringify(sourceDestinationState)}`);
     await page.getByRole("button", { name: "Preview source Kitchen window" }).click();
     await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "visible" });
     assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Source route preview must use the full panorama.");

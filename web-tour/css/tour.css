@@ -2521,6 +2521,11 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   border-bottom-right-radius: 0;
 }
 
+.editor-place-choice-card.is-current-source .editor-place-choice {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .editor-place-choice img { width: 88px; aspect-ratio: 2 / 1; border-radius: 2px; object-fit: cover; }
 .editor-place-choice > span { display: grid; min-width: 0; gap: 2px; }
 .editor-place-choice strong, .editor-place-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

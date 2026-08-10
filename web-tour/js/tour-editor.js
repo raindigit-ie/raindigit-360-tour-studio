@@ -660,6 +660,9 @@
     panel.querySelectorAll(`[data-scene-source-preview-for="${scene.id}"]`).forEach((node) => {
       node.setAttribute("aria-label", `Preview source ${scene.title}`);
     });
+    panel.querySelectorAll(`[data-scene-destination-preview-for="${scene.id}"]`).forEach((node) => {
+      node.setAttribute("aria-label", `Preview destination ${scene.title}`);
+    });
     panel.querySelectorAll(`[data-scene-remove-for="${scene.id}"]`).forEach((node) => {
       node.setAttribute("aria-label", `Remove ${scene.title}`);
     });
@@ -1585,13 +1588,15 @@
     if (source) {
       const selectedTargets = plannedTargets(source);
       elements.RoomTaskProgress.textContent = `${selectedTargets.length} walking route${selectedTargets.length === 1 ? "" : "s"} from ${source.title}`;
-      project.scenes.filter((scene) => scene.id !== source.id).forEach((target) => {
+      project.scenes.forEach((target) => {
+        const isCurrentSource = target.id === source.id;
         const selected = selectedTargets.includes(target.id);
         const card = document.createElement("article");
-        card.className = "editor-place-choice-card";
+        card.className = `editor-place-choice-card${isCurrentSource ? " is-current-source" : ""}`;
         const button = document.createElement("button");
         button.className = `editor-place-choice${selected ? " is-selected" : ""}`;
         button.type = "button";
+        button.disabled = isCurrentSource;
         button.setAttribute("aria-pressed", String(selected));
         button.innerHTML = `<img alt="" /><span><strong></strong><small></small></span><i aria-hidden="true"></i>`;
         button.querySelector("img").src = workspaceAsset(target.thumb);
@@ -1600,15 +1605,15 @@
         targetTitle.textContent = target.title;
         const targetRoom = button.querySelector("small");
         targetRoom.dataset.sceneRoomFor = target.id;
-        targetRoom.textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
-        button.querySelector("i").textContent = selected ? "✓" : "+";
-        button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
+        targetRoom.textContent = isCurrentSource ? "Current photo" : [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
+        button.querySelector("i").textContent = isCurrentSource ? "•" : selected ? "✓" : "+";
+        if (!isCurrentSource) button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
         const preview = document.createElement("button");
         preview.className = "editor-card-preview editor-card-preview--inline";
         preview.type = "button";
         preview.textContent = "Preview";
-        preview.dataset.scenePreviewFor = target.id;
-        preview.setAttribute("aria-label", `Preview ${target.title}`);
+        preview.dataset.sceneDestinationPreviewFor = target.id;
+        preview.setAttribute("aria-label", `Preview destination ${target.title}`);
         preview.addEventListener("click", () => openPhotoPreview(target.id));
         card.append(button, preview);
         elements.PlaceChoices.appendChild(card);
