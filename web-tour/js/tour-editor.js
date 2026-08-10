@@ -1379,24 +1379,26 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
+        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><button class="editor-room-photo__drag-handle" type="button" draggable="true">Move</button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
-        const choose = card.querySelector("button");
+        const choose = card.querySelector(".editor-room-photo__select");
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
         choose.draggable = false;
-        choose.addEventListener("pointerdown", (event) => {
-          if (event.button && event.button !== 0) return;
-          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
-        });
-        choose.addEventListener("mousedown", (event) => {
-          if (event.button !== 0) return;
-          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
-        });
         choose.addEventListener("click", () => {
           if (suppressRoomPhotoClick) return;
           state.roomPlanSceneId = scene.id;
           setStatus(`Choose where people can walk from ${scene.title}`);
           rerenderRoomsPanelPreservingScroll();
+        });
+        const dragHandle = card.querySelector(".editor-room-photo__drag-handle");
+        dragHandle.setAttribute("aria-label", `Move ${scene.title} to another space`);
+        dragHandle.addEventListener("pointerdown", (event) => {
+          if (event.button && event.button !== 0) return;
+          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
+        });
+        dragHandle.addEventListener("mousedown", (event) => {
+          if (event.button !== 0) return;
+          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
         });
         const preview = card.querySelector(".editor-card-preview");
         preview.dataset.scenePreviewFor = scene.id;
@@ -1445,8 +1447,8 @@
           event.dataTransfer.setData("text/plain", scene.id);
           card.classList.add("is-dragging");
         };
-        card.addEventListener("dragstart", beginDrag);
-        card.addEventListener("dragend", () => card.classList.remove("is-dragging"));
+        dragHandle.addEventListener("dragstart", beginDrag);
+        dragHandle.addEventListener("dragend", () => card.classList.remove("is-dragging"));
         photoList.appendChild(card);
       });
       elements.ProjectOrder.appendChild(column);

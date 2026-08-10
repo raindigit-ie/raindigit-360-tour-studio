@@ -2343,13 +2343,56 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-room-photo__select span {
   position: absolute;
-  left: 6px;
+  left: 74px;
   bottom: 6px;
   padding: 4px 6px;
   border-radius: 3px;
   background: rgba(14, 16, 15, 0.86);
   font-size: 9px;
   font-weight: 800;
+}
+
+.editor-room-photo__drag-handle {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  min-height: 28px;
+  padding: 0 9px 0 25px;
+  border: 1px solid rgba(214, 175, 92, 0.78);
+  border-radius: 4px;
+  color: #fff9ec;
+  background: rgba(14, 16, 15, 0.9);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+  cursor: grab;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0;
+  touch-action: none;
+}
+
+.editor-room-photo__drag-handle::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 10px;
+  height: 12px;
+  background:
+    radial-gradient(circle, currentColor 1.5px, transparent 1.7px) 0 0 / 5px 6px,
+    radial-gradient(circle, currentColor 1.5px, transparent 1.7px) 5px 0 / 5px 6px;
+  opacity: 0.86;
+  transform: translateY(-50%);
+}
+
+.editor-room-photo__drag-handle:hover,
+.editor-room-photo__drag-handle:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  background: rgba(31, 34, 30, 0.96);
+}
+
+.editor-room-photo__drag-handle:active {
+  cursor: grabbing;
 }
 
 .editor-card-actions {

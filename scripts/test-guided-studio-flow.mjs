@@ -261,9 +261,10 @@ async function main() {
     await photoNames.nth(2).fill("Hall entrance");
     const afterPhotoNames = await page.locator(".editor-room-photo input").evaluateAll((inputs) => inputs.map((input) => input.value));
     assert(afterPhotoNames[0] === "Kitchen window" && afterPhotoNames[1] === "Kitchen door", `Photo name input did not update the visible board: ${JSON.stringify(afterPhotoNames)}`);
+    assert(await page.locator(".editor-room-photo__drag-handle", { hasText: "Move" }).count() === 3, "Every photo card needs a visible Move drag handle.");
     const thirdPhoto = page.locator('.editor-room-photo[data-scene-id="scene-003"]');
     const hallColumn = page.locator(".editor-room-column").nth(1);
-    await thirdPhoto.locator(".editor-room-photo__select").dragTo(hallColumn);
+    await thirdPhoto.locator(".editor-room-photo__drag-handle").dragTo(hallColumn);
     const dragState = await page.evaluate(() => ({
       columns: Array.from(document.querySelectorAll(".editor-room-column")).map((column) => ({
         roomId: column.dataset.roomId,
@@ -284,7 +285,7 @@ async function main() {
     assert(await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").count() === 3, "The accessible Room menu could not move a photo.");
     await page.locator('.editor-room-photo[data-scene-id="scene-001"]').scrollIntoViewIfNeeded();
     await page.evaluate(() => {
-      const source = document.querySelector('.editor-room-photo[data-scene-id="scene-002"] .editor-room-photo__select');
+      const source = document.querySelector('.editor-room-photo[data-scene-id="scene-002"] .editor-room-photo__drag-handle');
       const target = document.querySelector('.editor-room-photo[data-scene-id="scene-001"]');
       const sourceBox = source.getBoundingClientRect();
       const targetBox = target.getBoundingClientRect();
@@ -297,7 +298,7 @@ async function main() {
     const reorderedKitchenScenes = await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").evaluateAll((cards) => cards.map((card) => card.dataset.sceneId));
     assert(JSON.stringify(reorderedKitchenScenes) === JSON.stringify(["scene-002", "scene-001", "scene-003"]), `Dragging within one room did not reorder photos: ${JSON.stringify(reorderedKitchenScenes)}`);
     await page.evaluate(() => {
-      const source = document.querySelector('.editor-room-photo[data-scene-id="scene-001"] .editor-room-photo__select');
+      const source = document.querySelector('.editor-room-photo[data-scene-id="scene-001"] .editor-room-photo__drag-handle');
       const target = document.querySelector('.editor-room-photo[data-scene-id="scene-002"]');
       const sourceBox = source.getBoundingClientRect();
       const targetBox = target.getBoundingClientRect();
