@@ -1887,8 +1887,10 @@
   function saveSelectedHotspotAtViewerCenter(reason = "movement-centre-confirmed") {
     const selected = selectedHotspot();
     if (!selected) return false;
-    const pitch = roundCoordinate(api.viewer.getPitch());
-    const yaw = roundCoordinate(api.viewer.getYaw());
+    api.viewer.stopMovement?.();
+    const centreCoordinates = viewerCoordinatesAtElementCenter(centreTarget);
+    const pitch = roundCoordinate(centreCoordinates?.pitch ?? api.viewer.getPitch());
+    const yaw = roundCoordinate(centreCoordinates?.yaw ?? api.viewer.getYaw());
     selected.hotspot.positionConfirmed = true;
     api.updateHotspotCoordinates(state.selected.sceneId, state.selected.hotspotIndex, { pitch, yaw });
     const guide = guideForScene(selected.scene);
