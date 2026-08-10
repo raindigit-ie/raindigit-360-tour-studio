@@ -42,6 +42,7 @@
   const hasSessionStage = stageOrder.includes(restoredStage) && restoredStage !== "start";
   const roundCoordinate = (value) => Math.round(value * 10) / 10;
   const hotspotDragStartDistance = 10;
+  const studioDefaultHfov = 94;
   const state = {
     activeStage: hasSessionStage ? restoredStage : "start",
     selected: null,
@@ -210,7 +211,7 @@
           <strong>Put the walking button under the door or camera point.</strong>
           <span>Drag the 360 photo, then save the walking button.</span>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorConfirmCentre" type="button">Save point here</button>
-          <details class="editor-disclosure editor-disclosure--compact editor-placement-advanced"><summary>Other actions</summary><button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Back to rooms setup</button><div class="editor-placement-tools"><button class="editor-button" id="editorInspectSource" type="button">Preview this photo</button><button class="editor-button" id="editorUseRoomHeight" type="button">Align to room height</button><label><input id="editorGuideSnap" type="checkbox" checked /> Keep the same height</label></div><p id="editorGuideReadout"></p></details>
+          <details class="editor-disclosure editor-disclosure--compact editor-placement-advanced"><summary>Other actions</summary><button class="editor-button editor-button--wide editor-button--danger" id="editorRemoveMovement" type="button">Remove this walking button</button><button class="editor-button editor-button--wide" id="editorCancelCentre" type="button">Back to rooms setup</button><div class="editor-placement-tools"><button class="editor-button" id="editorInspectSource" type="button">Preview this photo</button><button class="editor-button" id="editorUseRoomHeight" type="button">Align to room height</button><label><input id="editorGuideSnap" type="checkbox" checked /> Keep the same height</label></div><p id="editorGuideReadout"></p></details>
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
@@ -313,7 +314,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -586,7 +587,7 @@
   function lookAtSelectedMovement(reason = "movement-focused") {
     const selected = selectedHotspot();
     if (!selected || api.viewer.getScene() !== selected.scene.id || !api.viewer.isLoaded()) return false;
-    const hfov = Math.min(api.viewer.getHfov(), 86);
+    const hfov = studioDefaultHfov;
     api.viewer.lookAt(selected.hotspot.pitch, selected.hotspot.yaw, hfov, 0);
     studioLog(reason, {
       sceneId: selected.scene.id,
@@ -780,15 +781,16 @@
       panorama: workspaceAsset(scene.panorama || scene.thumb),
       autoLoad: true,
       showFullscreenCtrl: false,
-      showZoomCtrl: true,
+      showZoomCtrl: false,
       compass: false,
-      keyboardZoom: true,
-      mouseZoom: true,
+      keyboardZoom: false,
+      mouseZoom: false,
+      doubleClickZoom: false,
       pitch: scene.pitch,
       yaw: scene.yaw,
-      hfov: scene.hfov,
-      minHfov: 58,
-      maxHfov: 112
+      hfov: studioDefaultHfov,
+      minHfov: studioDefaultHfov,
+      maxHfov: studioDefaultHfov
     });
     studioLog("photo-preview-360-opened", { sceneId: scene.id });
   }
@@ -2346,13 +2348,15 @@
     window.requestAnimationFrame(() => {
       elements.HotspotList.querySelector(".editor-saved-movement.is-selected")?.scrollIntoView({ block: "nearest" });
     });
-    elements.HotspotList.hidden = source.hotspots.length <= 1;
+    elements.HotspotList.hidden = source.hotspots.length <= 0;
     renderAddRoutePicker(source);
     const showPlacementPanel = Boolean(selected && ["place", "review"].includes(state.linkStep));
     const viewerReady = Boolean(selected && api.viewer.getScene() === source.id && api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
     elements.PlaceAtCentre.hidden = !showPlacementPanel;
     elements.ConfirmCentre.hidden = true;
     elements.ConfirmCentre.disabled = true;
+    elements.RemoveMovement.hidden = !selected;
+    elements.RemoveMovement.disabled = !selected;
     const target = selected ? api.sceneById[selected.hotspot.target] : null;
     const guide = guideForScene(source);
     elements.GuideSnap.checked = guide.snapEnabled;
@@ -3569,12 +3573,17 @@
     const selected = selectedHotspot();
     if (selected) openPhotoPreview(selected.scene.id);
   });
+  elements.RemoveMovement.addEventListener("click", async () => {
+    const selected = selectedHotspot();
+    if (!selected) return;
+    await removeWalkingRouteFromLinks(selected.scene.id, selected.hotspot.target);
+  });
   elements.UseRoomHeight.addEventListener("click", () => {
     const selected = selectedHotspot();
     if (!selected) return;
     const guide = guideForScene(selected.scene);
     api.viewer.lookAt(guide.defaultPitch, api.viewer.getYaw(), api.viewer.getHfov(), 0);
-    setStatus("Room height aligned. Check the cross, then save the point.");
+    setStatus("Room height aligned. Check the walking button, then drag it if needed.");
     logOperatorStep("movement-room-height-used", { roomId: guide.roomId, pitch: guide.defaultPitch });
   });
   elements.GuideSnap.addEventListener("change", () => {
@@ -3639,6 +3648,12 @@
 
   viewerElement.addEventListener("pointerdown", handleHotspotDragStart, true);
   viewerElement.addEventListener("mousedown", handleHotspotDragStart, true);
+  viewerElement.addEventListener("dblclick", (event) => {
+    if (state.activeStage !== "links") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    lookAtSelectedMovement("studio-double-click-zoom-blocked");
+  }, true);
   document.addEventListener("pointerdown", handleHotspotDragStart, true);
   document.addEventListener("mousedown", handleHotspotDragStart, true);
   document.addEventListener("pointermove", (event) => {

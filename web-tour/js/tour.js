@@ -8,6 +8,7 @@ const isLocalEditorRequest = viewParams.get("edit") === "1" &&
   ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
 const isLocalDraftPreview = viewParams.get("preview") === "1" &&
   ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
+const localEditorDefaultHfov = 94;
 const defaultSceneAdjustment = Object.freeze({ brightness: 100, contrast: 100, saturation: 100, warmth: 0 });
 const sceneAdjustments = Object.fromEntries(scenes.map((scene) => [scene.id, { ...defaultSceneAdjustment }]));
 const adjustmentPreviewDisabled = new Set();
@@ -207,9 +208,10 @@ const viewer = pannellum.viewer("panorama", {
     compass: false,
     keyboardZoom: true,
     mouseZoom: true,
-    hfov: 94,
-    minHfov: 58,
-    maxHfov: 112
+    doubleClickZoom: !isLocalEditorRequest,
+    hfov: localEditorDefaultHfov,
+    minHfov: isLocalEditorRequest ? localEditorDefaultHfov : 58,
+    maxHfov: isLocalEditorRequest ? localEditorDefaultHfov : 112
   },
   scenes: configScenes
 });
