@@ -8,7 +8,7 @@
   const viewParams = new URLSearchParams(window.location.search);
   const workspaceMode = viewParams.get("workspace") === "1";
   const resumeMode = viewParams.get("resume") === "1";
-  const stageOrder = ["start", "upload", "rooms", "light", "links", "arrival", "export"];
+  const stageOrder = ["start", "upload", "rooms", "light", "links", "arrival", "polish", "export"];
   const stageLabels = {
     start: "Start",
     upload: "Photos",
@@ -16,6 +16,7 @@
     light: "Look",
     links: "Walking buttons",
     arrival: "First views",
+    polish: "Polish",
     export: "Publish"
   };
   const spaceNameTemplates = [
@@ -68,6 +69,7 @@
     arrivalQueueTotal: 0,
     arrivalLoading: false,
     arrivalSaving: false,
+    polishEditing: false,
     addRouteOpen: false,
     placementGuides: {},
     guidePreferences: { visible: true, snapEnabled: true, snapToleranceDeg: 2.2 },
@@ -225,8 +227,17 @@
           <button id="editorSaveSceneView" type="button">Use as room opening</button>
         </div>
       </section>
+      <section class="editor-stage-panel" data-stage-panel="polish">
+        <div class="editor-step-heading"><span>Step 6</span><h2>Polish the preview</h2></div>
+        <p class="editor-guidance" id="editorPolishHelp"></p>
+        <div class="editor-polish-actions">
+          <button class="editor-button" id="editorPolishEditToggle" type="button">Edit walking buttons</button>
+          <button class="editor-button" id="editorPolishSaveView" type="button">Save current first view</button>
+        </div>
+        <div class="editor-hotspot-list editor-hotspot-list--polish" id="editorPolishHotspotList" aria-label="Walking buttons in this preview"></div>
+      </section>
       <section class="editor-stage-panel" data-stage-panel="export">
-        <div class="editor-step-heading"><span>Step 6</span><h2>Check and publish</h2></div>
+        <div class="editor-step-heading"><span>Step 7</span><h2>Check and publish</h2></div>
         <div class="editor-export-summary" id="editorExportSummary"></div>
         <div class="editor-readiness" id="editorReadiness" role="status"></div>
         <details class="editor-disclosure editor-disclosure--compact" id="editorFloorplanOptions">
@@ -243,6 +254,7 @@
         <details class="editor-disclosure editor-disclosure--compact" id="editorPreviewOptions">
           <summary id="editorPreviewOptionsLabel">Check the tour first</summary>
           <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open tour preview</a>
+          <button class="editor-button editor-button--wide" id="editorOpenPolish" type="button">Polish inside studio</button>
         </details>
         <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build the tour</button>
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
@@ -314,7 +326,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishEditToggle", "PolishSaveView", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -871,6 +883,7 @@
       state.linkSceneIndex = 0;
       state.linkStep = "choose";
     }
+    if (stage !== "polish") state.polishEditing = false;
     studioLog("stage-change", { from: previousStage, to: stage }, true);
     render();
     scheduleUiStateSave(`stage-${stage}`);
@@ -1011,7 +1024,7 @@
     if (!next) {
       state.selected = null;
       setStatus("All destination views saved");
-      setStage("export");
+      setStage("polish");
       return false;
     }
     focusHotspotTask(next, "arrival");
@@ -1088,7 +1101,7 @@
     elements.Continue.hidden = ["start", "export"].includes(state.activeStage)
       || (state.activeStage === "links" && readiness.pendingPositions > 0 && !linkReviewReady)
       || (state.activeStage === "arrival" && readiness.pendingArrivals > 0 && !selected);
-    const viewerRequired = ["light", "links", "arrival"].includes(state.activeStage);
+    const viewerRequired = ["light", "links", "arrival", "polish"].includes(state.activeStage);
     const viewerBusy = viewerRequired && (!api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling);
     elements.Continue.disabled = (state.activeStage === "upload" && !state.workspaceProject?.scenes?.length) || viewerBusy;
     elements.Status.textContent = viewerBusy ? "Loading photo..." : state.statusMessage;
@@ -1103,6 +1116,8 @@
             ? readiness.pendingArrivals > 0
               ? state.arrival ? "Save first view" : "Open destination"
               : "Check tour"
+            : state.activeStage === "polish"
+              ? "Publish"
             : "Continue";
     elements.Continue.classList.toggle("editor-button--primary", true);
     panel.querySelector(".editor-panel__scene").hidden = ["start", "upload", "rooms", "export"].includes(state.activeStage);
@@ -2214,7 +2229,7 @@
     render();
   }
 
-  function selectMovementTarget(sourceSceneId, targetSceneId) {
+  function selectMovementTarget(sourceSceneId, targetSceneId, targetStage = state.activeStage === "polish" ? "polish" : "links") {
     const source = api.sceneById[sourceSceneId];
     const hotspotIndex = resolveHotspotIndex(sourceSceneId, { target: targetSceneId });
     const hotspot = source?.hotspots[hotspotIndex];
@@ -2228,7 +2243,7 @@
     selectHotspot(source.id, hotspotIndex);
     state.linkStep = hotspot.positionConfirmed ? "review" : "place";
     if (api.viewer.getScene() !== source.id) {
-      state.pendingFocus = { ...state.selected, stage: "links", place: false, lookAtHotspot: true };
+      state.pendingFocus = { ...state.selected, stage: targetStage, place: false, lookAtHotspot: true };
       api.viewer.loadScene(source.id);
       setStatus(`Opening ${source.title}...`);
       render();
@@ -2241,6 +2256,73 @@
       setStatus(`Place the walking button for ${target?.title || "this place"}`);
     }
     render();
+  }
+
+  async function saveCurrentPolishView() {
+    const scene = currentScene();
+    if (!scene || !api.viewer.isLoaded()) return;
+    const view = {
+      pitch: roundCoordinate(api.viewer.getPitch()),
+      yaw: roundCoordinate(api.viewer.getYaw()),
+      hfov: roundCoordinate(api.viewer.getHfov())
+    };
+    api.setSceneView(scene.id, view);
+    let updated = 0;
+    api.scenes.forEach((source) => {
+      source.hotspots.forEach((hotspot, hotspotIndex) => {
+        if (hotspot.target !== scene.id) return;
+        hotspot.arrivalConfirmed = true;
+        if (api.updateHotspotArrival(source.id, hotspotIndex, view)) updated += 1;
+      });
+    });
+    await queueDraftSave("polish-first-view-saved");
+    setStatus(updated
+      ? `Saved this first view for ${updated} walking button${updated === 1 ? "" : "s"}`
+      : "Saved this room opening view");
+    studioLog("polish-first-view-saved", { sceneId: scene.id, updated, view }, true);
+    renderPolishPanel(scene);
+  }
+
+  function renderPolishPanel(scene) {
+    if (state.activeStage !== "polish") return;
+    const selected = selectedHotspot();
+    const incomingCount = api.scenes.reduce((total, source) => total + source.hotspots.filter((hotspot) => hotspot.target === scene.id).length, 0);
+    elements.PolishHelp.textContent = state.polishEditing
+      ? "Pencil mode is on. Drag a walking person if it needs a small correction, or rotate the photo and save the first view."
+      : "Walk through the tour like a visitor. Turn on pencil mode only when a marker needs a small correction.";
+    elements.PolishEditToggle.textContent = state.polishEditing ? "Finish pencil edit" : "Pencil edit";
+    elements.PolishEditToggle.classList.toggle("is-active", state.polishEditing);
+    elements.PolishSaveView.disabled = !api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling;
+    elements.PolishSaveView.textContent = incomingCount
+      ? `Save current first view (${incomingCount})`
+      : "Save current first view";
+    elements.PolishHotspotList.replaceChildren();
+    if (!scene.hotspots.length) {
+      const empty = document.createElement("p");
+      empty.className = "editor-empty";
+      empty.textContent = "This view has no walking buttons.";
+      elements.PolishHotspotList.appendChild(empty);
+      return;
+    }
+    scene.hotspots.forEach((hotspot, hotspotIndex) => {
+      const target = api.sceneById[hotspot.target];
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = `editor-polish-row${sameHotspotReference(selected, { sceneId: scene.id, hotspotIndex, target: hotspot.target }) ? " is-selected" : ""}`;
+      row.innerHTML = `<span class="editor-polish-row__thumb"><img alt="" loading="lazy" decoding="async" /><i aria-hidden="true">${walkingIconMarkup()}</i></span><span><strong></strong><em></em></span><small></small>`;
+      row.querySelector("img").src = editorAsset(target?.thumb || "");
+      row.querySelector("strong").textContent = target?.title || hotspot.label;
+      row.querySelector("em").textContent = [target?.spaceLabel, target?.floorLabel].filter(Boolean).join(" · ");
+      row.querySelector("small").textContent = hotspot.positionConfirmed ? "Ready" : "Needs position";
+      row.addEventListener("click", () => {
+        state.polishEditing = true;
+        selectMovementTarget(scene.id, hotspot.target, "polish");
+      });
+      elements.PolishHotspotList.appendChild(row);
+    });
+    window.requestAnimationFrame(() => {
+      elements.PolishHotspotList.querySelector(".editor-polish-row.is-selected")?.scrollIntoView({ block: "nearest" });
+    });
   }
 
   function renderAddRoutePicker(source) {
@@ -2614,6 +2696,7 @@
       : `Finish ${readiness.pendingPositions} point${readiness.pendingPositions === 1 ? "" : "s"} and ${readiness.pendingArrivals} destination view${readiness.pendingArrivals === 1 ? "" : "s"}.`;
     const previewUrl = `${window.location.origin}${window.location.pathname}?preview=1${workspaceMode ? "&workspace=1" : ""}`;
     elements.PreviewLink.href = state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
+    elements.OpenPolish.hidden = !workspaceMode || !state.workspaceProject?.scenes?.length;
     elements.PreviewOptionsLabel.textContent = state.release.ready ? "View or test the tour" : "Check the tour first";
     elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
     elements.Build.disabled = !workspaceMode || state.building || !readiness.ready;
@@ -2838,6 +2921,7 @@
     renderSceneFields(scene);
     renderHotspotList(scene);
     renderArrivalPanel(scene);
+    renderPolishPanel(scene);
     renderImagePresets(scene.id);
     renderImageControls(scene.id);
     renderLocalAdjustments(scene.id);
@@ -2937,8 +3021,8 @@
       sceneId = selected.scene.id;
       index = selected.hotspotIndex;
     }
-    if (state.activeStage !== "links" || api.viewer.getScene() !== sceneId) {
-      setSelected(sceneId, index, state.activeStage === "arrival" ? "arrival" : "links");
+    if (!["links", "polish"].includes(state.activeStage) || api.viewer.getScene() !== sceneId) {
+      setSelected(sceneId, index, state.activeStage === "arrival" ? "arrival" : state.activeStage === "polish" ? "polish" : "links");
       return true;
     }
     selectHotspot(sceneId, index);
@@ -3310,7 +3394,7 @@
         resetArrivalQueue();
         focusNextArrivalTask("Open the destination and choose its first view");
       } else {
-        setStage("export");
+        setStage("polish");
       }
       return;
     }
@@ -3318,6 +3402,10 @@
     if (state.activeStage === "arrival" && readiness.pendingArrivals > 0) {
       if (state.arrival) await saveArrivalView();
       else await beginArrivalEdit();
+      return;
+    }
+    if (state.activeStage === "polish") {
+      if (await queueDraftSave("polish-complete")) setStage("export");
       return;
     }
     if (await queueDraftSave("continue")) setStage(stageOffset(1));
@@ -3645,6 +3733,18 @@
     renderArrivalPanel(scene);
     queueDraftSave("room-opening-view-saved");
   });
+  elements.PolishEditToggle.addEventListener("click", () => {
+    state.polishEditing = !state.polishEditing;
+    state.placement = null;
+    setStatus(state.polishEditing ? "Pencil mode on. Drag a walking person to correct it." : "Pencil mode off. You can walk through the tour.");
+    studioLog("polish-edit-toggled", { enabled: state.polishEditing }, true);
+    render();
+  });
+  elements.PolishSaveView.addEventListener("click", saveCurrentPolishView);
+  elements.OpenPolish.addEventListener("click", () => {
+    logOperatorStep("open-polish-from-publish");
+    setStage("polish");
+  });
   elements.AddAdjustment.addEventListener("click", () => {
     const scene = currentScene();
     const existing = api.getLocalAdjustments(scene.id);
@@ -3659,6 +3759,7 @@
   function handleHotspotDragStart(event) {
     const marker = event.target.closest("[data-editor-hotspot-id]");
     if (!marker || hotspotDrag) return false;
+    if (state.activeStage === "polish" && !state.polishEditing) return false;
     event.preventDefault();
     event.stopImmediatePropagation();
     beginHotspotDrag(event, marker);
@@ -3668,7 +3769,7 @@
   viewerElement.addEventListener("pointerdown", handleHotspotDragStart, true);
   viewerElement.addEventListener("mousedown", handleHotspotDragStart, true);
   viewerElement.addEventListener("dblclick", (event) => {
-    if (state.activeStage !== "links") return;
+    if (!["links", "polish"].includes(state.activeStage)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     lookAtSelectedMovement("studio-double-click-zoom-blocked");
@@ -3730,6 +3831,7 @@
     setStatus("Point drag cancelled");
   }, true);
   viewerElement.addEventListener("click", (event) => {
+    if (state.activeStage === "polish" && !state.polishEditing) return;
     if (event.target.closest("[data-editor-hotspot-id]")) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -3774,7 +3876,10 @@
     state.viewerSettled = false;
     if (applyPendingFocus()) return;
     const scene = currentScene();
-    if (state.activeStage !== "arrival" && !state.arrival) {
+    if (state.activeStage === "polish") {
+      if (scene?.hotspots.length) selectHotspot(scene.id, 0);
+      else state.selected = null;
+    } else if (state.activeStage !== "arrival" && !state.arrival) {
       if (!selectedHotspot() && scene?.hotspots.length) selectHotspot(scene.id, 0);
     }
     state.placement = null;

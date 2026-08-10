@@ -210,7 +210,7 @@ function validateDraft(value) {
   );
   const validUiState = value.uiState === undefined || (
     value.uiState && typeof value.uiState === "object" && !Array.isArray(value.uiState) &&
-    ["upload", "rooms", "light", "links", "arrival", "export"].includes(value.uiState.stage) &&
+    ["upload", "rooms", "light", "links", "arrival", "polish", "export"].includes(value.uiState.stage) &&
     (value.uiState.linkStep === undefined || ["choose", "place", "review"].includes(value.uiState.linkStep)) &&
     (value.uiState.lookSceneIndex === undefined || Number.isInteger(value.uiState.lookSceneIndex)) &&
     (

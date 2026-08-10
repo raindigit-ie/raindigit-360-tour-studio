@@ -787,7 +787,7 @@ async function main() {
       if (index < pendingBeforeArrival - 1) {
         await page.waitForFunction((previousTaskKey) => {
           const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
-          if (document.body.dataset.editorStage === "export") return true;
+          if (document.body.dataset.editorStage === "polish" || document.body.dataset.editorStage === "export") return true;
           if (!snapshot.selected) return false;
           return `${snapshot.selected.sceneId}::${snapshot.selected.target}` !== previousTaskKey;
         }, taskKey);
@@ -797,6 +797,21 @@ async function main() {
     const pendingAfterSharedArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
     assert(pendingAfterSharedArrival === 0, `Shared first views did not complete all routes: ${pendingAfterSharedArrival}`);
 
+    await assertOneTask(page, "Polish the preview");
+    const polishState = await page.evaluate(() => ({
+      stage: document.body.dataset.editorStage,
+      editButton: document.querySelector("#editorPolishEditToggle")?.textContent?.trim(),
+      saveViewButton: document.querySelector("#editorPolishSaveView")?.textContent?.trim(),
+      tourVisible: getComputedStyle(document.querySelector(".tour-shell")).visibility
+    }));
+    assert(polishState.stage === "polish", `Expected polish stage before publishing: ${JSON.stringify(polishState)}`);
+    assert(polishState.editButton === "Pencil edit", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
+    assert(polishState.saveViewButton?.startsWith("Save current first view"), `Polish first-view button is missing: ${JSON.stringify(polishState)}`);
+    assert(polishState.tourVisible !== "hidden", `Polish stage must show the final tour preview: ${JSON.stringify(polishState)}`);
+    await page.getByRole("button", { name: "Pencil edit" }).click();
+    await page.getByRole("button", { name: "Finish pencil edit" }).waitFor();
+    await page.getByRole("button", { name: /Save current first view/ }).click();
+    await page.getByRole("button", { name: "Publish" }).click();
     await assertOneTask(page, "Check and publish");
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Build the tour" }).click();
