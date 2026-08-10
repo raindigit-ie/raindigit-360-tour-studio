@@ -232,10 +232,16 @@ async function main() {
     assert(kitchenTemplateText === "Kitchen - кухня", "The quick-name list did not show the Russian space hint.");
     await spaceTemplates.nth(0).selectOption("Kitchen");
     assert(await roomNames.nth(0).inputValue() === "Kitchen", "Choosing a quick name should write only the English space name.");
+    await spaceTemplates.nth(1).selectOption("Kitchen");
+    assert(await roomNames.nth(1).inputValue() === "Kitchen 2", "Duplicate quick names should get a visible numeric suffix.");
     await roomNames.nth(1).fill("Wrong space");
     await roomNames.nth(1).press("Tab");
     await roomNames.nth(2).fill("Hall");
     await roomNames.nth(2).press("Tab");
+    await page.getByLabel("Number of spaces").fill("1");
+    await page.getByRole("button", { name: "Update spaces" }).click();
+    await page.waitForFunction(() => document.querySelectorAll("#editorRoomList input").length === 3);
+    assert(await page.getByLabel("Number of spaces").inputValue() === "3", "The space count control allowed a destructive shrink.");
     await page.getByRole("button", { name: "Remove Wrong space" }).click();
     await page.waitForFunction(() => document.querySelectorAll("#editorRoomList input").length === 2);
     assert(await roomNames.nth(0).inputValue() === "Kitchen" && await roomNames.nth(1).inputValue() === "Hall", "Deleting a middle space did not keep the intended spaces.");

@@ -570,6 +570,28 @@
     return defaultFloorNames[index] || `Floor ${index + 1}`;
   }
 
+  function uniqueRoomLabel(project, label, roomId) {
+    const trimmed = (label || "").trim();
+    if (!project || !trimmed) return trimmed;
+    const used = new Set(projectRooms(project)
+      .filter((room) => room.id !== roomId)
+      .map((room) => room.label.trim().toLowerCase())
+      .filter(Boolean));
+    if (!used.has(trimmed.toLowerCase())) return trimmed;
+    const base = trimmed.replace(/\s+\d+$/u, "").trim() || trimmed;
+    let suffix = 2;
+    while (used.has(`${base} ${suffix}`.toLowerCase())) suffix += 1;
+    return `${base} ${suffix}`;
+  }
+
+  function isDefaultRoomLabel(room, index) {
+    return room.label.trim().toLowerCase() === `room ${index + 1}`.toLowerCase();
+  }
+
+  function isDefaultFloorLabel(floor, index) {
+    return floor.label.trim().toLowerCase() === defaultFloorLabel(index).toLowerCase();
+  }
+
   function floorMap(project = state.workspaceProject) {
     const floors = new Map();
     for (const floor of project?.floors || []) floors.set(floor.id, { ...floor, scenes: [] });
@@ -1073,6 +1095,18 @@
       rooms.push({ id: `room-${Date.now().toString(36)}-${number}`, label: `Room ${number}` });
     }
     if (rooms.length > count) {
+      const removed = rooms.slice(count);
+      const removedIds = new Set(removed.map((room) => room.id));
+      const wouldLoseWork = removed.some((room, offset) =>
+        project.scenes.some((scene) => scene.space === room.id) ||
+        !isDefaultRoomLabel(room, count + offset)
+      );
+      if (wouldLoseWork) {
+        elements.RoomCount.value = String(rooms.length);
+        setStatus("To remove a space, use its × button so photos are moved intentionally.");
+        studioLog("room-count-shrink-blocked", { requested: count, current: rooms.length, removedRoomIds: [...removedIds] });
+        return;
+      }
       const kept = rooms.slice(0, count);
       const keptIds = new Set(kept.map((room) => room.id));
       const fallback = kept[0];
@@ -1101,6 +1135,18 @@
       floors.push({ id: `floor-${Date.now().toString(36)}-${index + 1}`, label: defaultFloorLabel(index) });
     }
     if (floors.length > count) {
+      const removed = floors.slice(count);
+      const removedIds = new Set(removed.map((floor) => floor.id));
+      const wouldLoseWork = removed.some((floor, offset) =>
+        project.scenes.some((scene) => scene.floor === floor.id) ||
+        !isDefaultFloorLabel(floor, count + offset)
+      );
+      if (wouldLoseWork) {
+        elements.FloorCount.value = String(floors.length);
+        setStatus("To remove a floor, use its × button so photos are moved intentionally.");
+        studioLog("floor-count-shrink-blocked", { requested: count, current: floors.length, removedFloorIds: [...removedIds] });
+        return;
+      }
       const kept = floors.slice(0, count);
       const keptIds = new Set(kept.map((floor) => floor.id));
       const fallback = kept[0];
@@ -1312,12 +1358,13 @@
       remove.setAttribute("aria-label", `Remove ${room.label}`);
       remove.disabled = rooms.length <= 1;
       const commitRoomName = (rerender) => {
-        const nextLabel = input.value.trim();
+        const nextLabel = uniqueRoomLabel(project, input.value, room.id);
         if (!nextLabel) {
           input.value = room.label;
           setStatus("Every space needs a name");
           return;
         }
+        input.value = nextLabel;
         room.label = nextLabel;
         project.scenes.filter((scene) => scene.space === room.id).forEach((scene) => { scene.spaceLabel = nextLabel; });
         refreshAutoSceneTitles(project, room.id);
