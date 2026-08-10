@@ -141,6 +141,10 @@ button {
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
+.icon-button[hidden] {
+  display: none;
+}
+
 .icon-button:hover,
 .icon-button:focus-visible,
 .icon-button.is-active {

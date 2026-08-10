@@ -246,13 +246,16 @@ async function main() {
     assert(!singleRelease.includes("\n"), "The single HTML must stay on one line.");
     const singleRuntimeJs = Buffer.from(singleRuntime, "base64").toString("utf8");
     assert(singleRuntimeJs.includes("data:image/jpeg;base64,") && singleRuntimeJs.includes('"firstScene":"scene-002"') && singleRuntimeJs.includes('"map":{"enabled":true'), "The single HTML runtime must embed the tour, floorplan and first visible viewpoint.");
+    assert(singleRuntimeJs.includes("const isLocalEditorRequest = false;") && singleRuntimeJs.includes("const isLocalDraftPreview = false;"), "The single HTML runtime must keep disabled local-editor flags defined.");
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(singleRelease), "The single HTML must not depend on local files.");
     const embedRelease = await readFile(embedHtml, "utf8");
     assert(embedRelease.includes("Loading 360 tour...") && embedRelease.includes("requestIdleCallback") && embedRelease.includes("srcdoc"), "The paste-in HTML must preload and lazy-start the self-contained tour.");
     assert(embedRelease.includes("raindigit-tour-fullscreen-fallback") && embedRelease.includes("raindigit-tour-fullscreen-state") && embedRelease.includes("webkitallowfullscreen") && embedRelease.includes("mozallowfullscreen"), "The paste-in HTML must let the generated tour control manage mobile iframe fullscreen fallback.");
     assert(!embedRelease.includes("Exit 360 tour fullscreen"), "The paste-in HTML must not add a competing parent-side fullscreen control.");
     const embedRuntime = embedRelease.match(/data:text\/javascript;base64,([A-Za-z0-9+/=]+)/)?.[1];
-    assert(embedRuntime && Buffer.from(embedRuntime, "base64").toString("utf8").includes('"firstScene":"scene-002"'), "The paste-in HTML must preserve the first visible viewpoint.");
+    const embedRuntimeJs = embedRuntime ? Buffer.from(embedRuntime, "base64").toString("utf8") : "";
+    assert(embedRuntimeJs.includes('"firstScene":"scene-002"'), "The paste-in HTML must preserve the first visible viewpoint.");
+    assert(embedRuntimeJs.includes("const isLocalEditorRequest = false;") && embedRuntimeJs.includes("const isLocalDraftPreview = false;"), "The paste-in HTML runtime must keep disabled local-editor flags defined.");
     assert(!embedRelease.includes("\n"), "The paste-in HTML must stay on one line for copy/paste.");
     assert(!/<(?:link|script)[^>]+(?:href|src)=\"(?:css|js|assets)\//i.test(embedRelease), "The paste-in HTML must not depend on local files.");
 

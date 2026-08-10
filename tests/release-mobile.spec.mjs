@@ -81,3 +81,22 @@ test("mobile release exposes an optional floorplan without blocking the tour", a
   await page.locator("#floorplanClose").click();
   await expect(page.locator("#floorplanPanel")).toBeHidden();
 });
+
+test("release hides floorplan control when no map is configured", async ({ page }) => {
+  await page.route(/\/js\/tour-config\.js(?:\?.*)?$/, (route) => route.fulfill({
+    contentType: "application/javascript; charset=utf-8",
+    body: `window.TOUR_CONFIG=${JSON.stringify({
+      schema: "raindigit-tour-project/v1",
+      title: "No Floorplan QA Tour",
+      firstScene: "scene-001",
+      map: { enabled: false, asset: null, pins: {} },
+      scenes: [
+        { id: "scene-001", title: "Kitchen", subtitle: "Kitchen view", space: "kitchen", spaceLabel: "Kitchen", thumb: "assets/studio-placeholder.svg", panorama: "assets/studio-placeholder.svg", pitch: 0, yaw: 0, hfov: 94, hotspots: [] }
+      ]
+    })};`
+  }));
+  await page.goto("/?no-floorplan-qa=1");
+  await expect(page.locator(".pnlm-render-container canvas")).toBeVisible();
+  await expect(page.locator("#mapToggle")).toBeHidden();
+  await expect(page.locator("#floorplanPanel")).toBeHidden();
+});

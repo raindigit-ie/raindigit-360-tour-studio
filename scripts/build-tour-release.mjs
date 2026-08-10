@@ -346,9 +346,10 @@ async function copyRuntime(output) {
   await cp(join(source, "js", "tour-bootstrap-release.js"), join(output, "js", "tour-bootstrap.js"));
   const studioRuntime = await readFile(join(source, "js", "tour.js"), "utf8");
   const releaseRuntime = studioRuntime
-    .replace(/const isLocalEditorRequest = viewParams\.get\("edit"\) === "1"[\s\S]*?const defaultSceneAdjustment/, "const defaultSceneAdjustment")
+    .replace(/const isLocalEditorRequest = viewParams\.get\("edit"\) === "1"[\s\S]*?const localEditorDefaultHfov = 94;/, "const isLocalEditorRequest = false;\nconst isLocalDraftPreview = false;\nconst localEditorDefaultHfov = 94;")
     .replace(/\/\/ Exposed only on explicit QA URLs[\s\S]*?\/\/ The preview can apply a saved local draft, but deliberately exposes no editor UI or write endpoint\.[\s\S]*?}\n\n/, "")
     .replace(/if \(isLocal(?:EditorRequest \|\| isLocal)?DraftPreview\) setNavigatorOpen\(true\);/, "setNavigatorOpen(false);");
+  assert(releaseRuntime.includes("const isLocalEditorRequest = false;") && releaseRuntime.includes("const isLocalDraftPreview = false;"), "Release runtime must define disabled local-editor flags.");
   assert(!/tour-editor|tour-preview|__TOUR_EDITOR|__TOUR_DRAFT_PREVIEW/.test(releaseRuntime), "Release runtime still references local studio code.");
   await writeFile(join(output, "js", "tour.js"), releaseRuntime, "utf8");
   await cp(join(source, "assets"), join(output, "assets"), { recursive: true });
