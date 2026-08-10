@@ -72,6 +72,8 @@
     initializing: true,
     viewportSettling: false,
     viewerSettled: false,
+    roomPlanTargetId: null,
+    roomPlanTargetAction: null,
     statusMessage: "Loading project"
   };
   window.sessionStorage.removeItem(stageStorageKey);
@@ -1308,19 +1310,50 @@
     return outgoing ? `${outgoing} outgoing` : "No outgoing yet";
   }
 
-  function destinationRouteStatus(project, scene, { currentSource = false, selectedDestination = false } = {}) {
+  function destinationRouteStatus(project, scene, { currentSource = false, selectedDestination = false, recentAction = null } = {}) {
     if (currentSource) return "Current photo";
     if (selectedDestination) return "Selected destination";
+    if (recentAction === "previewed") return "Last previewed";
+    if (recentAction === "removed") return "Last changed";
     return routeStatusText(project, scene);
+  }
+
+  function roomPlanDestinationGroups(project, source, selectedTargets) {
+    const groups = {
+      suggested: [],
+      unstarted: [],
+      other: []
+    };
+    project.scenes.forEach((target) => {
+      const isCurrentSource = target.id === source.id;
+      const selected = selectedTargets.includes(target.id);
+      const returnsToSource = plannedTargets(target).includes(source.id);
+      const stats = sceneRouteStats(project, target);
+      if (isCurrentSource || selected || returnsToSource) {
+        groups.suggested.push(target);
+      } else if (!stats.connected) {
+        groups.unstarted.push(target);
+      } else {
+        groups.other.push(target);
+      }
+    });
+    return [
+      { key: "suggested", title: "Suggested", note: "Current, selected, or likely return routes.", scenes: groups.suggested },
+      { key: "unstarted", title: "Not linked yet", note: "Photos with no walking routes yet.", scenes: groups.unstarted },
+      { key: "other", title: "Other photos", note: "Already used elsewhere.", scenes: groups.other }
+    ].filter((group) => group.scenes.length);
   }
 
   function togglePlannedTarget(sourceId, targetId) {
     const source = state.workspaceProject?.scenes.find((scene) => scene.id === sourceId);
     if (!source || source.id === targetId) return;
     const targets = plannedTargets(source);
-    source.plannedTargets = targets.includes(targetId)
-      ? targets.filter((id) => id !== targetId)
-      : [...targets, targetId];
+    const nextSelected = !targets.includes(targetId);
+    source.plannedTargets = nextSelected
+      ? [...targets, targetId]
+      : targets.filter((id) => id !== targetId);
+    state.roomPlanTargetId = targetId;
+    state.roomPlanTargetAction = nextSelected ? "selected" : "removed";
     setStatus(`${source.plannedTargets.length} walking route${source.plannedTargets.length === 1 ? "" : "s"} selected from ${source.title}`);
     studioLog("planned-place-toggled", { sourceSceneId: sourceId, targetSceneId: targetId, selected: source.plannedTargets.includes(targetId) });
     queueWorkspaceStructureSave("planned-place-toggled");
@@ -1528,6 +1561,8 @@
         choose.addEventListener("click", () => {
           if (suppressRoomPhotoClick) return;
           state.roomPlanSceneId = scene.id;
+          state.roomPlanTargetId = null;
+          state.roomPlanTargetAction = null;
           setStatus(`Choose where people can walk from ${scene.title}`);
           rerenderRoomsPanelPreservingScroll();
         });
@@ -1620,6 +1655,8 @@
       button.querySelector("i").textContent = sourceReady ? "✓" : "!";
       button.addEventListener("click", () => {
         state.roomPlanSceneId = scene.id;
+        state.roomPlanTargetId = null;
+        state.roomPlanTargetAction = null;
         rerenderRoomsPanelPreservingScroll();
       });
       const preview = document.createElement("button");
@@ -1637,12 +1674,15 @@
     if (source) {
       const selectedTargets = plannedTargets(source);
       elements.RoomTaskProgress.textContent = `${selectedTargets.length} walking route${selectedTargets.length === 1 ? "" : "s"} from ${source.title}`;
-      project.scenes.forEach((target) => {
+      const appendDestinationCard = (target, groupGrid) => {
         const isCurrentSource = target.id === source.id;
         const selected = selectedTargets.includes(target.id);
+        const recentAction = target.id === state.roomPlanTargetId ? state.roomPlanTargetAction : null;
+        const isRecentTarget = Boolean(recentAction);
         const stats = sceneRouteStats(project, target);
         const card = document.createElement("article");
-        card.className = `editor-place-choice-card${isCurrentSource ? " is-current-source" : ""}${stats.connected ? " is-linked" : " is-unlinked"}`;
+        card.className = `editor-place-choice-card${isCurrentSource ? " is-current-source" : ""}${stats.connected ? " is-linked" : " is-unlinked"}${isRecentTarget ? " is-recent-target" : ""}`;
+        card.dataset.destinationSceneId = target.id;
         const button = document.createElement("button");
         button.className = `editor-place-choice${selected ? " is-selected" : ""}`;
         button.type = "button";
@@ -1656,7 +1696,7 @@
         const targetRoom = button.querySelector("small");
         targetRoom.dataset.sceneRoomFor = target.id;
         targetRoom.textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
-        button.querySelector(".editor-choice-status").textContent = destinationRouteStatus(project, target, { currentSource: isCurrentSource, selectedDestination: selected });
+        button.querySelector(".editor-choice-status").textContent = destinationRouteStatus(project, target, { currentSource: isCurrentSource, selectedDestination: selected, recentAction });
         button.querySelector("i").textContent = isCurrentSource ? "•" : selected ? "✓" : "+";
         if (!isCurrentSource) button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
         const preview = document.createElement("button");
@@ -1665,9 +1705,24 @@
         preview.textContent = "Preview";
         preview.dataset.sceneDestinationPreviewFor = target.id;
         preview.setAttribute("aria-label", `Preview destination ${target.title}`);
-        preview.addEventListener("click", () => openPhotoPreview(target.id));
+        preview.addEventListener("click", () => {
+          state.roomPlanTargetId = target.id;
+          state.roomPlanTargetAction = "previewed";
+          rerenderRoomsPanelPreservingScroll();
+          openPhotoPreview(target.id);
+        });
         card.append(button, preview);
-        elements.PlaceChoices.appendChild(card);
+        groupGrid.appendChild(card);
+      };
+      roomPlanDestinationGroups(project, source, selectedTargets).forEach((group) => {
+        const section = document.createElement("section");
+        section.className = `editor-place-choice-group editor-place-choice-group--${group.key}`;
+        section.innerHTML = `<header><strong></strong><small></small></header><div class="editor-place-choice-group__grid"></div>`;
+        section.querySelector("strong").textContent = group.title;
+        section.querySelector("small").textContent = group.note;
+        const grid = section.querySelector(".editor-place-choice-group__grid");
+        group.scenes.forEach((target) => appendDestinationCard(target, grid));
+        elements.PlaceChoices.appendChild(section);
       });
       const summary = document.createElement("p");
       summary.textContent = selectedTargets.length

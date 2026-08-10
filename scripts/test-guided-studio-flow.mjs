@@ -216,6 +216,13 @@ async function main() {
     await page.locator(".editor-photo-preview__dialog").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Continue" }).click();
 
+    const roomsStageWidth = await page.evaluate(() => {
+      const viewport = document.documentElement.clientWidth;
+      const stagePanel = document.querySelector('.editor-stage-panel[data-stage-panel="rooms"]')?.getBoundingClientRect();
+      return { viewport, stageWidth: stagePanel?.width || 0 };
+    });
+    assert(roomsStageWidth.stageWidth >= roomsStageWidth.viewport - 48, `Step 2 rooms panel is still width-capped: ${JSON.stringify(roomsStageWidth)}`);
+
     await page.setViewportSize({ width: 390, height: 605 });
     await assertOneTask(page, "Set up spaces and walking routes");
     await page.getByLabel("Number of spaces").fill("3");
@@ -380,19 +387,39 @@ async function main() {
         title: card.querySelector("strong")?.textContent,
         note: card.querySelector(".editor-choice-status")?.textContent,
         disabled: card.querySelector(".editor-place-choice")?.disabled
+      })),
+      groups: Array.from(document.querySelectorAll(".editor-place-choice-group")).map((group) => ({
+        title: group.querySelector("header strong")?.textContent,
+        count: group.querySelectorAll(".editor-place-choice-card").length,
+        firstTitle: group.querySelector(".editor-place-choice strong")?.textContent
       }))
     }));
     assert(sourceDestinationState.destinationCards === sourceDestinationState.sourceCards, `The destination list hid the current source instead of showing it disabled: ${JSON.stringify(sourceDestinationState)}`);
     assert(sourceDestinationState.currentCards.length === 1 && sourceDestinationState.currentCards[0].title === "Kitchen window" && sourceDestinationState.currentCards[0].note === "Current photo" && sourceDestinationState.currentCards[0].disabled, `The current source was not shown as a disabled destination: ${JSON.stringify(sourceDestinationState)}`);
     assert(sourceDestinationState.sourceStatuses.some((item) => item.title === "Kitchen window" && item.status === "Selected source" && item.selected), `The source strip did not keep a clear selected-source marker: ${JSON.stringify(sourceDestinationState)}`);
+    assert(sourceDestinationState.groups[0]?.title === "Suggested" && sourceDestinationState.groups[0]?.firstTitle === "Kitchen window", `The destination list was not grouped with the current source first: ${JSON.stringify(sourceDestinationState)}`);
     await page.getByRole("button", { name: "Preview source Kitchen window" }).click();
     await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "visible" });
     assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Source route preview must use the full panorama.");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Preview destination Kitchen door" }).click();
+    await page.getByRole("dialog", { name: "Kitchen door" }).waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Kitchen door" }).waitFor({ state: "hidden" });
+    const lastPreviewedDestination = await page.evaluate(() => ({
+      title: document.querySelector(".editor-place-choice-card.is-recent-target strong")?.textContent,
+      status: document.querySelector(".editor-place-choice-card.is-recent-target .editor-choice-status")?.textContent
+    }));
+    assert(lastPreviewedDestination.title === "Kitchen door" && lastPreviewedDestination.status === "Last previewed", `The lower destination block did not keep the last previewed card visible: ${JSON.stringify(lastPreviewedDestination)}`);
     await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();
     const roomRouteScrollTop = await page.evaluate(() => document.querySelector(".editor-panel__content")?.scrollTop || 0);
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen door" }).click();
+    const lastSelectedDestination = await page.evaluate(() => ({
+      title: document.querySelector(".editor-place-choice-card.is-recent-target strong")?.textContent,
+      status: document.querySelector(".editor-place-choice-card.is-recent-target .editor-choice-status")?.textContent
+    }));
+    assert(lastSelectedDestination.title === "Kitchen door" && lastSelectedDestination.status === "Selected destination", `The lower destination block did not keep the last selected card visible: ${JSON.stringify(lastSelectedDestination)}`);
     const roomRouteScrollAfterClick = await page.evaluate(() => document.querySelector(".editor-panel__content")?.scrollTop || 0);
     assert(roomRouteScrollAfterClick >= roomRouteScrollTop - 24, `Choosing a walking route jumped to the top: ${JSON.stringify({ roomRouteScrollTop, roomRouteScrollAfterClick })}`);
     await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
@@ -411,6 +438,14 @@ async function main() {
     assert(kitchenDoorSource?.status === "No outgoing yet" && kitchenDoorSource?.icon === "!", `An incoming-only source looked complete: ${JSON.stringify(incomingOnlySourceState)}`);
     assert(hallEntranceSource?.status === "No outgoing yet" && hallEntranceSource?.icon === "!", `An incoming-only source looked complete: ${JSON.stringify(incomingOnlySourceState)}`);
     await page.locator(".editor-photo-choice").filter({ hasText: "Kitchen door" }).click();
+    const reverseSuggestionState = await page.evaluate(() => ({
+      selectedSource: document.querySelector(".editor-photo-choice.is-selected strong")?.textContent,
+      groups: Array.from(document.querySelectorAll(".editor-place-choice-group")).map((group) => ({
+        title: group.querySelector("header strong")?.textContent,
+        cards: Array.from(group.querySelectorAll(".editor-place-choice strong")).map((node) => node.textContent)
+      }))
+    }));
+    assert(reverseSuggestionState.groups[0]?.title === "Suggested" && reverseSuggestionState.groups[0]?.cards.includes("Kitchen window"), `The reverse return candidate was not suggested first: ${JSON.stringify(reverseSuggestionState)}`);
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
     await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
     await page.locator(".editor-photo-choice").filter({ hasText: "Hall entrance" }).click();
