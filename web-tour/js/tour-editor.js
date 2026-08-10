@@ -71,6 +71,7 @@
     guidePreferences: { visible: true, snapEnabled: true, snapToleranceDeg: 2.2 },
     showOriginalLook: false,
     initializing: true,
+    routeReferenceMigrated: false,
     viewportSettling: false,
     viewerSettled: false,
     roomPlanTargetId: null,
@@ -2977,7 +2978,10 @@
       }
       if (draft.uiState?.selected && typeof draft.uiState.selected.sceneId === "string") {
         const hotspotIndex = resolveHotspotIndex(draft.uiState.selected.sceneId, draft.uiState.selected);
-        if (hotspotIndex >= 0) selectHotspot(draft.uiState.selected.sceneId, hotspotIndex);
+        if (hotspotIndex >= 0) {
+          selectHotspot(draft.uiState.selected.sceneId, hotspotIndex);
+          if (draft.uiState.selected.target !== state.selected?.target) state.routeReferenceMigrated = true;
+        }
       }
       studioLog("ui-state-restored", { stage: state.activeStage, selected: state.selected }, true);
     }
@@ -3745,8 +3749,13 @@
           ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
         : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
-    if (plannedPlacesChanged || sharedArrivalChanged) {
-      queueDraftSave(sharedArrivalChanged ? "shared-arrival-views-applied" : "planned-places-synchronised");
+    if (plannedPlacesChanged || sharedArrivalChanged || state.routeReferenceMigrated) {
+      queueDraftSave(sharedArrivalChanged
+        ? "shared-arrival-views-applied"
+        : plannedPlacesChanged
+          ? "planned-places-synchronised"
+          : "ui-state-route-reference-migrated");
+      state.routeReferenceMigrated = false;
     }
     studioLog("studio-ready", {
       savedAt: state.savedAt,
