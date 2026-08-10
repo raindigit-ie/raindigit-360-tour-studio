@@ -2331,7 +2331,18 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   gap: 8px;
 }
 
-.editor-room-photo.is-selected { border-color: var(--accent); }
+.editor-room-photo.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(214, 175, 92, 0.18);
+}
+
+.editor-room-photo.is-unlinked {
+  border-style: dashed;
+}
+
+.editor-room-photo.is-linked {
+  border-color: rgba(105, 194, 163, 0.42);
+}
 .editor-room-photo.is-dragging { opacity: 0.55; }
 .editor-room-photo.is-drag-over {
   border-color: #69c2a3;
@@ -2371,6 +2382,36 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   background: rgba(14, 16, 15, 0.86);
   font-size: 9px;
   font-weight: 800;
+}
+
+.editor-room-photo__select em {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  max-width: calc(100% - 96px);
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 249, 236, 0.18);
+  border-radius: 999px;
+  color: #fff9ec;
+  background: rgba(14, 16, 15, 0.9);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-room-photo.is-selected .editor-room-photo__select em {
+  color: #17130d;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.editor-room-photo.is-linked:not(.is-selected) .editor-room-photo__select em {
+  color: #102018;
+  border-color: #69c2a3;
+  background: #69c2a3;
 }
 
 .editor-room-photo__move-controls {
@@ -2476,6 +2517,7 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 
 .editor-photo-choice {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
   gap: 5px;
   padding: 6px;
   border: 1px solid rgba(255, 249, 236, 0.16);
@@ -2488,13 +2530,72 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
 }
 
 .editor-photo-choice img {
+  grid-column: 1 / -1;
   width: 100%;
   aspect-ratio: 2 / 1;
   border-radius: 2px;
   object-fit: cover;
 }
 
-.editor-photo-choice.is-selected { border-color: var(--accent); background: rgba(214, 175, 92, 0.14); }
+.editor-photo-choice > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.editor-photo-choice strong,
+.editor-photo-choice small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-photo-choice strong {
+  font-size: 9px;
+}
+
+.editor-photo-choice small {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.editor-photo-choice i {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  align-self: center;
+  justify-self: end;
+  border: 1px solid rgba(255, 249, 236, 0.2);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.editor-photo-choice-card.is-linked .editor-photo-choice i {
+  color: #102018;
+  border-color: #69c2a3;
+  background: #69c2a3;
+}
+
+.editor-photo-choice-card.is-unlinked .editor-photo-choice i {
+  color: #17130d;
+  border-color: #f0c86b;
+  background: #f0c86b;
+}
+
+.editor-photo-choice.is-selected {
+  border-color: var(--accent);
+  background: rgba(214, 175, 92, 0.14);
+  box-shadow: 0 0 0 2px rgba(214, 175, 92, 0.16);
+}
+
+.editor-photo-choice.is-selected small {
+  color: var(--accent);
+}
 
 .editor-card-preview--source {
   position: static;
@@ -2539,11 +2640,27 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   opacity: 0.58;
 }
 
+.editor-place-choice-card.is-unlinked:not(.is-current-source) .editor-place-choice {
+  border-style: dashed;
+}
+
+.editor-place-choice-card.is-linked:not(.is-current-source) .editor-place-choice {
+  border-color: rgba(105, 194, 163, 0.34);
+}
+
 .editor-place-choice img { width: 88px; aspect-ratio: 2 / 1; border-radius: 2px; object-fit: cover; }
 .editor-place-choice > span { display: grid; min-width: 0; gap: 2px; }
 .editor-place-choice strong, .editor-place-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-place-choice strong { font-size: 11px; }
 .editor-place-choice small { color: var(--text-muted); font-size: 9px; }
+.editor-place-choice .editor-choice-status {
+  color: #f0c86b;
+  font-weight: 900;
+}
+.editor-place-choice.is-selected .editor-choice-status,
+.editor-place-choice-card.is-linked .editor-choice-status {
+  color: #69c2a3;
+}
 .editor-place-choice i { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid rgba(255, 249, 236, 0.2); border-radius: 50%; font-style: normal; font-weight: 900; }
 .editor-place-choice.is-selected { border-color: #69c2a3; background: rgba(105, 194, 163, 0.12); }
 .editor-place-choice.is-selected i { color: #102018; background: #69c2a3; }

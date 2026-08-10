@@ -262,7 +262,8 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 4);
     const addedRoomState = await page.evaluate(async () => ({
       rooms: Array.from(document.querySelectorAll("#editorRoomList input")).map((input) => input.value),
-      selectedSource: document.querySelector(".editor-photo-choice.is-selected span")?.textContent,
+      selectedSource: document.querySelector(".editor-photo-choice.is-selected strong")?.textContent,
+      selectedStatus: document.querySelector(".editor-photo-choice.is-selected small")?.textContent,
       added: {
         title: document.querySelector('.editor-room-photo[data-scene-id="scene-004"] input')?.value,
         space: document.querySelector('.editor-room-photo[data-scene-id="scene-004"] select')?.selectedOptions[0]?.textContent,
@@ -272,7 +273,22 @@ async function main() {
     }));
     assert(addedRoomState.rooms.join("|") === "Kitchen|Hall", `Adding a missing photo on Step 2 lost the room setup: ${JSON.stringify(addedRoomState)}`);
     assert(addedRoomState.added.title === "Kitchen view 4" && addedRoomState.added.space === "Kitchen" && addedRoomState.added.floor === "First floor", `The Step 2 upload did not inherit the current photo location: ${JSON.stringify(addedRoomState)}`);
-    assert(addedRoomState.selectedSource === "Kitchen view 4", `The newly added Step 2 photo was not selected for route setup: ${JSON.stringify(addedRoomState)}`);
+    assert(addedRoomState.selectedSource === "Kitchen view 4" && addedRoomState.selectedStatus === "Selected source", `The newly added Step 2 photo was not selected for route setup: ${JSON.stringify(addedRoomState)}`);
+    const sourceStripScroll = await page.evaluate(() => {
+      const strip = document.querySelector("#editorRoomChoices");
+      strip.scrollLeft = strip.scrollWidth;
+      return { before: strip.scrollLeft, overflow: strip.scrollWidth > strip.clientWidth };
+    });
+    await page.locator(".editor-place-choice").filter({ hasText: "Kitchen view 1" }).click();
+    const preservedSourceScroll = await page.evaluate(() => ({
+      sourceScrollLeft: document.querySelector("#editorRoomChoices")?.scrollLeft || 0,
+      selectedSource: document.querySelector(".editor-photo-choice.is-selected strong")?.textContent,
+      selectedRoomBoard: document.querySelector(".editor-room-photo.is-selected input")?.value,
+      linkedBadges: Array.from(document.querySelectorAll(".editor-photo-choice small")).map((node) => node.textContent)
+    }));
+    assert(!sourceStripScroll.overflow || preservedSourceScroll.sourceScrollLeft >= sourceStripScroll.before - 4, `Choosing a destination reset the source strip scroll: ${JSON.stringify({ sourceStripScroll, preservedSourceScroll })}`);
+    assert(preservedSourceScroll.selectedSource === "Kitchen view 4" && preservedSourceScroll.selectedRoomBoard === "Kitchen view 4", `The selected source highlight did not persist across blocks: ${JSON.stringify(preservedSourceScroll)}`);
+    assert(preservedSourceScroll.linkedBadges.some((text) => text.includes("outgoing") || text === "Selected source"), `Source strip did not expose linked/unlinked status: ${JSON.stringify(preservedSourceScroll)}`);
     await page.getByRole("button", { name: "Remove Kitchen view 4" }).click();
     await page.waitForFunction(() => document.querySelectorAll(".editor-room-photo").length === 3);
 
@@ -351,18 +367,24 @@ async function main() {
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, `Reload lost the photo space assignment: ${JSON.stringify(reloadState)}`);
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(1).locator("option:checked").textContent() === "Second floor", `Reload lost the photo floor assignment: ${JSON.stringify(reloadState)}`);
 
-    await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
+    await page.locator(".editor-photo-choice").filter({ hasText: "Kitchen window" }).click();
     const sourceDestinationState = await page.evaluate(() => ({
       sourceCards: document.querySelectorAll(".editor-photo-choice-card").length,
       destinationCards: document.querySelectorAll(".editor-place-choice-card").length,
+      sourceStatuses: Array.from(document.querySelectorAll(".editor-photo-choice")).map((button) => ({
+        title: button.querySelector("strong")?.textContent,
+        status: button.querySelector("small")?.textContent,
+        selected: button.classList.contains("is-selected")
+      })),
       currentCards: Array.from(document.querySelectorAll(".editor-place-choice-card.is-current-source")).map((card) => ({
         title: card.querySelector("strong")?.textContent,
-        note: card.querySelector("small")?.textContent,
+        note: card.querySelector(".editor-choice-status")?.textContent,
         disabled: card.querySelector(".editor-place-choice")?.disabled
       }))
     }));
     assert(sourceDestinationState.destinationCards === sourceDestinationState.sourceCards, `The destination list hid the current source instead of showing it disabled: ${JSON.stringify(sourceDestinationState)}`);
     assert(sourceDestinationState.currentCards.length === 1 && sourceDestinationState.currentCards[0].title === "Kitchen window" && sourceDestinationState.currentCards[0].note === "Current photo" && sourceDestinationState.currentCards[0].disabled, `The current source was not shown as a disabled destination: ${JSON.stringify(sourceDestinationState)}`);
+    assert(sourceDestinationState.sourceStatuses.some((item) => item.title === "Kitchen window" && item.status === "Selected source" && item.selected), `The source strip did not keep a clear selected-source marker: ${JSON.stringify(sourceDestinationState)}`);
     await page.getByRole("button", { name: "Preview source Kitchen window" }).click();
     await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "visible" });
     assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Source route preview must use the full panorama.");
@@ -376,10 +398,10 @@ async function main() {
     await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
     await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
     assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
-    await page.getByRole("button", { name: "Kitchen door", exact: true }).click();
+    await page.locator(".editor-photo-choice").filter({ hasText: "Kitchen door" }).click();
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
     await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "Hall entrance", exact: true }).click();
+    await page.locator(".editor-photo-choice").filter({ hasText: "Hall entrance" }).click();
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
     await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
     await page.evaluate(() => { document.querySelector(".editor-panel__content").scrollTop = 0; });

@@ -540,9 +540,17 @@
   }
 
   function rerenderRoomsPanelPreservingScroll() {
-    const top = panelContent.scrollTop;
+    const scroll = {
+      top: panelContent.scrollTop,
+      projectOrderLeft: elements.ProjectOrder?.scrollLeft || 0,
+      roomChoicesLeft: elements.RoomChoices?.scrollLeft || 0,
+      placeChoicesLeft: elements.PlaceChoices?.scrollLeft || 0
+    };
     renderRoomsPanel();
-    panelContent.scrollTop = top;
+    panelContent.scrollTop = scroll.top;
+    if (elements.ProjectOrder) elements.ProjectOrder.scrollLeft = scroll.projectOrderLeft;
+    if (elements.RoomChoices) elements.RoomChoices.scrollLeft = scroll.roomChoicesLeft;
+    if (elements.PlaceChoices) elements.PlaceChoices.scrollLeft = scroll.placeChoicesLeft;
   }
 
   function selectedAdjustment() {
@@ -1278,6 +1286,24 @@
     return scene.plannedTargets;
   }
 
+  function sceneRouteStats(project, scene) {
+    if (!project || !scene) return { incoming: 0, outgoing: 0, connected: false };
+    const outgoing = plannedTargets(scene).length;
+    const incoming = project.scenes.reduce((total, candidate) => total + (plannedTargets(candidate).includes(scene.id) ? 1 : 0), 0);
+    return { incoming, outgoing, connected: incoming + outgoing > 0 };
+  }
+
+  function routeStatusText(project, scene, { selectedSource = false, selectedDestination = false, currentSource = false } = {}) {
+    if (currentSource) return "Current photo";
+    if (selectedDestination) return "Selected destination";
+    if (selectedSource) return "Selected source";
+    const stats = sceneRouteStats(project, scene);
+    if (!stats.connected) return "No links yet";
+    if (stats.outgoing && stats.incoming) return `${stats.outgoing} out / ${stats.incoming} in`;
+    if (stats.outgoing) return `${stats.outgoing} outgoing`;
+    return `${stats.incoming} incoming`;
+  }
+
   function togglePlannedTarget(sourceId, targetId) {
     const source = state.workspaceProject?.scenes.find((scene) => scene.id === sourceId);
     if (!source || source.id === targetId) return;
@@ -1460,8 +1486,9 @@
       });
       const photoList = column.querySelector(".editor-room-column__photos");
       roomScenes.forEach((scene, roomSceneIndex) => {
+        const stats = sceneRouteStats(project, scene);
         const card = document.createElement("article");
-        card.className = `editor-room-photo${state.roomPlanSceneId === scene.id ? " is-selected" : ""}`;
+        card.className = `editor-room-photo${state.roomPlanSceneId === scene.id ? " is-selected" : ""}${stats.connected ? " is-linked" : " is-unlinked"}`;
         card.draggable = false;
         card.dataset.sceneId = scene.id;
         card.addEventListener("dragover", (event) => {
@@ -1480,9 +1507,11 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-room-photo__move-controls"><button type="button" data-space-direction="-1" aria-label="Move ${scene.title} to previous space">←</button><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">↑</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">↓</button><button type="button" data-space-direction="1" aria-label="Move ${scene.title} to next space">→</button></div><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
+        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span><em></em></button><div class="editor-room-photo__move-controls"><button type="button" data-space-direction="-1" aria-label="Move ${scene.title} to previous space">←</button><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">↑</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">↓</button><button type="button" data-space-direction="1" aria-label="Move ${scene.title} to next space">→</button></div><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
         const choose = card.querySelector(".editor-room-photo__select");
+        const badge = choose.querySelector("em");
+        badge.textContent = routeStatusText(project, scene, { selectedSource: state.roomPlanSceneId === scene.id });
         choose.dataset.sceneChooseFor = scene.id;
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
         choose.draggable = false;
@@ -1563,17 +1592,21 @@
       state.roomPlanSceneId = project.scenes[0]?.id || null;
     }
     project.scenes.forEach((scene) => {
+      const stats = sceneRouteStats(project, scene);
+      const isSelectedSource = scene.id === state.roomPlanSceneId;
       const card = document.createElement("article");
-      card.className = "editor-photo-choice-card";
+      card.className = `editor-photo-choice-card${stats.connected ? " is-linked" : " is-unlinked"}${isSelectedSource ? " is-selected-source" : ""}`;
       const button = document.createElement("button");
-      button.className = `editor-photo-choice${scene.id === state.roomPlanSceneId ? " is-selected" : ""}`;
+      button.className = `editor-photo-choice${isSelectedSource ? " is-selected" : ""}`;
       button.type = "button";
-      button.setAttribute("aria-pressed", String(scene.id === state.roomPlanSceneId));
-      button.innerHTML = `<img alt="" /><span></span>`;
+      button.setAttribute("aria-pressed", String(isSelectedSource));
+      button.innerHTML = `<img alt="" /><span><strong></strong><small></small></span><i aria-hidden="true"></i>`;
       button.querySelector("img").src = workspaceAsset(scene.thumb);
-      const title = button.querySelector("span");
+      const title = button.querySelector("strong");
       title.dataset.sceneTitleFor = scene.id;
       title.textContent = scene.title;
+      button.querySelector("small").textContent = routeStatusText(project, scene, { selectedSource: isSelectedSource });
+      button.querySelector("i").textContent = stats.connected ? "✓" : "!";
       button.addEventListener("click", () => {
         state.roomPlanSceneId = scene.id;
         rerenderRoomsPanelPreservingScroll();
@@ -1596,21 +1629,23 @@
       project.scenes.forEach((target) => {
         const isCurrentSource = target.id === source.id;
         const selected = selectedTargets.includes(target.id);
+        const stats = sceneRouteStats(project, target);
         const card = document.createElement("article");
-        card.className = `editor-place-choice-card${isCurrentSource ? " is-current-source" : ""}`;
+        card.className = `editor-place-choice-card${isCurrentSource ? " is-current-source" : ""}${stats.connected ? " is-linked" : " is-unlinked"}`;
         const button = document.createElement("button");
         button.className = `editor-place-choice${selected ? " is-selected" : ""}`;
         button.type = "button";
         button.disabled = isCurrentSource;
         button.setAttribute("aria-pressed", String(selected));
-        button.innerHTML = `<img alt="" /><span><strong></strong><small></small></span><i aria-hidden="true"></i>`;
+        button.innerHTML = `<img alt="" /><span><strong></strong><small class="editor-place-choice__room"></small><small class="editor-choice-status"></small></span><i aria-hidden="true"></i>`;
         button.querySelector("img").src = workspaceAsset(target.thumb);
         const targetTitle = button.querySelector("strong");
         targetTitle.dataset.sceneTitleFor = target.id;
         targetTitle.textContent = target.title;
         const targetRoom = button.querySelector("small");
         targetRoom.dataset.sceneRoomFor = target.id;
-        targetRoom.textContent = isCurrentSource ? "Current photo" : [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
+        targetRoom.textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
+        button.querySelector(".editor-choice-status").textContent = routeStatusText(project, target, { currentSource: isCurrentSource, selectedDestination: selected });
         button.querySelector("i").textContent = isCurrentSource ? "•" : selected ? "✓" : "+";
         if (!isCurrentSource) button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
         const preview = document.createElement("button");
@@ -1630,7 +1665,8 @@
       elements.PlannedPlaces.appendChild(summary);
     }
     const totalPlaces = project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0);
-    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} space${rooms.length === 1 ? "" : "s"} across ${floors.length} floor${floors.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}`;
+    const unlinkedScenes = project.scenes.filter((scene) => !sceneRouteStats(project, scene).connected).length;
+    elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} space${rooms.length === 1 ? "" : "s"} across ${floors.length} floor${floors.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}; ${unlinkedScenes ? `${unlinkedScenes} photo${unlinkedScenes === 1 ? "" : "s"} not linked yet` : "all photos linked"}`;
   }
 
   function renderProjectPanel() {
