@@ -261,10 +261,13 @@ async function main() {
     await photoNames.nth(2).fill("Hall entrance");
     const afterPhotoNames = await page.locator(".editor-room-photo input").evaluateAll((inputs) => inputs.map((input) => input.value));
     assert(afterPhotoNames[0] === "Kitchen window" && afterPhotoNames[1] === "Kitchen door", `Photo name input did not update the visible board: ${JSON.stringify(afterPhotoNames)}`);
-    assert(await page.locator(".editor-room-photo__drag-handle", { hasText: "Move" }).count() === 3, "Every photo card needs a visible Move drag handle.");
+    assert(await page.locator(".editor-room-photo__order button").count() === 6, "Every photo card needs visible up/down order buttons.");
     const thirdPhoto = page.locator('.editor-room-photo[data-scene-id="scene-003"]');
     const hallColumn = page.locator(".editor-room-column").nth(1);
-    await thirdPhoto.locator(".editor-room-photo__drag-handle").dragTo(hallColumn);
+    const kitchenRoomId = await page.locator(".editor-room-column").nth(0).getAttribute("data-room-id");
+    const hallRoomId = await hallColumn.getAttribute("data-room-id");
+    const thirdRoomSelect = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
+    await thirdRoomSelect.nth(0).selectOption(hallRoomId);
     const dragState = await page.evaluate(() => ({
       columns: Array.from(document.querySelectorAll(".editor-room-column")).map((column) => ({
         roomId: column.dataset.roomId,
@@ -272,11 +275,8 @@ async function main() {
       })),
       status: document.querySelector("#editorStatus")?.textContent
     }));
-    assert(await hallColumn.locator(".editor-room-photo").count() === 1, `Dragging a photo did not move it into Hall: ${JSON.stringify(dragState)}`);
-    const kitchenRoomId = await page.locator(".editor-room-column").nth(0).getAttribute("data-room-id");
-    const hallRoomId = await hallColumn.getAttribute("data-room-id");
-    const thirdRoomSelect = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
-    assert(await thirdRoomSelect.nth(0).inputValue() === hallRoomId, "The room selector did not follow the drag operation.");
+    assert(await hallColumn.locator(".editor-room-photo").count() === 1, `The Space menu did not move the photo into Hall: ${JSON.stringify(dragState)}`);
+    assert(await thirdRoomSelect.nth(0).inputValue() === hallRoomId, "The room selector did not keep the selected Hall value.");
     const thirdSelectors = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
     assert(await thirdSelectors.nth(1).locator("option", { hasText: "Second floor" }).count() === 1, "The photo card did not offer the second floor.");
     await thirdSelectors.nth(1).selectOption({ label: "Second floor" });
@@ -284,32 +284,12 @@ async function main() {
     await thirdSelectors.nth(0).selectOption(kitchenRoomId);
     assert(await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").count() === 3, "The accessible Room menu could not move a photo.");
     await page.locator('.editor-room-photo[data-scene-id="scene-001"]').scrollIntoViewIfNeeded();
-    await page.evaluate(() => {
-      const source = document.querySelector('.editor-room-photo[data-scene-id="scene-002"] .editor-room-photo__drag-handle');
-      const target = document.querySelector('.editor-room-photo[data-scene-id="scene-001"]');
-      const sourceBox = source.getBoundingClientRect();
-      const targetBox = target.getBoundingClientRect();
-      const start = { clientX: sourceBox.left + sourceBox.width / 2, clientY: sourceBox.top + sourceBox.height / 2 };
-      const end = { clientX: targetBox.left + targetBox.width / 2, clientY: targetBox.top + targetBox.height / 2 };
-      source.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, ...start }));
-      document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, button: 0, ...end }));
-      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, ...end }));
-    });
+    await page.getByLabel("Move Kitchen door up").click();
     const reorderedKitchenScenes = await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").evaluateAll((cards) => cards.map((card) => card.dataset.sceneId));
-    assert(JSON.stringify(reorderedKitchenScenes) === JSON.stringify(["scene-002", "scene-001", "scene-003"]), `Dragging within one room did not reorder photos: ${JSON.stringify(reorderedKitchenScenes)}`);
-    await page.evaluate(() => {
-      const source = document.querySelector('.editor-room-photo[data-scene-id="scene-001"] .editor-room-photo__drag-handle');
-      const target = document.querySelector('.editor-room-photo[data-scene-id="scene-002"]');
-      const sourceBox = source.getBoundingClientRect();
-      const targetBox = target.getBoundingClientRect();
-      const start = { clientX: sourceBox.left + sourceBox.width / 2, clientY: sourceBox.top + sourceBox.height / 2 };
-      const end = { clientX: targetBox.left + targetBox.width / 2, clientY: targetBox.top + targetBox.height / 2 };
-      source.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, ...start }));
-      document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, button: 0, ...end }));
-      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, ...end }));
-    });
+    assert(JSON.stringify(reorderedKitchenScenes) === JSON.stringify(["scene-002", "scene-001", "scene-003"]), `The up arrow did not reorder photos: ${JSON.stringify(reorderedKitchenScenes)}`);
+    await page.getByLabel("Move Kitchen window up").click();
     const restoredKitchenScenes = await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").evaluateAll((cards) => cards.map((card) => card.dataset.sceneId));
-    assert(JSON.stringify(restoredKitchenScenes) === JSON.stringify(["scene-001", "scene-002", "scene-003"]), `Could not restore room order after reorder test: ${JSON.stringify(restoredKitchenScenes)}`);
+    assert(JSON.stringify(restoredKitchenScenes) === JSON.stringify(["scene-001", "scene-002", "scene-003"]), `Could not restore room order with the up arrow: ${JSON.stringify(restoredKitchenScenes)}`);
     await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(0).selectOption(hallRoomId);
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, "The Room menu did not move the photo back to Hall.");
     await waitForWorkspaceStructure(page, (project) =>

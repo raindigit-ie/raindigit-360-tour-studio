@@ -1222,6 +1222,26 @@
     rerenderRoomsPanelPreservingScroll();
   }
 
+  function moveSceneWithinRoom(sceneId, direction) {
+    const project = state.workspaceProject;
+    const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
+    if (!project || !scene || ![-1, 1].includes(direction)) return;
+    const roomScenes = project.scenes.filter((candidate) => candidate.space === scene.space);
+    const roomIndex = roomScenes.findIndex((candidate) => candidate.id === scene.id);
+    const target = roomScenes[roomIndex + direction];
+    if (!target) return;
+    const sourceIndex = project.scenes.findIndex((candidate) => candidate.id === scene.id);
+    const targetIndex = project.scenes.findIndex((candidate) => candidate.id === target.id);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    [project.scenes[sourceIndex], project.scenes[targetIndex]] = [project.scenes[targetIndex], project.scenes[sourceIndex]];
+    refreshAutoSceneTitles(project, scene.space);
+    const directionLabel = direction < 0 ? "up" : "down";
+    setStatus(`${scene.title} moved ${directionLabel}`);
+    studioLog("photo-order-changed", { sceneId: scene.id, direction: directionLabel, spaceId: scene.space });
+    queueWorkspaceStructureSave("photo-order-changed");
+    renderRoomsPanel();
+  }
+
   function renderRoomsPanel() {
     const project = state.workspaceProject;
     elements.RoomList.replaceChildren();
@@ -1358,7 +1378,7 @@
         moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id);
       });
       const photoList = column.querySelector(".editor-room-column__photos");
-      roomScenes.forEach((scene) => {
+      roomScenes.forEach((scene, roomSceneIndex) => {
         const card = document.createElement("article");
         card.className = `editor-room-photo${state.roomPlanSceneId === scene.id ? " is-selected" : ""}`;
         card.draggable = false;
@@ -1379,7 +1399,7 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><button class="editor-room-photo__drag-handle" type="button" draggable="true">Move</button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
+        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span></button><div class="editor-room-photo__order"><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">↑</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">↓</button></div><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
         const choose = card.querySelector(".editor-room-photo__select");
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
@@ -1390,15 +1410,14 @@
           setStatus(`Choose where people can walk from ${scene.title}`);
           rerenderRoomsPanelPreservingScroll();
         });
-        const dragHandle = card.querySelector(".editor-room-photo__drag-handle");
-        dragHandle.setAttribute("aria-label", `Move ${scene.title} to another space`);
-        dragHandle.addEventListener("pointerdown", (event) => {
-          if (event.button && event.button !== 0) return;
-          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
-        });
-        dragHandle.addEventListener("mousedown", (event) => {
-          if (event.button !== 0) return;
-          roomPointerDrag = { sceneId: scene.id, startX: event.clientX, startY: event.clientY, moved: false };
+        const orderButtons = card.querySelectorAll(".editor-room-photo__order button");
+        orderButtons.forEach((button) => {
+          const direction = Number(button.dataset.orderDirection);
+          button.disabled = direction < 0 ? roomSceneIndex === 0 : roomSceneIndex === roomScenes.length - 1;
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            moveSceneWithinRoom(scene.id, direction);
+          });
         });
         const preview = card.querySelector(".editor-card-preview");
         preview.dataset.scenePreviewFor = scene.id;
@@ -1441,14 +1460,6 @@
         floors.forEach((candidate) => floorSelect.add(new Option(candidate.label, candidate.id)));
         floorSelect.value = scene.floor;
         floorSelect.addEventListener("change", () => assignSceneToFloor(scene.id, floorSelect.value));
-        const beginDrag = (event) => {
-          roomPointerDrag = null;
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", scene.id);
-          card.classList.add("is-dragging");
-        };
-        dragHandle.addEventListener("dragstart", beginDrag);
-        dragHandle.addEventListener("dragend", () => card.classList.remove("is-dragging"));
         photoList.appendChild(card);
       });
       elements.ProjectOrder.appendChild(column);
