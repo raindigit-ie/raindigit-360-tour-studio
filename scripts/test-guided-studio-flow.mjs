@@ -81,6 +81,16 @@ async function addedHotspots(page, sceneId) {
   })), sceneId);
 }
 
+async function waitForWorkspaceStructure(page, predicate) {
+  await page.waitForFunction(async (predicateSource) => {
+    const response = await fetch("/__tour-editor/workspace-project", { cache: "no-store" });
+    const body = await response.json();
+    const project = body.project;
+    if (!project) return false;
+    return Function("project", `return (${predicateSource})(project);`)(project);
+  }, predicate.toString(), { timeout: 10_000 });
+}
+
 async function dragViewer(page, deltaX) {
   const bounds = await page.locator("#panorama").boundingBox();
   assert(bounds, "Panorama is not visible.");
@@ -210,9 +220,9 @@ async function main() {
     const roomNames = page.locator("#editorRoomList input");
     const floorNames = page.locator("#editorFloorList input");
     const spaceTemplates = page.locator("#editorRoomList select");
-    assert(await floorNames.nth(0).inputValue() === "Ground floor", "The first default floor name was not Ground floor.");
-    assert(await floorNames.nth(1).inputValue() === "First floor", "The second default floor name was not First floor.");
-    assert(await floorNames.nth(2).inputValue() === "Second floor", "The third default floor name was not Second floor.");
+    assert(await floorNames.nth(0).inputValue() === "First floor", "The first default floor name was not First floor.");
+    assert(await floorNames.nth(1).inputValue() === "Second floor", "The second default floor name was not Second floor.");
+    assert(await floorNames.nth(2).inputValue() === "Third floor", "The third default floor name was not Third floor.");
     const kitchenTemplateText = await spaceTemplates.nth(0).locator("option", { hasText: "Kitchen - кухня" }).textContent();
     assert(kitchenTemplateText === "Kitchen - кухня", "The quick-name list did not show the Russian space hint.");
     await spaceTemplates.nth(0).selectOption("Kitchen");
@@ -228,7 +238,7 @@ async function main() {
     await floorNames.nth(2).press("Tab");
     await page.getByRole("button", { name: "Remove Wrong floor" }).click();
     await page.waitForFunction(() => document.querySelectorAll("#editorFloorList input").length === 2);
-    assert(await floorNames.nth(0).inputValue() === "Ground floor" && await floorNames.nth(1).inputValue() === "First floor", "Deleting a middle floor did not keep the intended floors.");
+    assert(await floorNames.nth(0).inputValue() === "First floor" && await floorNames.nth(1).inputValue() === "Second floor", "Deleting a middle floor did not keep the intended floors.");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-001"] input').inputValue() === "Kitchen view 1", "The first auto-named photo still looked like a generic View.");
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-002"] input').inputValue() === "Kitchen view 2", "The second auto-named photo still looked like a generic View.");
     await page.getByRole("button", { name: "Remove Kitchen view 4" }).click();
@@ -249,6 +259,8 @@ async function main() {
     await photoNames.nth(0).fill("Kitchen window");
     await photoNames.nth(1).fill("Kitchen door");
     await photoNames.nth(2).fill("Hall entrance");
+    const afterPhotoNames = await page.locator(".editor-room-photo input").evaluateAll((inputs) => inputs.map((input) => input.value));
+    assert(afterPhotoNames[0] === "Kitchen window" && afterPhotoNames[1] === "Kitchen door", `Photo name input did not update the visible board: ${JSON.stringify(afterPhotoNames)}`);
     const thirdPhoto = page.locator('.editor-room-photo[data-scene-id="scene-003"]');
     const hallColumn = page.locator(".editor-room-column").nth(1);
     await thirdPhoto.locator(".editor-room-photo__select").dragTo(hallColumn);
@@ -265,8 +277,8 @@ async function main() {
     const thirdRoomSelect = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
     assert(await thirdRoomSelect.nth(0).inputValue() === hallRoomId, "The room selector did not follow the drag operation.");
     const thirdSelectors = page.locator('.editor-room-photo[data-scene-id="scene-003"] select');
-    assert(await thirdSelectors.nth(1).locator("option", { hasText: "First floor" }).count() === 1, "The photo card did not offer the second floor.");
-    await thirdSelectors.nth(1).selectOption({ label: "First floor" });
+    assert(await thirdSelectors.nth(1).locator("option", { hasText: "Second floor" }).count() === 1, "The photo card did not offer the second floor.");
+    await thirdSelectors.nth(1).selectOption({ label: "Second floor" });
     assert(await thirdSelectors.nth(1).inputValue() !== await thirdSelectors.nth(0).inputValue(), "The floor selector was not independent from the space selector.");
     await thirdSelectors.nth(0).selectOption(kitchenRoomId);
     assert(await page.locator(".editor-room-column").nth(0).locator(".editor-room-photo").count() === 3, "The accessible Room menu could not move a photo.");
@@ -299,6 +311,34 @@ async function main() {
     assert(JSON.stringify(restoredKitchenScenes) === JSON.stringify(["scene-001", "scene-002", "scene-003"]), `Could not restore room order after reorder test: ${JSON.stringify(restoredKitchenScenes)}`);
     await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(0).selectOption(hallRoomId);
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, "The Room menu did not move the photo back to Hall.");
+    await waitForWorkspaceStructure(page, (project) =>
+      project.rooms.map((room) => room.label).join("|") === "Kitchen|Hall" &&
+      project.floors.map((floor) => floor.label).join("|") === "First floor|Second floor" &&
+      project.scenes.map((scene) => scene.id).join("|") === "scene-001|scene-002|scene-003" &&
+      project.scenes.find((scene) => scene.id === "scene-001")?.title === "Kitchen window" &&
+      project.scenes.find((scene) => scene.id === "scene-002")?.title === "Kitchen door" &&
+      project.scenes.find((scene) => scene.id === "scene-003")?.spaceLabel === "Hall" &&
+      project.scenes.find((scene) => scene.id === "scene-003")?.floorLabel === "Second floor"
+    );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await assertOneTask(page, "Set up spaces and walking routes");
+    await page.waitForFunction(() => document.querySelectorAll("#editorRoomList input").length === 2 && document.querySelectorAll(".editor-room-photo").length === 3);
+    const reloadState = await page.evaluate(async () => ({
+      rooms: Array.from(document.querySelectorAll("#editorRoomList input")).map((input) => input.value),
+      floors: Array.from(document.querySelectorAll("#editorFloorList input")).map((input) => input.value),
+      cards: Array.from(document.querySelectorAll(".editor-room-photo")).map((card) => ({
+        sceneId: card.dataset.sceneId,
+        title: card.querySelector("input")?.value,
+        selectedFloor: card.querySelectorAll("select")[1]?.selectedOptions[0]?.textContent
+      })),
+      project: (await (await fetch("/__tour-editor/workspace-project", { cache: "no-store" })).json()).project
+    }));
+    assert(reloadState.rooms[0] === "Kitchen" && reloadState.rooms[1] === "Hall", `Reload lost saved space names: ${JSON.stringify(reloadState)}`);
+    assert(reloadState.floors[0] === "First floor" && reloadState.floors[1] === "Second floor", `Reload lost saved floor names: ${JSON.stringify(reloadState)}`);
+    assert(await page.locator('.editor-room-photo[data-scene-id="scene-001"] input').inputValue() === "Kitchen window", `Reload lost the first photo name: ${JSON.stringify(reloadState)}`);
+    assert(await page.locator('.editor-room-photo[data-scene-id="scene-002"] input').inputValue() === "Kitchen door", `Reload lost the second photo name: ${JSON.stringify(reloadState)}`);
+    assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, `Reload lost the photo space assignment: ${JSON.stringify(reloadState)}`);
+    assert(await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(1).locator("option:checked").textContent() === "Second floor", `Reload lost the photo floor assignment: ${JSON.stringify(reloadState)}`);
 
     await page.getByRole("button", { name: "Kitchen window", exact: true }).click();
     await page.locator(".editor-place-planner").scrollIntoViewIfNeeded();

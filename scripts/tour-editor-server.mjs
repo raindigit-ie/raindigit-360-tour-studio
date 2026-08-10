@@ -81,6 +81,7 @@ function emptyWorkspaceProject(title = "Untitled 3D Tour") {
   return {
     schema: "raindigit-tour-project/v1",
     title,
+    editorStructureRevision: 0,
     firstScene: null,
     rooms: [],
     floors: [],
@@ -226,6 +227,7 @@ function validateDraft(value) {
 
 function validateWorkspaceProject(value) {
   if (!value || value.schema !== "raindigit-tour-project/v1" || typeof value.title !== "string" || !Array.isArray(value.scenes)) return false;
+  if (value.editorStructureRevision !== undefined && (!Number.isSafeInteger(value.editorStructureRevision) || value.editorStructureRevision < 0)) return false;
   if (value.rooms !== undefined) {
     if (!Array.isArray(value.rooms) || value.rooms.length > 100) return false;
     const roomIds = new Set();
@@ -668,6 +670,13 @@ const server = createServer(async (request, response) => {
           replyJson(response, 400, { error: "A project title is required." });
           return;
         }
+        const hasIncomingRevision = Number.isSafeInteger(body.editorStructureRevision) && body.editorStructureRevision >= 0;
+        const incomingRevision = hasIncomingRevision ? body.editorStructureRevision : 0;
+        const existingRevision = Number.isSafeInteger(existing.editorStructureRevision) ? existing.editorStructureRevision : 0;
+        if (hasIncomingRevision && incomingRevision < existingRevision) {
+          replyJson(response, 200, existing);
+          return;
+        }
         const rooms = Array.isArray(body.rooms)
           ? body.rooms.map((room) => ({
             id: typeof room?.id === "string" ? room.id : "",
@@ -719,6 +728,7 @@ const server = createServer(async (request, response) => {
         existing.floors = floors;
         existing.scenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
         existing.firstScene = existing.scenes[0]?.id || null;
+        existing.editorStructureRevision = hasIncomingRevision ? incomingRevision : existingRevision;
         await writeWorkspaceProject(existing);
         replyJson(response, 200, existing);
         return;
@@ -845,7 +855,7 @@ const server = createServer(async (request, response) => {
       const existingRoom = project.rooms?.find((room) => room.id === requestedRoomId) || project.scenes.find((scene) => scene.space === requestedRoomId);
       const spaceLabel = existingRoom?.label || existingRoom?.spaceLabel || requestedRoomLabel || fileNameToTitle(fileName);
       const space = existingRoom?.space || existingRoom?.id || roomId(spaceLabel, requestedRoomId);
-      const fallbackFloor = project.floors?.[0] || { id: "floor-1", label: "Ground floor" };
+      const fallbackFloor = project.floors?.[0] || { id: "floor-1", label: "First floor" };
       if (!project.floors?.length) project.floors = [fallbackFloor];
       const panorama = `panoramas/${id}.jpg`;
       const thumb = `thumbnails/${id}.jpg`;
