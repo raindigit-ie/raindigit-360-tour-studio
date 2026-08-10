@@ -398,6 +398,18 @@ async function main() {
     await page.locator(".editor-place-choice").filter({ hasText: "Hall entrance" }).click();
     await page.getByText("Walking buttons: Kitchen door, Hall entrance", { exact: true }).waitFor();
     assert(await page.locator(".editor-place-choice.is-selected").count() === 2, "The room board did not keep two selected places.");
+    const incomingOnlySourceState = await page.evaluate(() => (
+      Array.from(document.querySelectorAll(".editor-photo-choice")).map((button) => ({
+        title: button.querySelector("strong")?.textContent,
+        status: button.querySelector("small")?.textContent,
+        icon: button.querySelector("i")?.textContent,
+        linkedClass: button.closest(".editor-photo-choice-card")?.className
+      }))
+    ));
+    const kitchenDoorSource = incomingOnlySourceState.find((item) => item.title === "Kitchen door");
+    const hallEntranceSource = incomingOnlySourceState.find((item) => item.title === "Hall entrance");
+    assert(kitchenDoorSource?.status === "No outgoing yet" && kitchenDoorSource?.icon === "!", `An incoming-only source looked complete: ${JSON.stringify(incomingOnlySourceState)}`);
+    assert(hallEntranceSource?.status === "No outgoing yet" && hallEntranceSource?.icon === "!", `An incoming-only source looked complete: ${JSON.stringify(incomingOnlySourceState)}`);
     await page.locator(".editor-photo-choice").filter({ hasText: "Kitchen door" }).click();
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
     await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();

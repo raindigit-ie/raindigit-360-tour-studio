@@ -2587,6 +2587,18 @@ body[data-editor-stage="rooms"] .editor-panel__footer {
   background: #f0c86b;
 }
 
+.editor-photo-choice-card.is-source-linked .editor-photo-choice i {
+  color: #102018;
+  border-color: #69c2a3;
+  background: #69c2a3;
+}
+
+.editor-photo-choice-card.is-source-unlinked .editor-photo-choice i {
+  color: #17130d;
+  border-color: #f0c86b;
+  background: #f0c86b;
+}
+
 .editor-photo-choice.is-selected {
   border-color: var(--accent);
   background: rgba(214, 175, 92, 0.14);

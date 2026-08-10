@@ -1293,15 +1293,25 @@
     return { incoming, outgoing, connected: incoming + outgoing > 0 };
   }
 
-  function routeStatusText(project, scene, { selectedSource = false, selectedDestination = false, currentSource = false } = {}) {
-    if (currentSource) return "Current photo";
-    if (selectedDestination) return "Selected destination";
+  function routeStatusText(project, scene, { selectedSource = false } = {}) {
     if (selectedSource) return "Selected source";
     const stats = sceneRouteStats(project, scene);
     if (!stats.connected) return "No links yet";
     if (stats.outgoing && stats.incoming) return `${stats.outgoing} out / ${stats.incoming} in`;
     if (stats.outgoing) return `${stats.outgoing} outgoing`;
     return `${stats.incoming} incoming`;
+  }
+
+  function sourceRouteStatus(project, scene, selectedSource = false) {
+    if (selectedSource) return "Selected source";
+    const outgoing = plannedTargets(scene).length;
+    return outgoing ? `${outgoing} outgoing` : "No outgoing yet";
+  }
+
+  function destinationRouteStatus(project, scene, { currentSource = false, selectedDestination = false } = {}) {
+    if (currentSource) return "Current photo";
+    if (selectedDestination) return "Selected destination";
+    return routeStatusText(project, scene);
   }
 
   function togglePlannedTarget(sourceId, targetId) {
@@ -1594,8 +1604,9 @@
     project.scenes.forEach((scene) => {
       const stats = sceneRouteStats(project, scene);
       const isSelectedSource = scene.id === state.roomPlanSceneId;
+      const sourceReady = plannedTargets(scene).length > 0;
       const card = document.createElement("article");
-      card.className = `editor-photo-choice-card${stats.connected ? " is-linked" : " is-unlinked"}${isSelectedSource ? " is-selected-source" : ""}`;
+      card.className = `editor-photo-choice-card${sourceReady ? " is-source-linked" : " is-source-unlinked"}${stats.connected ? " is-linked" : " is-unlinked"}${isSelectedSource ? " is-selected-source" : ""}`;
       const button = document.createElement("button");
       button.className = `editor-photo-choice${isSelectedSource ? " is-selected" : ""}`;
       button.type = "button";
@@ -1605,8 +1616,8 @@
       const title = button.querySelector("strong");
       title.dataset.sceneTitleFor = scene.id;
       title.textContent = scene.title;
-      button.querySelector("small").textContent = routeStatusText(project, scene, { selectedSource: isSelectedSource });
-      button.querySelector("i").textContent = stats.connected ? "✓" : "!";
+      button.querySelector("small").textContent = sourceRouteStatus(project, scene, isSelectedSource);
+      button.querySelector("i").textContent = sourceReady ? "✓" : "!";
       button.addEventListener("click", () => {
         state.roomPlanSceneId = scene.id;
         rerenderRoomsPanelPreservingScroll();
@@ -1645,7 +1656,7 @@
         const targetRoom = button.querySelector("small");
         targetRoom.dataset.sceneRoomFor = target.id;
         targetRoom.textContent = [target.spaceLabel, target.floorLabel].filter(Boolean).join(" · ");
-        button.querySelector(".editor-choice-status").textContent = routeStatusText(project, target, { currentSource: isCurrentSource, selectedDestination: selected });
+        button.querySelector(".editor-choice-status").textContent = destinationRouteStatus(project, target, { currentSource: isCurrentSource, selectedDestination: selected });
         button.querySelector("i").textContent = isCurrentSource ? "•" : selected ? "✓" : "+";
         if (!isCurrentSource) button.addEventListener("click", () => togglePlannedTarget(source.id, target.id));
         const preview = document.createElement("button");
