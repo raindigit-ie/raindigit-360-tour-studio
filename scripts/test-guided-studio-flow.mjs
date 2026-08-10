@@ -197,7 +197,7 @@ async function main() {
     await page.evaluate(() => window.sessionStorage.clear());
     await page.goto(`${baseUrl}/?edit=1&workspace=1`);
     await assertOneTask(page, "Start a tour");
-    await page.getByRole("button", { name: "Continue current tour" }).click();
+    await page.getByRole("button", { name: /Continue (current|unfinished) tour/ }).click();
     await assertOneTask(page, "Add 360 photos");
     await page.locator(".editor-stage-panel[data-stage-panel='upload'] .editor-upload-item__actions .editor-button--small").first().click();
     await page.locator(".editor-photo-preview__dialog").waitFor({ state: "visible" });
@@ -527,6 +527,27 @@ async function main() {
         draft.uiState?.selected?.sceneId === "scene-001" &&
         draft.uiState?.selected?.target === "scene-003";
     });
+    await page.evaluate(async () => {
+      const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
+      const draft = await response.json();
+      draft.sceneMetadata = {
+        ...(draft.sceneMetadata || {}),
+        "scene-001": { title: "Driveway view 1", subtitle: "360 photo" },
+        "scene-002": { title: "Driveway view 2", subtitle: "360 photo" },
+        "scene-003": { title: "Driveway view 10", subtitle: "360 photo" }
+      };
+      Object.values(draft.addedHotspots || {}).forEach((hotspots) => {
+        hotspots.forEach((hotspot) => {
+          if (hotspot.target === "scene-003") hotspot.label = "Go to Driveway view 10";
+        });
+      });
+      const save = await fetch("/__tour-editor/save?workspace=1", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(draft)
+      });
+      if (!save.ok) throw new Error("Could not save stale draft fixture");
+    });
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => {
       const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
@@ -542,10 +563,16 @@ async function main() {
       return {
         stage: document.body.dataset.editorStage,
         selected: snapshot.selected,
-        activeSceneId: snapshot.activeSceneId
+        activeSceneId: snapshot.activeSceneId,
+        sourceTitle: document.querySelector("#editorSceneName")?.textContent,
+        targetTitle: document.querySelector('.editor-saved-movement[data-saved-movement-target="scene-003"] strong')?.textContent,
+        guidance: document.querySelector("#editorLinkGuidance")?.textContent,
+        runtimeTitles: ["scene-001", "scene-002", "scene-003"].map((id) => window.__TOUR_EDITOR_API.sceneById[id]?.title)
       };
     });
     assert(restoredRouteSelection.stage === "links" && restoredRouteSelection.selected?.sceneId === "scene-001" && restoredRouteSelection.selected?.target === "scene-003", `Reload did not restore the same walking target: ${JSON.stringify(restoredRouteSelection)}`);
+    assert(restoredRouteSelection.sourceTitle === "Kitchen window" && restoredRouteSelection.targetTitle === "Hall entrance", `Stale draft scene names overrode the workspace project: ${JSON.stringify(restoredRouteSelection)}`);
+    assert(!restoredRouteSelection.guidance.includes("Driveway view 10") && !restoredRouteSelection.runtimeTitles.includes("Driveway view 10"), `Step 4 still showed stale Driveway names after reload: ${JSON.stringify(restoredRouteSelection)}`);
     await page.getByRole("button", { name: "Back" }).click();
     await assertOneTask(page, "Choose the look");
     await page.getByRole("button", { name: "Continue" }).click();

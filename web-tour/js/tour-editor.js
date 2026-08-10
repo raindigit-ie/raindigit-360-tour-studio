@@ -751,6 +751,21 @@
     });
   }
 
+  function syncWorkspaceSceneMetadata(reason = "workspace-scene-metadata-sync") {
+    if (!workspaceMode || !state.workspaceProject?.scenes?.length) return false;
+    let changed = false;
+    state.workspaceProject.scenes.forEach((scene) => {
+      const runtimeScene = api.sceneById[scene.id];
+      if (!runtimeScene) return;
+      const title = scene.title.trim();
+      const subtitle = scene.subtitle || "";
+      if (runtimeScene.title === title && runtimeScene.subtitle === subtitle) return;
+      if (api.setSceneMetadata(scene.id, { title, subtitle })) changed = true;
+    });
+    if (changed) studioLog("workspace-scene-metadata-synchronised", { reason }, true);
+    return changed;
+  }
+
   function destroyPhotoPreviewViewer() {
     if (photoPreviewViewer?.destroy) photoPreviewViewer.destroy();
     photoPreviewViewer = null;
@@ -3102,7 +3117,11 @@
         api.updateHotspotArrival(sceneId, Number(hotspotIndex), { pitch: override.targetPitch, yaw: override.targetYaw, hfov: override.targetHfov });
       }
     });
-    Object.entries(draft.sceneMetadata || {}).forEach(([sceneId, metadata]) => api.setSceneMetadata(sceneId, metadata));
+    if (workspaceMode) {
+      syncWorkspaceSceneMetadata("draft-scene-metadata-skipped");
+    } else {
+      Object.entries(draft.sceneMetadata || {}).forEach(([sceneId, metadata]) => api.setSceneMetadata(sceneId, metadata));
+    }
     Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => api.setSceneView(sceneId, view));
     Object.entries(draft.sceneAdjustments || {}).forEach(([sceneId, adjustment]) => api.setSceneAdjustment(sceneId, adjustment));
     Object.entries(draft.localAdjustments || {}).forEach(([sceneId, adjustments]) => api.setLocalAdjustments(sceneId, adjustments));
@@ -3864,6 +3883,7 @@
     await waitForViewerSettled();
     state.viewerSettled = true;
     applyDraft(draft);
+    const metadataChanged = syncWorkspaceSceneMetadata("startup");
     if (resumeMode && workspaceMode && state.workspaceProject && state.activeStage === "start") {
       state.activeStage = "upload";
       studioLog("resume-fallback-upload", { projectTitle: state.workspaceProject.title }, true);
@@ -3902,12 +3922,14 @@
           ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
         : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
-    if (plannedPlacesChanged || sharedArrivalChanged || state.routeReferenceMigrated) {
+    if (plannedPlacesChanged || sharedArrivalChanged || state.routeReferenceMigrated || metadataChanged) {
       queueDraftSave(sharedArrivalChanged
         ? "shared-arrival-views-applied"
         : plannedPlacesChanged
           ? "planned-places-synchronised"
-          : "ui-state-route-reference-migrated");
+          : state.routeReferenceMigrated
+            ? "ui-state-route-reference-migrated"
+            : "workspace-scene-metadata-synchronised");
       state.routeReferenceMigrated = false;
     }
     studioLog("studio-ready", {

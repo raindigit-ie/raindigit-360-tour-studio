@@ -156,16 +156,17 @@ function applyDraft(project, draft) {
     hotspot.targetYaw = clamp(override.targetYaw, -180, 180, hotspot.targetYaw);
     hotspot.targetHfov = clamp(override.targetHfov, 58, 112, hotspot.targetHfov);
   });
-  Object.entries(draft.sceneMetadata || {}).forEach(([sceneId, metadata]) => {
-    if (!byId[sceneId] || typeof metadata?.title !== "string" || !metadata.title.trim()) return;
-    byId[sceneId].title = metadata.title.trim().slice(0, 80);
-    byId[sceneId].subtitle = typeof metadata.subtitle === "string" ? metadata.subtitle.slice(0, 120) : "";
-  });
   Object.entries(draft.sceneViews || {}).forEach(([sceneId, view]) => {
     if (!byId[sceneId]) return;
     byId[sceneId].pitch = clamp(view?.pitch, -85, 85, byId[sceneId].pitch);
     byId[sceneId].yaw = clamp(view?.yaw, -180, 180, byId[sceneId].yaw);
     byId[sceneId].hfov = clamp(view?.hfov, 58, 112, byId[sceneId].hfov);
+  });
+  project.scenes.forEach((scene) => {
+    scene.hotspots.forEach((hotspot) => {
+      const target = byId[hotspot.target];
+      if (target) hotspot.label = `Go to ${target.title}`;
+    });
   });
   return project;
 }
