@@ -10,17 +10,19 @@
     "app:stop": "sh scripts/stop-studio.sh",
     "build:editor-ui": "vite build",
     "check:types": "svelte-check --tsconfig ./tsconfig.json",
-    "check": "npm run check:types && npm run build:editor-ui && node --check scripts/tour-editor-server.mjs && node --check scripts/build-tour-release.mjs && node --check web-tour/js/tour-bootstrap.js && node --check web-tour/js/tour.js && node --check web-tour/js/tour-editor.js && node --check web-tour/js/tour-preview.js",
+    "check": "npm run check:types && npm run build:editor-ui && node --check scripts/tour-editor-server.mjs && node --check scripts/build-tour-release.mjs && node --check web-tour/js/tour-bootstrap.js && node --check web-tour/js/tour.js && node --check web-tour/js/tour-editor.js && node --check web-tour/js/tour-preview.js && node --check web-tour/js/frame-picker.js",
     "build:release": "node scripts/build-tour-release.mjs --workspace studio-workspace --output release --zip dist/raindigit-360-tour.zip --single dist/raindigit-360-tour.html --embed dist/raindigit-360-tour-embed.html --replace",
-    "build:multires": "node scripts/build-multires-release.mjs --workspace studio-workspace --output release-multires --slug new-tour --replace",
+    "build:multires": "node scripts/build-multires-release.mjs --workspace studio-workspace --output release-multires --zip dist/raindigit-360-tour-web-package.zip --replace",
     "build:studio-kit": "node scripts/package-studio-kit.mjs",
     "test:product": "node scripts/test-product-flow.mjs",
     "test:studio-ui": "node scripts/test-studio-wizard-ui.mjs",
     "test:guided-flow": "node scripts/test-guided-studio-flow.mjs",
     "test:distribution": "node scripts/test-studio-kit.mjs",
+    "test:frame-picker": "node scripts/test-frame-picker.mjs",
     "test:multires": "node scripts/test-multires-release.mjs",
     "test:release-browser": "node scripts/test-release-browser.mjs",
-    "test:all": "npm run check && npm run test:product && npm run test:studio-ui && npm run test:distribution && npm run test:release-browser"
+    "test:all": "npm run check && npm run test:product && npm run test:studio-ui && npm run test:guided-flow && npm run test:frame-picker && npm run test:multires && npm run test:distribution && npm run test:release-browser",
+    "test:all:verified": "bash scripts/run-verified-test-suite.sh"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
@@ -31,6 +33,6 @@
     "vite": "^8.2.1"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   }
 }

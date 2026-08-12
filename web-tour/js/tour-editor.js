@@ -256,11 +256,18 @@
           <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open tour preview</a>
           <button class="editor-button editor-button--wide" id="editorOpenPolish" type="button">Polish inside studio</button>
         </details>
+        <label class="editor-field editor-field--stacked editor-web-name">
+          <span>Tour web name</span>
+          <input id="editorReleaseSlug" type="text" inputmode="url" autocomplete="off" maxlength="72" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" aria-describedby="editorReleaseSlugHelp" />
+          <small id="editorReleaseSlugHelp">Used in the permanent address: raindigit.ie/tours/<b>tour-name</b>/</small>
+        </label>
         <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build the tour</button>
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
           <div class="editor-publish-card">
-            <strong>Your tour is ready</strong>
-            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadSingle" download="raindigit-360-tour.html">Download website file</a>
+            <strong>Optimized website tour is ready</strong>
+            <span id="editorMultiresSummary">Versioned tiles, manifest and rollback pointer are included.</span>
+            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadMultires" download="raindigit-tour-web-package.zip">Download web package</a>
+            <a class="editor-button editor-button--wide" id="editorPreviewMultires" target="_blank" rel="noopener">Open optimized preview</a>
           </div>
           <details class="editor-disclosure editor-disclosure--compact">
             <summary>Test on a website</summary>
@@ -282,7 +289,9 @@
             </div>
           </details>
           <details class="editor-advanced">
-            <summary>Backups and advanced files</summary>
+            <summary>Portable, backup and advanced files</summary>
+            <span class="editor-advanced__hint">Use these only when the tour must work outside the Rain Digit website.</span>
+            <a class="editor-button editor-button--wide" id="editorDownloadSingle" download="raindigit-360-tour.html">Download portable website file</a>
             <button class="editor-button editor-button--wide" id="editorDownloadDebug" type="button">Download debug bundle</button>
             <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable backup</button>
             <a class="editor-button editor-button--wide" id="editorDownloadZip" download="raindigit-360-tour.zip">Download folder package (.zip)</a>
@@ -326,7 +335,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishEditToggle", "PolishSaveView", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "Build", "ReleaseActions", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishEditToggle", "PolishSaveView", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -518,6 +527,17 @@
 
   function studioUrl(path, workspace = workspaceMode) {
     return `${endpoint}/${path}${workspace ? "?workspace=1" : ""}`;
+  }
+
+  function slugifyTourTitle(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 72)
+      .replace(/-+$/g, "") || "new-tour";
   }
 
   function workspaceEditorUrl(resume = false) {
@@ -2694,15 +2714,25 @@
     elements.Readiness.textContent = readiness.ready
       ? "Ready to publish"
       : `Finish ${readiness.pendingPositions} point${readiness.pendingPositions === 1 ? "" : "s"} and ${readiness.pendingArrivals} destination view${readiness.pendingArrivals === 1 ? "" : "s"}.`;
+    if (!elements.ReleaseSlug.value) elements.ReleaseSlug.value = state.release.multires?.slug || slugifyTourTitle(state.workspaceProject?.title || api.title);
+    const releaseSlug = elements.ReleaseSlug.value.trim();
+    const releaseSlugValid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(releaseSlug) && releaseSlug.length <= 72;
+    elements.ReleaseSlug.setAttribute("aria-invalid", String(!releaseSlugValid));
+    elements.ReleaseSlug.disabled = state.building || state.release.ready;
     const previewUrl = `${window.location.origin}${window.location.pathname}?preview=1${workspaceMode ? "&workspace=1" : ""}`;
-    elements.PreviewLink.href = state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
+    elements.PreviewLink.href = state.release.multires?.ready ? `${endpoint}/release-multires/${state.release.multires.entrypoint}` : state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
     elements.OpenPolish.hidden = !workspaceMode || !state.workspaceProject?.scenes?.length;
     elements.PreviewOptionsLabel.textContent = state.release.ready ? "View or test the tour" : "Check the tour first";
     elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
-    elements.Build.disabled = !workspaceMode || state.building || !readiness.ready;
+    elements.Build.disabled = !workspaceMode || state.building || !readiness.ready || !releaseSlugValid;
     elements.Build.hidden = state.release.ready;
     elements.Build.textContent = state.building ? "Building tour..." : "Build the tour";
     elements.ReleaseActions.hidden = !state.release.ready;
+    elements.PreviewMultires.href = state.release.multires?.ready ? `${endpoint}/release-multires/${state.release.multires.entrypoint}` : "";
+    elements.DownloadMultires.href = studioUrl("release-multires-download");
+    elements.MultiresSummary.textContent = state.release.multires?.ready
+      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons · immutable ${state.release.multires.version}`
+      : "Versioned tiles, manifest and rollback pointer are included.";
     elements.EmbedTestLink.href = `${endpoint}/release-embed-test.html`;
     elements.DownloadSingle.href = studioUrl("release-single-download");
     elements.DownloadEmbed.href = studioUrl("release-embed-download");
@@ -2712,8 +2742,8 @@
     elements.ReleaseStatus.textContent = !workspaceMode
       ? "Create a tour before publishing."
       : state.release.ready
-        ? `Website files ready${state.release.singleBytes ? ` - single ${(state.release.singleBytes / 1024 / 1024).toFixed(1)} MB` : ""}${state.release.embedBytes ? `, paste-in ${(state.release.embedBytes / 1024 / 1024).toFixed(1)} MB` : ""}`
-        : "The tour has not been built yet.";
+        ? `Optimized web package ready${state.release.multires?.bytes ? ` · ${(state.release.multires.bytes / 1024 / 1024).toFixed(1)} MB` : ""}. Test it before promotion.`
+        : releaseSlugValid ? "The tour has not been built yet." : "Use lowercase letters, numbers and hyphens for the tour web name.";
   }
 
   function floorplanPosition(event) {
@@ -3503,7 +3533,11 @@
     setStatus("Building tour...");
     renderExportPanel();
     try {
-      const response = await fetch(studioUrl("build-release"), { method: "POST" });
+      const response = await fetch(studioUrl("build-release"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug: elements.ReleaseSlug.value.trim() })
+      });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || `Build failed (${response.status})`);
       state.release = body;
@@ -3602,6 +3636,11 @@
     continueWizard();
   });
   elements.Build.addEventListener("click", buildRelease);
+  elements.ReleaseSlug.addEventListener("input", renderExportPanel);
+  elements.ReleaseSlug.addEventListener("blur", () => {
+    elements.ReleaseSlug.value = slugifyTourTitle(elements.ReleaseSlug.value);
+    renderExportPanel();
+  });
   elements.DownloadProject.addEventListener("click", downloadEditableProject);
   elements.MapFile.addEventListener("change", uploadFloorplan);
   elements.MapEnabled.addEventListener("change", async () => {
@@ -3632,6 +3671,7 @@
   elements.CopyEmbed.addEventListener("click", copyEmbedCode);
   elements.CopyEmbedBlock.addEventListener("click", copyEmbedBlock);
   elements.DownloadSingle.addEventListener("click", () => watchFinishedExport("single-html"));
+  elements.DownloadMultires.addEventListener("click", () => watchFinishedExport("multires-web-package"));
   elements.DownloadEmbed.addEventListener("click", () => watchFinishedExport("paste-in-html"));
   elements.DownloadZip.addEventListener("click", () => watchFinishedExport("zip"));
   panel.querySelector("#editorClose").addEventListener("click", () => document.body.classList.remove("is-editor-open"));

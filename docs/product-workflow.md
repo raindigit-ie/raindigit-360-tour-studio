@@ -64,9 +64,10 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 7. **Publish**
    - Review the room, view, place and picture-change counts and require a green readiness gate.
-   - Build the static package, then show **Download website file** as the only primary result.
-   - Keep preview/testing, website-install code, editable backup and folder ZIP in separate collapsed disclosures.
-   - `raindigit-360-tour.html` is the normal one-file customer installation. The editable backup is an operator asset, not part of the default customer handoff.
+   - Confirm the permanent lower-case web name, build both delivery formats, then show **Download web package** as the only primary result.
+   - Open the optimized preview and complete the desktop Chromium, mobile Chromium and mobile WebKit review before promoting `current.json`.
+   - Keep portable HTML, preview/testing, website-install code, editable backup and legacy folder ZIP in separate collapsed disclosures.
+   - `raindigit-360-tour-web-package.zip` is the normal Rain Digit/R2 installation. `raindigit-360-tour.html` is the portable fallback. The editable backup is an operator asset, not part of the default customer handoff.
    - `raindigit-360-tour-embed.html` is the secondary paste-in installation for website editors that cannot host a separate file. It must be one compressed body fragment with inline styles, scripts and panorama data, show a preloader immediately, then create the self-contained tour iframe after host page `load` plus idle callback or timeout.
 
 ## Review Gate
@@ -79,15 +80,17 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 ## Build And Embed
 
-Use **Build the tour** on the Publish screen, or run `npm run build:release` after approval. The build validates the scene graph and image dimensions, rasterises approved look changes into public derivatives, generates thumbnails and writes:
+Use **Build the tour** on the Publish screen after approval. The build validates the scene graph and image dimensions, rasterises approved look changes, generates multires WebP tiles plus JPEG fallbacks, and writes:
 
+- `release-multires/` - R2-shaped package with immutable `tours/<slug>/<version>/` content and a small `manifests/<slug>/current.json` pointer;
+- `dist/raindigit-360-tour-web-package.zip` - primary optimized website candidate;
 - `release/` - static deployable folder;
 - `dist/raindigit-360-tour.html` - self-contained tour with no adjacent runtime or media files;
 - `dist/raindigit-360-tour-embed.html` - one-line paste-in body fragment with a preloader and lazy self-contained iframe startup;
 - `dist/raindigit-360-tour.zip` - advanced folder-based deployment;
 - the studio download endpoint creates `raindigit-tour-project.rdtour`, containing project JSON, draft JSON and normalized editable media.
 
-For the simplest customer handoff, upload the single HTML file and use its URL directly. The iframe-by-URL installation is lighter for the host page than pasting the whole tour into page markup. The paste-in block is available when a website editor can only accept body HTML. The ZIP remains available for hosts that prefer normal cacheable assets and includes `INSTALL.txt`.
+For Rain Digit, upload the immutable version directory first, visually verify it, and only then replace the small `current.json` pointer. Never overwrite an accepted version. Rolling back means restoring the previous pointer version. The portable HTML is for an external customer host that cannot use the Rain Digit R2 pipeline.
 
 The single HTML must also open directly from disk and render when embedded in a
 fullscreen-enabled iframe. Both paths are part of the automated product test.

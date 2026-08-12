@@ -6,7 +6,8 @@
   const local = localHosts.has(window.location.hostname);
   const editing = local && query.get("edit") === "1";
   const previewing = local && query.get("preview") === "1";
-  const endpoint = editing ? "__tour-editor" : previewing ? "__tour-preview" : null;
+  const framePicking = local && query.get("frame-picker") === "1";
+  const endpoint = editing || framePicking ? "__tour-editor" : previewing ? "__tour-preview" : null;
   const workspace = endpoint && query.get("workspace") === "1";
 
   function loadScript(source) {
@@ -21,6 +22,10 @@
 
   (async () => {
     await loadScript("js/pannellum.js?v=20260802-wizard-v1");
+    if (framePicking) {
+      await loadScript("js/frame-picker.js?v=20260811-frame-picker-v1");
+      return;
+    }
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");

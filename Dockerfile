@@ -1,11 +1,10 @@
-FROM node:22-bookworm-slim AS studio
+FROM node:22-alpine AS studio
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     imagemagick \
+    ffmpeg \
     unzip \
-    zip \
-  && rm -rf /var/lib/apt/lists/*
+    zip
 
 WORKDIR /workspace
 COPY package.json ./

@@ -37,6 +37,7 @@ try {
   const compose = await readFile(join(packageRoot, "docker-compose.yml"), "utf8");
   assert(compose.includes("127.0.0.1:8767:8767"), "The operator kit must keep the studio bound to localhost.");
   await execFileAsync("docker", ["build", "--target", "studio", "-t", imageName, packageRoot], { maxBuffer: 8 * 1024 * 1024 });
+  await execFileAsync("docker", ["run", "--rm", imageName, "ffmpeg", "-version"], { maxBuffer: 2 * 1024 * 1024 });
   await execFileAsync("docker", ["run", "-d", "--name", containerName, "-e", "TOUR_SERVER_HOST=0.0.0.0", "-p", `127.0.0.1:${port}:8767`, imageName]);
   let cleanServerReady = false;
   for (let attempt = 0; attempt < 60; attempt += 1) {

@@ -17,12 +17,18 @@ const draftPath = process.env.INSTA360_TOUR_DRAFT_PATH ? resolve(process.env.INS
 const workspaceRoot = process.env.INSTA360_TOUR_WORKSPACE ? resolve(process.env.INSTA360_TOUR_WORKSPACE) : defaultWorkspaceRoot;
 const workspaceProjectPath = join(workspaceRoot, "tour-project.json");
 const workspaceDraftPath = join(workspaceRoot, "draft.json");
+const workspaceFrameSelectionsPath = join(workspaceRoot, "frame-selections.json");
 const studioLogPath = join(workspaceRoot, "studio-debug.ndjson");
 const artifactRoot = process.env.INSTA360_TOUR_ARTIFACTS ? resolve(process.env.INSTA360_TOUR_ARTIFACTS) : join(projectRoot, "dist");
 const releaseRoot = process.env.INSTA360_TOUR_RELEASE ? resolve(process.env.INSTA360_TOUR_RELEASE) : join(projectRoot, "release");
+const releaseMultiresRoot = process.env.INSTA360_TOUR_MULTIRES_RELEASE
+  ? resolve(process.env.INSTA360_TOUR_MULTIRES_RELEASE)
+  : process.env.INSTA360_TOUR_RELEASE ? `${releaseRoot}-multires` : join(projectRoot, "release-multires");
 const releaseZipPath = join(artifactRoot, "raindigit-360-tour.zip");
 const releaseSinglePath = join(artifactRoot, "raindigit-360-tour.html");
 const releaseEmbedPath = join(artifactRoot, "raindigit-360-tour-embed.html");
+const releaseMultiresZipPath = join(artifactRoot, "raindigit-360-tour-web-package.zip");
+const releaseMultiresMetadataPath = join(artifactRoot, "raindigit-360-tour-web-package.json");
 const projectBackupPath = join(artifactRoot, "raindigit-tour-project.rdtour");
 const host = process.env.TOUR_SERVER_HOST || "127.0.0.1";
 const previewMode = process.argv.includes("--preview");
@@ -89,6 +95,15 @@ function emptyWorkspaceProject(title = "Untitled 3D Tour") {
   };
 }
 
+function emptyFrameSelections(project = null) {
+  return {
+    schema: "raindigit-tour-frame-selections/v1",
+    tourTitle: project?.title || "Untitled 3D Tour",
+    updatedAt: null,
+    frames: {}
+  };
+}
+
 function isValidFloorplanMap(value, sceneIds = new Set()) {
   if (value === undefined) return true;
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -104,6 +119,52 @@ function isValidFloorplanMap(value, sceneIds = new Set()) {
 
 function isWorkspaceRequest(url) {
   return url.searchParams.get("workspace") === "1";
+}
+
+function isSafeWorkspaceAssetPath(value) {
+  return typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 220 &&
+    !value.includes("\0") &&
+    !value.includes("\\") &&
+    !value.split("/").some((part) => part === "..") &&
+    /^(?:panoramas|thumbnails)\//.test(value);
+}
+
+function isValidFrameSelections(value, project) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (value.schema !== "raindigit-tour-frame-selections/v1") return false;
+  if (typeof value.tourTitle !== "string" || value.tourTitle.length > 120) return false;
+  if (value.updatedAt !== null && typeof value.updatedAt !== "string") return false;
+  if (!value.frames || typeof value.frames !== "object" || Array.isArray(value.frames)) return false;
+  const sceneById = new Map((project?.scenes || []).map((scene) => [scene.id, scene]));
+  const entries = Object.entries(value.frames);
+  if (entries.length > 80) return false;
+  return entries.every(([slot, frame]) => {
+    const scene = sceneById.get(frame?.sceneId);
+    return /^[a-z0-9][a-z0-9-]{0,60}$/i.test(slot) &&
+      Boolean(scene) &&
+      frame &&
+      typeof frame === "object" &&
+      !Array.isArray(frame) &&
+      typeof frame.label === "string" &&
+      frame.label.length <= 120 &&
+      typeof frame.sceneTitle === "string" &&
+      frame.sceneTitle.length <= 120 &&
+      isSafeWorkspaceAssetPath(frame.panorama) &&
+      frame.panorama === scene.panorama &&
+      (frame.thumb === undefined || frame.thumb === null || isSafeWorkspaceAssetPath(frame.thumb)) &&
+      Number.isFinite(frame.yaw) &&
+      frame.yaw >= -360 &&
+      frame.yaw <= 360 &&
+      Number.isFinite(frame.pitch) &&
+      frame.pitch >= -90 &&
+      frame.pitch <= 90 &&
+      Number.isFinite(frame.hfov) &&
+      frame.hfov >= 30 &&
+      frame.hfov <= 140 &&
+      typeof frame.savedAt === "string";
+  });
 }
 
 function activeDraftPath(url) {
@@ -271,6 +332,18 @@ function cleanHeader(value) {
   }
 }
 
+function slugifyTourTitle(value) {
+  const slug = String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72)
+    .replace(/-+$/g, "");
+  return slug || "new-tour";
+}
+
 function roomId(label, preferred = "") {
   if (/^[a-z0-9-]{1,60}$/i.test(preferred)) return preferred;
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42);
@@ -286,8 +359,35 @@ async function releaseStatus() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
+    const legacyReady = archive.mtimeMs >= latestInput && single.mtimeMs >= latestInput && embed.mtimeMs >= latestInput;
+    let multires = { ready: false };
+    try {
+      const [metadata, multiresArchive] = await Promise.all([
+        readFile(releaseMultiresMetadataPath, "utf8").then(JSON.parse),
+        stat(releaseMultiresZipPath)
+      ]);
+      const pointer = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.pointer), "utf8"));
+      const releaseManifest = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.releaseManifest), "utf8"));
+      const ready = multiresArchive.mtimeMs >= latestInput && pointer.version === metadata.version && releaseManifest.contentDigest === metadata.contentDigest;
+      multires = {
+        ready,
+        bytes: multiresArchive.size,
+        slug: metadata.slug,
+        version: metadata.version,
+        entrypoint: metadata.entrypoint,
+        pointer: metadata.pointer,
+        contentDigest: metadata.contentDigest,
+        scenes: metadata.scenes,
+        hotspots: metadata.hotspots,
+        updatedAt: multiresArchive.mtime.toISOString()
+      };
+    } catch (error) {
+      if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+    }
     return {
-      ready: archive.mtimeMs >= latestInput && single.mtimeMs >= latestInput && embed.mtimeMs >= latestInput,
+      ready: legacyReady && multires.ready,
+      legacyReady,
+      multires,
       embedReady: embed.mtimeMs >= latestInput,
       bytes: archive.size,
       singleBytes: single.size,
@@ -313,6 +413,11 @@ async function readBody(request, maximumBytes = 256 * 1024) {
 
 async function readJsonBody(request) {
   return JSON.parse((await readBody(request)).toString("utf8"));
+}
+
+async function readOptionalJsonBody(request) {
+  const source = (await readBody(request)).toString("utf8").trim();
+  return source ? JSON.parse(source) : {};
 }
 
 async function readDraft(path) {
@@ -405,6 +510,21 @@ async function readWorkspaceProject() {
 async function writeWorkspaceProject(project) {
   if (!validateWorkspaceProject(project)) throw new Error("Workspace project manifest is invalid.");
   await writeJsonAtomic(workspaceProjectPath, project);
+}
+
+async function readFrameSelections(project = null) {
+  try {
+    const value = JSON.parse(await readFile(workspaceFrameSelectionsPath, "utf8"));
+    return isValidFrameSelections(value, project) ? value : emptyFrameSelections(project);
+  } catch (error) {
+    if (error.code === "ENOENT") return emptyFrameSelections(project);
+    throw error;
+  }
+}
+
+async function writeFrameSelections(value, project) {
+  if (!isValidFrameSelections(value, project)) throw new Error("Frame selection manifest is invalid.");
+  await writeJsonAtomic(workspaceFrameSelectionsPath, value);
 }
 
 function workspaceReachableSceneIds(project, draft) {
@@ -703,6 +823,47 @@ const server = createServer(async (request, response) => {
       replyJson(response, 200, { project });
       return;
     }
+    if (!readOnly && url.pathname === `${routeEndpoint}/frame-selections` && request.method === "GET") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required." });
+        return;
+      }
+      const project = await readWorkspaceProject();
+      if (!project || project.scenes.length === 0) {
+        replyJson(response, 404, { error: "Create a tour and add at least one 360 photo first." });
+        return;
+      }
+      replyJson(response, 200, { selections: await readFrameSelections(project) });
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/frame-selections` && request.method === "POST") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required." });
+        return;
+      }
+      const project = await readWorkspaceProject();
+      if (!project || project.scenes.length === 0) {
+        replyJson(response, 404, { error: "Create a tour and add at least one 360 photo first." });
+        return;
+      }
+      const body = await readJsonBody(request);
+      if (!isValidFrameSelections(body, project)) {
+        replyJson(response, 400, { error: "Invalid frame selections." });
+        return;
+      }
+      await writeFrameSelections(body, project);
+      await appendStudioLogs([{
+        time: new Date().toISOString(),
+        sessionId: "frame-picker",
+        event: "frame-selection-saved",
+        details: {
+          slots: Object.keys(body.frames || {}),
+          latestUpdatedAt: body.updatedAt
+        }
+      }]);
+      replyJson(response, 200, { saved: true, selections: body, path: workspaceFrameSelectionsPath });
+      return;
+    }
     if (!readOnly && url.pathname === `${routeEndpoint}/workspace-project` && request.method === "POST") {
       const body = await readJsonBody(request);
       const existing = await readWorkspaceProject();
@@ -988,9 +1149,15 @@ const server = createServer(async (request, response) => {
         replyJson(response, 400, { error: "Workspace mode is required to build a release." });
         return;
       }
+      const body = await readOptionalJsonBody(request);
       const project = await readWorkspaceProject();
       if (!project || project.scenes.length === 0) {
         replyJson(response, 409, { error: "Add at least one 360 photo before building the tour." });
+        return;
+      }
+      const requestedSlug = body.slug === undefined ? slugifyTourTitle(project.title) : String(body.slug).trim();
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(requestedSlug) || requestedSlug.length > 72) {
+        replyJson(response, 400, { error: "Use a short web name made from lowercase letters, numbers and hyphens." });
         return;
       }
       const { removed } = await pruneUnreachableWorkspaceScenes(project);
@@ -1000,6 +1167,21 @@ const server = createServer(async (request, response) => {
         maxBuffer: 4 * 1024 * 1024,
         timeout: 10 * 60 * 1000
       });
+      const multiresBuilder = join(projectRoot, "scripts", "build-multires-release.mjs");
+      const { stdout: multiresOutput } = await execFileAsync(process.execPath, [
+        multiresBuilder,
+        "--workspace", workspaceRoot,
+        "--output", releaseMultiresRoot,
+        "--zip", releaseMultiresZipPath,
+        "--slug", requestedSlug,
+        "--replace"
+      ], {
+        cwd: projectRoot,
+        maxBuffer: 8 * 1024 * 1024,
+        timeout: 30 * 60 * 1000
+      });
+      const multiresMetadata = JSON.parse(multiresOutput);
+      await writeJsonAtomic(releaseMultiresMetadataPath, multiresMetadata);
       replyJson(response, 200, { ...await releaseStatus(), prunedScenes: removed.map((scene) => ({ id: scene.id, title: scene.title })) });
       return;
     }
@@ -1020,6 +1202,21 @@ const server = createServer(async (request, response) => {
         "content-length": status.bytes
       });
       createReadStream(releaseZipPath).pipe(response);
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-multires-download` && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!workspace || !status.multires?.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before downloading its optimized web package." });
+        return;
+      }
+      clearWorkspaceAfterResponse(response);
+      response.writeHead(200, {
+        ...responseHeaders("application/zip"),
+        "content-disposition": `attachment; filename=raindigit-${status.multires.slug}-web-package.zip`,
+        "content-length": status.multires.bytes
+      });
+      createReadStream(releaseMultiresZipPath).pipe(response);
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-single-download` && request.method === "GET") {
@@ -1093,6 +1290,16 @@ const server = createServer(async (request, response) => {
       }
       const relativePath = decodeURIComponent(url.pathname.slice(`${routeEndpoint}/release/`.length)) || "index.html";
       await serveFile(response, releaseRoot, relativePath, "no-store");
+      return;
+    }
+    if (!readOnly && url.pathname.startsWith(`${routeEndpoint}/release-multires/`) && request.method === "GET") {
+      const status = await releaseStatus();
+      if (!status.multires?.ready) {
+        replyJson(response, 404, { error: "Build the current workspace before opening its optimized release." });
+        return;
+      }
+      const relativePath = decodeURIComponent(url.pathname.slice(`${routeEndpoint}/release-multires/`.length));
+      await serveFile(response, releaseMultiresRoot, relativePath || status.multires.entrypoint, "no-store");
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-embed-test.html` && request.method === "GET") {

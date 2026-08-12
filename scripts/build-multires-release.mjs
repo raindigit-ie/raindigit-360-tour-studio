@@ -16,7 +16,9 @@ function parseArguments(argv) {
   const options = {
     workspace: join(projectRoot, "studio-workspace"),
     output: join(projectRoot, "release-multires"),
+    zip: null,
     slug: null,
+    rollbackVersion: null,
     tileSize: 512,
     fallbackSize: 1024,
     webpQuality: 78,
@@ -27,18 +29,21 @@ function parseArguments(argv) {
     const argument = argv[index];
     if (argument === "--workspace") options.workspace = resolve(argv[++index] || "");
     else if (argument === "--output") options.output = resolve(argv[++index] || "");
+    else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
     else if (argument === "--slug") options.slug = String(argv[++index] || "");
+    else if (argument === "--rollback-version") options.rollbackVersion = String(argv[++index] || "");
     else if (argument === "--tile-size") options.tileSize = Number(argv[++index]);
     else if (argument === "--fallback-size") options.fallbackSize = Number(argv[++index]);
     else if (argument === "--webp-quality") options.webpQuality = Number(argv[++index]);
     else if (argument === "--jpeg-quality") options.jpegQuality = Number(argv[++index]);
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-multires-release.mjs --workspace path --output path --slug project-slug [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]");
+      console.log("Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug [--zip package.zip] [--rollback-version version] [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]");
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
   }
   if (!options.slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.slug)) throw new Error("--slug must be a lowercase URL slug.");
+  if (options.rollbackVersion && !/^(?:legacy|multires)-[a-f0-9]{8,64}$/.test(options.rollbackVersion)) throw new Error("--rollback-version must be a legacy-* or multires-* content version.");
   if (![256, 512, 1024].includes(options.tileSize)) throw new Error("Tile size must be 256, 512 or 1024 pixels.");
   if (!Number.isInteger(options.fallbackSize) || options.fallbackSize < 512 || options.fallbackSize > 2048) throw new Error("Fallback size must be 512..2048 pixels.");
   if (!Number.isInteger(options.webpQuality) || options.webpQuality < 75 || options.webpQuality > 80) throw new Error("WebP quality must be 75..80.");
@@ -86,6 +91,25 @@ async function walk(directory) {
   return output;
 }
 
+async function fileInventory(directory) {
+  const files = [];
+  for (const file of (await walk(directory)).sort()) {
+    const body = await readFile(file);
+    files.push({
+      path: relative(directory, file).split("\\").join("/"),
+      bytes: body.byteLength,
+      sha256: createHash("sha256").update(body).digest("hex")
+    });
+  }
+  return files;
+}
+
+async function createZip(directory, zipPath) {
+  await mkdir(dirname(zipPath), { recursive: true });
+  await rm(zipPath, { force: true });
+  await run("zip", ["-X", "-r", zipPath, "."], { cwd: directory });
+}
+
 function readTourConfig(source) {
   const context = { window: {} };
   vm.runInNewContext(source, context);
@@ -131,7 +155,7 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
     const facePath = join(temporaryRoot, `${scene.id}-${face}.png`);
     await runMagick([stripPath, "-crop", `${cubeSize}x${cubeSize}+${faceIndex * cubeSize}+0`, "+repage", facePath]);
     await mkdir(join(targetRoot, "fallback"), { recursive: true });
-    await runMagick([facePath, "-resize", `${options.fallbackSize}x${options.fallbackSize}!`, "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "82", join(targetRoot, "fallback", `${face}.jpg`)]);
+    await runMagick([facePath, "-resize", `${options.fallbackSize}x${options.fallbackSize}!`, "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", String(options.jpegQuality), join(targetRoot, "fallback", `${face}.jpg`)]);
 
     for (let level = levels; level >= 1; level -= 1) {
       const size = Math.max(1, Math.floor(cubeSize / 2 ** (levels - level)));
@@ -188,6 +212,7 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   const temporaryRoot = await mkdtemp(join(tmpdir(), "raindigit-multires-"));
   const stagedRoot = join(temporaryRoot, "staged-release");
+  const packageRoot = join(temporaryRoot, "package");
   const finalParent = dirname(options.output);
   try {
     await run(process.execPath, [
@@ -221,21 +246,65 @@ async function main() {
     await writeFile(configPath, `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
     const digest = await digestDirectory(stagedRoot);
     const version = `multires-${digest.slice(0, 12)}`;
+    const immutablePrefix = `tours/${options.slug}/${version}/`;
+    const payloadFiles = await fileInventory(stagedRoot);
+    const payloadBytes = payloadFiles.reduce((sum, file) => sum + file.bytes, 0);
+    const sceneViews = Object.fromEntries(project.scenes.map((scene) => [scene.id, {
+      pitch: scene.pitch,
+      yaw: scene.yaw,
+      hfov: scene.hfov
+    }]));
+    const hotspotGraph = project.scenes.flatMap((scene) => scene.hotspots.map((hotspot) => ({
+      source: scene.id,
+      target: hotspot.target,
+      kind: hotspot.kind,
+      pitch: hotspot.pitch,
+      yaw: hotspot.yaw,
+      targetPitch: hotspot.targetPitch,
+      targetYaw: hotspot.targetYaw,
+      targetHfov: hotspot.targetHfov
+    })));
     const manifest = {
       schema: "raindigit-tour-multires-release/v1",
       title: project.title,
       slug: options.slug,
       version,
       generatedAt: new Date().toISOString(),
+      rollbackVersion: options.rollbackVersion,
       firstScene: project.firstScene,
       sceneIds,
+      sceneViews,
+      hotspotGraph,
       tileSize: options.tileSize,
       webpQuality: options.webpQuality,
       fallbackFormat: "jpeg",
+      fallbackSize: options.fallbackSize,
+      fileCount: payloadFiles.length,
+      bytes: payloadBytes,
+      files: payloadFiles,
       contentDigest: digest,
-      immutablePrefix: `tours/${options.slug}/${version}/`
+      immutablePrefix,
+      entrypoint: `${immutablePrefix}index.html`
     };
     await writeFile(join(stagedRoot, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    const immutableRoot = join(packageRoot, immutablePrefix);
+    await mkdir(dirname(immutableRoot), { recursive: true });
+    await rename(stagedRoot, immutableRoot);
+    const pointer = {
+      schema: "raindigit-tour-current/v1",
+      slug: options.slug,
+      version,
+      previousVersion: options.rollbackVersion,
+      prefix: immutablePrefix,
+      entrypoint: manifest.entrypoint,
+      releaseManifest: `${immutablePrefix}release-manifest.json`,
+      contentDigest: digest,
+      updatedAt: manifest.generatedAt
+    };
+    const pointerPath = join(packageRoot, "manifests", options.slug, "current.json");
+    await mkdir(dirname(pointerPath), { recursive: true });
+    await writeFile(pointerPath, `${JSON.stringify(pointer, null, 2)}\n`, "utf8");
 
     if (!options.replace) {
       try {
@@ -247,8 +316,25 @@ async function main() {
     }
     await rm(options.output, { recursive: true, force: true });
     await mkdir(finalParent, { recursive: true });
-    await rename(stagedRoot, options.output);
-    console.log(JSON.stringify({ output: options.output, slug: options.slug, version, scenes: project.scenes.length, tiles: tileCount, contentDigest: digest }, null, 2));
+    await rename(packageRoot, options.output);
+    if (options.zip) await createZip(options.output, options.zip);
+    console.log(JSON.stringify({
+      output: options.output,
+      zip: options.zip,
+      slug: options.slug,
+      version,
+      immutablePrefix,
+      entrypoint: manifest.entrypoint,
+      releaseManifest: `${immutablePrefix}release-manifest.json`,
+      pointer: `manifests/${options.slug}/current.json`,
+      rollbackVersion: options.rollbackVersion,
+      scenes: project.scenes.length,
+      hotspots: hotspotGraph.length,
+      tiles: tileCount,
+      files: payloadFiles.length,
+      bytes: payloadBytes,
+      contentDigest: digest
+    }, null, 2));
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }

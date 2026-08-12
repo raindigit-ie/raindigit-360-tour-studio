@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
+import { chromium, webkit } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -40,10 +43,92 @@ async function walk(directory) {
   return output;
 }
 
+async function runBrowserQa(packageRoot, pointer) {
+  const contentTypes = { ".css": "text/css", ".html": "text/html", ".jpg": "image/jpeg", ".js": "application/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".webp": "image/webp" };
+  const server = createServer(async (request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url, "http://127.0.0.1").pathname);
+      const file = resolve(packageRoot, `.${pathname}`);
+      if (!file.startsWith(`${resolve(packageRoot)}/`)) throw new Error("Invalid path");
+      const body = await readFile(file);
+      const extension = file.slice(file.lastIndexOf("."));
+      response.writeHead(200, { "content-type": contentTypes[extension] || "application/octet-stream", "cache-control": "no-store" });
+      response.end(body);
+    } catch {
+      response.writeHead(404);
+      response.end("Not found");
+    }
+  });
+  await new Promise((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}/${pointer.entrypoint}?qa=1`;
+  const evidence = join(projectRoot, "output", "playwright", "multires");
+  await rm(evidence, { recursive: true, force: true });
+  await mkdir(evidence, { recursive: true });
+  try {
+    for (const target of [
+      { name: "chromium-desktop", engine: chromium, viewport: { width: 1365, height: 768 }, mobile: false },
+      { name: "chromium-mobile", engine: chromium, viewport: { width: 390, height: 844 }, mobile: true },
+      { name: "webkit-mobile", engine: webkit, viewport: { width: 390, height: 844 }, mobile: true }
+    ]) {
+      const browser = await target.engine.launch({ headless: true });
+      const context = await browser.newContext({ viewport: target.viewport, isMobile: target.mobile, hasTouch: target.mobile });
+      const page = await context.newPage();
+      const consoleErrors = [];
+      const networkErrors = [];
+      const tileRequests = [];
+      page.on("console", (message) => { if (message.type() === "error" && message.text() !== "not granted") consoleErrors.push(message.text()); });
+      page.on("requestfailed", (request) => networkErrors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`));
+      page.on("response", (response) => {
+        if (response.status() >= 400) networkErrors.push(`${response.status()} ${response.url()}`);
+        if (/\/assets\/mr\/.+\.webp(?:\?|$)/.test(response.url())) tileRequests.push(response.url());
+      });
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await page.locator(".pnlm-render-container canvas").waitFor({ state: "visible", timeout: 30_000 });
+      const screenshot = await page.screenshot({ path: join(evidence, `${target.name}.png`), fullPage: true });
+      assert(screenshot.byteLength > 30_000, `${target.name} screenshot is unexpectedly empty.`);
+      assert(await page.locator(".scene-card").count() === 2, `${target.name} lost scene navigation.`);
+      const waitForScene = async (sceneId, counter) => {
+        try {
+          await page.waitForFunction(([expectedScene, expectedCounter]) => document.querySelector(`.scene-card[data-scene="${expectedScene}"]`)?.classList.contains("is-active") && document.querySelector("#sceneCounter")?.textContent === expectedCounter, [sceneId, counter], { timeout: 30_000 });
+        } catch (error) {
+          const debug = await page.evaluate(() => ({ scene: window.__tourViewer?.getScene(), counter: document.querySelector("#sceneCounter")?.textContent, cards: Array.from(document.querySelectorAll(".scene-card")).map((card) => ({ scene: card.dataset.scene, active: card.classList.contains("is-active") })) }));
+          throw new Error(`${target.name} did not activate ${sceneId}: ${JSON.stringify(debug)}; ${error.message}`);
+        }
+      };
+      await page.locator('.scene-card[data-scene="scene-002"]').evaluate((button) => button.click());
+      await waitForScene("scene-002", "View 2 of 2");
+      await page.locator('.scene-card[data-scene="scene-001"]').evaluate((button) => button.click());
+      await waitForScene("scene-001", "View 1 of 2");
+      const firstHotspot = page.locator(".nav-hotspot-anchor").first();
+      await firstHotspot.waitFor({ state: "attached" });
+      assert((await firstHotspot.getAttribute("aria-label"))?.toLowerCase() === "go to second", `${target.name} first hotspot label is wrong: ${await firstHotspot.getAttribute("aria-label")}.`);
+      await page.locator('.scene-card[data-scene="scene-002"]').evaluate((button) => button.click());
+      await waitForScene("scene-002", "View 2 of 2");
+      const secondHotspot = page.locator(".nav-hotspot-anchor").first();
+      await secondHotspot.waitFor({ state: "attached" });
+      assert((await secondHotspot.getAttribute("aria-label"))?.toLowerCase() === "go to entry", `${target.name} return hotspot label is wrong.`);
+      await page.locator('.scene-card[data-scene="scene-001"]').evaluate((button) => button.click());
+      await waitForScene("scene-001", "View 1 of 2");
+      const layout = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+      assert(layout.scrollWidth <= layout.width, `${target.name} has horizontal overflow.`);
+      assert(tileRequests.length > 0, `${target.name} did not request multires WebP tiles.`);
+      assert(consoleErrors.length === 0, `${target.name} console errors: ${consoleErrors.join(" | ")}`);
+      assert(networkErrors.length === 0, `${target.name} network errors: ${networkErrors.join(" | ")}`);
+      await context.close();
+      await browser.close();
+    }
+  } finally {
+    await new Promise((resolvePromise) => server.close(resolvePromise));
+  }
+}
+
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "raindigit-multires-test-"));
   const workspace = join(root, "workspace");
-  const output = join(root, "release");
+  const output = join(root, "package");
+  const secondOutput = join(root, "package-repeat");
+  const zip = join(root, "future-multires-qa.zip");
   try {
     await mkdir(join(workspace, "panoramas"), { recursive: true });
     await mkdir(join(workspace, "thumbnails"), { recursive: true });
@@ -66,8 +151,13 @@ async function main() {
     await writeFile(join(workspace, "tour-project.json"), `${JSON.stringify(project, null, 2)}\n`);
     await writeFile(join(workspace, "draft.json"), `${JSON.stringify({ schema: "raindigit-tour-hotspot-overrides/v1", overrides: {}, addedHotspots: {}, sceneViews: {}, sceneAdjustments: {}, localAdjustments: {} }, null, 2)}\n`);
 
-    await execFileAsync(process.execPath, [join(projectRoot, "scripts", "build-multires-release.mjs"), "--workspace", workspace, "--output", output, "--slug", "future-multires-qa", "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
-    const source = await readFile(join(output, "js", "tour-config.js"), "utf8");
+    const builder = join(projectRoot, "scripts", "build-multires-release.mjs");
+    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", output, "--zip", zip, "--slug", "future-multires-qa", "--rollback-version", "legacy-0123456789ab", "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const pointer = JSON.parse(await readFile(join(output, "manifests", "future-multires-qa", "current.json"), "utf8"));
+    assert(pointer.schema === "raindigit-tour-current/v1" && pointer.previousVersion === "legacy-0123456789ab", "The stable current pointer or rollback reference is invalid.");
+    assert(pointer.entrypoint === `${pointer.prefix}index.html` && pointer.releaseManifest === `${pointer.prefix}release-manifest.json`, "The current pointer does not reference the immutable release.");
+    const releaseRoot = join(output, pointer.prefix);
+    const source = await readFile(join(releaseRoot, "js", "tour-config.js"), "utf8");
     const context = { window: {} };
     vm.runInNewContext(source, context);
     const config = context.window.TOUR_CONFIG;
@@ -78,7 +168,7 @@ async function main() {
     assert(config.scenes.every((scene) => scene.type === "multires" && !scene.panorama), "Scenes were not converted to multires.");
     assert(config.scenes.every((scene) => scene.multiRes.tileResolution === 512 && scene.multiRes.extension === "webp" && scene.multiRes.fallbackExtension === "jpg" && scene.multiRes.equirectangularThumbnail.startsWith("data:image/webp;base64,")), "Multires contract is incomplete.");
 
-    const files = await walk(output);
+    const files = await walk(releaseRoot);
     const webpTiles = files.filter((path) => path.endsWith(".webp") && !path.includes("thumbnails"));
     const fallbacks = files.filter((path) => /\/fallback\/[fbudlr]\.jpg$/.test(path));
     assert(webpTiles.length > 12, "Too few multires WebP tiles were produced.");
@@ -88,10 +178,24 @@ async function main() {
       const [width, height] = await imageDimensions(tile);
       assert(width <= 512 && height <= 512, `${tile} exceeds 512 px.`);
     }
-    const manifest = JSON.parse(await readFile(join(output, "release-manifest.json"), "utf8"));
-    assert(manifest.version.startsWith("multires-") && manifest.immutablePrefix.includes(manifest.version), "Versioned immutable manifest is invalid.");
-    const pannellumRuntime = await readFile(join(output, "js", "pannellum.js"), "utf8");
+    const manifest = JSON.parse(await readFile(join(releaseRoot, "release-manifest.json"), "utf8"));
+    assert(manifest.version.startsWith("multires-") && manifest.immutablePrefix.includes(manifest.version) && manifest.version === pointer.version, "Versioned immutable manifest is invalid.");
+    assert(manifest.rollbackVersion === "legacy-0123456789ab", "Release manifest lost the rollback version.");
+    assert(Object.keys(manifest.sceneViews).length === 2 && manifest.hotspotGraph.length === 2, "Scene views or hotspot graph are missing from the release manifest.");
+    assert(manifest.fileCount === manifest.files.length && manifest.bytes === manifest.files.reduce((sum, file) => sum + file.bytes, 0), "Release inventory totals are invalid.");
+    for (const entry of manifest.files) {
+      const body = await readFile(join(releaseRoot, entry.path));
+      assert(body.byteLength === entry.bytes, `Inventory size is wrong for ${entry.path}.`);
+      assert(createHash("sha256").update(body).digest("hex") === entry.sha256, `Inventory hash is wrong for ${entry.path}.`);
+    }
+    const { stdout: zipListing } = await execFileAsync("unzip", ["-Z1", zip]);
+    assert(zipListing.includes(`tours/future-multires-qa/${manifest.version}/index.html`) && zipListing.includes("manifests/future-multires-qa/current.json"), "The deployable archive does not mirror the R2 object layout.");
+    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", secondOutput, "--slug", "future-multires-qa", "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const repeatedPointer = JSON.parse(await readFile(join(secondOutput, "manifests", "future-multires-qa", "current.json"), "utf8"));
+    assert(repeatedPointer.version === pointer.version && repeatedPointer.contentDigest === pointer.contentDigest, "Identical source content did not produce a stable version.");
+    const pannellumRuntime = await readFile(join(releaseRoot, "js", "pannellum.js"), "utf8");
     assert(pannellumRuntime.includes("m.fallbackExtension||m.extension"), "JPEG fallback extension support is missing from the release runtime.");
+    await runBrowserQa(output, pointer);
     console.log(`Future multires release passed: ${config.scenes.length} scenes, ${webpTiles.length} WebP tiles, 12 JPEG fallback faces.`);
   } finally {
     await rm(root, { recursive: true, force: true });

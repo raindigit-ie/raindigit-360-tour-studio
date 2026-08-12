@@ -66,7 +66,7 @@ Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
 5. **Walking buttons**: the studio opens every planned walking button in order. Rotate until its real position is under the centre target, then press **Save point here**. All destinations use the same person marker, including another camera position in the same room.
 6. **First views**: open one destination at a time, rotate to its useful first frame and save it. Buttons remain disabled while a photo or cross-fade is loading.
-7. **Publish**: check readiness, build and download one self-contained website file. Preview, website-install code, editable backup and folder package are separate collapsed options.
+7. **Publish**: check readiness, confirm the permanent web name, build and download the optimized versioned website package. Preview it before promotion. Portable one-file HTML, paste-in code, editable backup and folder package stay in collapsed options.
 
 Every movement placement, removal, arrival view and picture adjustment is saved
 automatically. Scene arrows wait for that save and ignore overlapping clicks, so
@@ -75,20 +75,22 @@ cycling between photos cannot replace a newer point with stale state. Each
 read-only same-origin preview, normally `http://127.0.0.1:8767/?preview=1&workspace=1`.
 The separate preview container remains available at `http://127.0.0.1:8768/?preview=1&workspace=1`.
 
-Create the customer package only after review approval:
+Create the optimized Rain Digit website package only after review approval:
 
 ```bash
-npm run build:release
+npm run build:multires -- --slug my-tour
 ```
 
 The studio blocks publishing when a planned walking button has not been explicitly
 positioned or its destination view has not been saved. This prevents a technically
 valid but unfinished navigation graph from reaching a customer.
 
-The release build creates `release/`, `dist/raindigit-360-tour.html` and the advanced
-`dist/raindigit-360-tour.zip`. The HTML is the normal one-file customer handoff; the ZIP contains an
-`INSTALL.txt` file with a ready iframe example. Generated output is not versioned;
-they are generated from the private workspace. See [the product workflow](docs/product-workflow.md)
+The Publish screen builds both delivery forms. Its primary `raindigit-360-tour-web-package.zip`
+mirrors the R2 object layout: immutable `tours/<slug>/multires-<digest>/` assets plus
+`manifests/<slug>/current.json`. Every immutable release includes hashes, scene views,
+the transition graph and an optional rollback version. The portable one-file HTML and
+legacy folder ZIP remain available under advanced files. Generated output is not committed;
+it is generated from the private workspace. See [the product workflow](docs/product-workflow.md)
 and [client handoff](docs/client-handoff.md) for the exact operator and website-installation paths.
 
 ## Docker

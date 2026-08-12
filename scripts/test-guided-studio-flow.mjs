@@ -157,7 +157,8 @@ async function main() {
       ...process.env,
       INSTA360_TOUR_WORKSPACE: join(root, "workspace"),
       INSTA360_TOUR_ARTIFACTS: join(root, "artifacts"),
-      INSTA360_TOUR_RELEASE: join(root, "release")
+      INSTA360_TOUR_RELEASE: join(root, "release"),
+      INSTA360_TOUR_MULTIRES_RELEASE: join(root, "release-multires")
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -815,7 +816,8 @@ async function main() {
     await assertOneTask(page, "Check and publish");
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Build the tour" }).click();
-    await page.getByRole("link", { name: "Download website file" }).waitFor({ timeout: 90_000 });
+    await page.getByRole("link", { name: "Download web package" }).waitFor({ timeout: 180_000 });
+    await page.screenshot({ path: join(outputDir, "04-publish-ready-mobile.png"), fullPage: true });
     await page.evaluate(() => window.__RAINDIGIT_STUDIO_DEBUG__.flush());
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
@@ -829,9 +831,9 @@ async function main() {
     assert(!/data:image|blob:/i.test(logText), "The diagnostic journal contains media payloads.");
     assert(consoleErrors.length === 0, `Studio console errors: ${consoleErrors.join(" | ")}`);
 
-    const href = await page.getByRole("link", { name: "Download website file" }).getAttribute("href");
+    const href = await page.getByRole("link", { name: "Download web package" }).getAttribute("href");
     const releaseResponse = await page.request.get(new URL(href, baseUrl).href);
-    assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The customer website file was not built correctly.");
+    assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The optimized website package was not built correctly.");
     await page.waitForFunction(async () => {
       const response = await fetch("/__tour-editor/status", { cache: "no-store" });
       const status = await response.json();

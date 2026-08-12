@@ -9,8 +9,8 @@ For another operator, extract `raindigit-360-tour-studio.zip` first. The kit con
 3. Complete the six numbered screens in order. The studio saves at every **Continue**.
 4. On **Movement**, use **Rotate view** to frame the area, then **Place selected** and click once. The camera is locked while placing. The next screen remains locked until all new points are positioned and automatically opens the first unfinished point.
 5. On **First views**, save the destination view for every new movement. Publish remains locked until all destination views are reviewed.
-6. On **Publish**, build the tour and download `raindigit-360-tour.html` for a one-file page, or `raindigit-360-tour-embed.html` when a website editor needs one paste-in HTML block.
-7. Use **Backups and advanced files -> Download editable backup** only for internal continuation or transfer to another operator. It is not required by the website owner.
+6. On **Publish**, confirm the permanent web name, build the tour, open the optimized preview and download the web package only after review.
+7. Use **Portable, backup and advanced files** for `raindigit-360-tour.html`, paste-in code or an editable backup only when that special delivery form is needed.
 8. Double-click `Stop RainDigit 360 Studio.command` when finished.
 
 Camera originals stay outside the studio. The `.rdtour` backup contains normalized editable media and project data, not the untouched camera originals.

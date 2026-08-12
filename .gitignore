@@ -5,6 +5,8 @@
 /demo-site/
 /studio-workspace/
 /release/
+/release-multires/
+/release-multires-package/
 /dist/
 /.playwright-cli/
 /test-results/
