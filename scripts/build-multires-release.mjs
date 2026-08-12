@@ -132,6 +132,57 @@ async function makePreview(input) {
   return `data:image/webp;base64,${Buffer.from(stdout, "binary").toString("base64")}`;
 }
 
+function seoDescription(title) {
+  const base = `Explore ${title}, a self-hosted interactive 360° tour by Rain Digit with connected scenes, clear navigation and mobile-ready viewing.`;
+  const suffix = " Open the tour and understand the space before you arrive.";
+  const combined = `${base}${suffix}`;
+  if (combined.length <= 160 && combined.length >= 140) return combined;
+  if (combined.length < 140) return `${combined} Available on desktop and mobile.`.slice(0, 160);
+  const candidate = combined.slice(0, 159);
+  return `${candidate.slice(0, candidate.lastIndexOf(" ")).replace(/[\s,;:.-]+$/g, "")}.`;
+}
+
+async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
+  const targetRoot = join(stagedRoot, "assets", "seo");
+  const previewPath = join(targetRoot, "preview.webp");
+  const posterPath = join(targetRoot, "poster.webp");
+  await mkdir(targetRoot, { recursive: true });
+  await runMagick([input, "-resize", "512x256!", "-strip", "-quality", "66", previewPath]);
+  await runMagick([input, "-resize", "1200x630^", "-gravity", "center", "-extent", "1200x630", "-strip", "-quality", "82", posterPath]);
+  const previewBytes = (await stat(previewPath)).size;
+  assert(previewBytes <= 30 * 1024, `Generated preview is ${previewBytes} bytes; budget is 30720 bytes.`);
+  const firstScene = project.scenes.find((scene) => scene.id === project.firstScene);
+  const firstBuild = sceneBuilds.get(project.firstScene);
+  assert(firstScene && firstBuild, "First-scene multires output is missing.");
+  const firstLevelRoot = join(stagedRoot, firstBuild.relativeRoot, "1");
+  const firstLevelTiles = (await readdir(firstLevelRoot)).filter((file) => file.endsWith(".webp")).sort().map((file) => `${firstBuild.relativeRoot}/1/${file}`);
+  const fallbackFiles = faceLetters.map((face) => `${firstBuild.relativeRoot}/fallback/${face}.jpg`);
+  const seoDraft = {
+    schema: "raindigit-tour-seo/v1",
+    title: project.title,
+    seoTitle: `360° Tour: ${project.title} | Rain Digit`.slice(0, 60),
+    seoDescription: seoDescription(project.title),
+    landingDescriptionDraft: `Explore ${project.title} as a self-hosted interactive 360-degree experience. The tour connects ${project.scenes.length} real viewpoints with clear scene navigation and mobile-ready controls. Add the verified place, visible features, intended audience and linked Rain Digit project story before publication; this draft must be reviewed by a person and expanded to 80–150 factual words.`,
+    poster: "assets/seo/poster.webp",
+    posterAltDraft: `${project.title} — opening view before the interactive 360-degree tour`,
+    posterWidth: 1200,
+    posterHeight: 630,
+    preview: "assets/seo/preview.webp"
+  };
+  await mkdir(join(stagedRoot, "seo"), { recursive: true });
+  await writeFile(join(stagedRoot, "seo", "tour.json"), `${JSON.stringify(seoDraft, null, 2)}\n`);
+  return {
+    preview: seoDraft.preview,
+    previewBytes,
+    poster: seoDraft.poster,
+    posterWidth: seoDraft.posterWidth,
+    posterHeight: seoDraft.posterHeight,
+    seoDraft: "seo/tour.json",
+    fallbackFiles,
+    criticalFiles: ["js/tour-config.js", seoDraft.preview, ...firstLevelTiles]
+  };
+}
+
 async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
   const source = join(stagedRoot, scene.panorama);
   const dimensions = await imageDimensions(source);
@@ -233,17 +284,25 @@ async function main() {
     assert(patchedPannellum !== pannellumSource, "Pannellum fallback-extension compatibility patch did not apply.");
     await writeFile(pannellumPath, patchedPannellum, "utf8");
     const project = readTourConfig(await readFile(configPath, "utf8"));
+    const firstSceneSource = join(stagedRoot, project.scenes.find((scene) => scene.id === project.firstScene)?.panorama || "");
+    assert(await stat(firstSceneSource).catch(() => null), "First-scene panorama is missing before multires conversion.");
     const sceneIds = project.scenes.map((scene) => scene.id);
+    const sceneBuilds = new Map();
     let tileCount = 0;
     for (const scene of project.scenes) {
       const generated = await buildSceneMultires(scene, stagedRoot, temporaryRoot, options);
+      sceneBuilds.set(scene.id, generated);
       scene.type = "multires";
       scene.multiRes = generated.config;
       delete scene.panorama;
       tileCount += generated.tileCount;
     }
-    await rm(join(stagedRoot, "assets", "p"), { recursive: true, force: true });
     await writeFile(configPath, `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
+    const performance = await buildSeoAssets(firstSceneSource, stagedRoot, project, sceneBuilds);
+    await rm(join(stagedRoot, "assets", "p"), { recursive: true, force: true });
+    performance.criticalBytes = (await Promise.all(performance.criticalFiles.map(async (path) => (await stat(join(stagedRoot, path))).size))).reduce((sum, bytes) => sum + bytes, 0);
+    performance.criticalBudgetBytes = 1024 * 1024;
+    assert(performance.criticalBytes <= performance.criticalBudgetBytes, `First-scene critical payload is ${performance.criticalBytes} bytes; budget is ${performance.criticalBudgetBytes} bytes.`);
     const digest = await digestDirectory(stagedRoot);
     const version = `multires-${digest.slice(0, 12)}`;
     const immutablePrefix = `tours/${options.slug}/${version}/`;
@@ -284,7 +343,8 @@ async function main() {
       files: payloadFiles,
       contentDigest: digest,
       immutablePrefix,
-      entrypoint: `${immutablePrefix}index.html`
+      entrypoint: `${immutablePrefix}index.html`,
+      performance
     };
     await writeFile(join(stagedRoot, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 

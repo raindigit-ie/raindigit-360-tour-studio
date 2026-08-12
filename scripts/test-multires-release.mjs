@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
 import { chromium, webkit } from "@playwright/test";
@@ -169,7 +169,7 @@ async function main() {
     assert(config.scenes.every((scene) => scene.multiRes.tileResolution === 512 && scene.multiRes.extension === "webp" && scene.multiRes.fallbackExtension === "jpg" && scene.multiRes.equirectangularThumbnail.startsWith("data:image/webp;base64,")), "Multires contract is incomplete.");
 
     const files = await walk(releaseRoot);
-    const webpTiles = files.filter((path) => path.endsWith(".webp") && !path.includes("thumbnails"));
+    const webpTiles = files.filter((path) => path.endsWith(".webp") && !path.includes("thumbnails") && !path.includes(`${join("assets", "seo")}${sep}`));
     const fallbacks = files.filter((path) => /\/fallback\/[fbudlr]\.jpg$/.test(path));
     assert(webpTiles.length > 12, "Too few multires WebP tiles were produced.");
     assert(fallbacks.length === 12, `Expected 12 JPEG fallback faces, found ${fallbacks.length}.`);
@@ -183,6 +183,14 @@ async function main() {
     assert(manifest.rollbackVersion === "legacy-0123456789ab", "Release manifest lost the rollback version.");
     assert(Object.keys(manifest.sceneViews).length === 2 && manifest.hotspotGraph.length === 2, "Scene views or hotspot graph are missing from the release manifest.");
     assert(manifest.fileCount === manifest.files.length && manifest.bytes === manifest.files.reduce((sum, file) => sum + file.bytes, 0), "Release inventory totals are invalid.");
+    assert(manifest.performance.previewBytes <= 30 * 1024, "Preview exceeds 30 KB.");
+    assert(manifest.performance.posterWidth === 1200 && manifest.performance.posterHeight === 630, "SEO poster is not 1200x630.");
+    assert(manifest.performance.criticalBytes <= 1024 * 1024, "First-scene critical payload exceeds 1 MB.");
+    assert(manifest.performance.criticalFiles.length >= 8 && manifest.performance.fallbackFiles.length === 6, "First-scene budget inventory is incomplete.");
+    assert(manifest.performance.criticalFiles.every((path) => files.includes(join(releaseRoot, path))), "A critical first-scene file is absent from the release.");
+    assert(manifest.performance.fallbackFiles.every((path) => files.includes(join(releaseRoot, path))), "A JPEG fallback face is absent from the release.");
+    const seoDraft = JSON.parse(await readFile(join(releaseRoot, manifest.performance.seoDraft), "utf8"));
+    assert(seoDraft.seoTitle && seoDraft.seoDescription.length >= 140 && seoDraft.seoDescription.length <= 160 && seoDraft.landingDescriptionDraft, "SEO draft is incomplete.");
     for (const entry of manifest.files) {
       const body = await readFile(join(releaseRoot, entry.path));
       assert(body.byteLength === entry.bytes, `Inventory size is wrong for ${entry.path}.`);
