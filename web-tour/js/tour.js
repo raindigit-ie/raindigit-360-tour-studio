@@ -184,8 +184,8 @@ function toPannellumLocalAdjustment(sceneId, adjustment) {
 for (const scene of scenes) {
   configScenes[scene.id] = {
     title: scene.title,
-    type: "equirectangular",
-    panorama: scene.panorama,
+    type: scene.type === "multires" && scene.multiRes ? "multires" : "equirectangular",
+    ...(scene.type === "multires" && scene.multiRes ? { multiRes: scene.multiRes } : { panorama: scene.panorama }),
     pitch: scene.pitch,
     yaw: scene.yaw,
     hfov: scene.hfov,
