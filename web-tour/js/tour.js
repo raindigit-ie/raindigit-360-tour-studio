@@ -216,6 +216,7 @@ const viewer = pannellum.viewer("panorama", {
   scenes: configScenes
 });
 
+
 function applySceneAdjustment(sceneId) {
   const adjustment = sceneAdjustments[sceneId] || defaultSceneAdjustment;
   const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");
@@ -728,6 +729,7 @@ viewer.on("scenechange", (sceneId) => {
   emitTourDebug("runtime-scene-change", navigationHotspotInventory(sceneId));
 });
 viewer.on("load", () => {
+  document.documentElement.classList.add("is-tour-ready");
   if (!initialViewApplied) {
     const scene = configScenes[initialScene];
     viewer.lookAt(scene.pitch, scene.yaw, scene.hfov, 0);

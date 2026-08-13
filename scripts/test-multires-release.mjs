@@ -66,6 +66,49 @@ async function runBrowserQa(packageRoot, pointer) {
   await rm(evidence, { recursive: true, force: true });
   await mkdir(evidence, { recursive: true });
   try {
+    const performanceBrowser = await chromium.launch({ headless: true });
+    const performanceContext = await performanceBrowser.newContext({
+      viewport: { width: 412, height: 915 },
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: 2.625
+    });
+    const performancePage = await performanceContext.newPage();
+    let firstTileResponseAt = null;
+    performancePage.on("response", (response) => {
+      if (firstTileResponseAt === null && /\/assets\/mr\/.+\.webp(?:\?|$)/.test(response.url()) && response.ok()) firstTileResponseAt = Date.now();
+    });
+    const devtools = await performanceContext.newCDPSession(performancePage);
+    await devtools.send("Network.enable");
+    await devtools.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 40,
+      downloadThroughput: 4 * 1024 * 1024 / 8,
+      uploadThroughput: 1 * 1024 * 1024 / 8,
+      connectionType: "cellular4g"
+    });
+    await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await performancePage.goto(baseUrl, { waitUntil: "commit" });
+    await performancePage.locator(".tour-first-frame").waitFor({ state: "visible", timeout: 30_000 });
+    await performancePage.locator(".tour-first-frame").evaluate((preview) => preview.decode());
+    const firstFrameMs = await performancePage.evaluate(() => performance.now());
+    const recognisableFrameMs = firstFrameMs;
+    for (let attempt = 0; firstTileResponseAt === null && attempt < 300; attempt += 1) {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    assert(firstTileResponseAt !== null, "No first-scene WebP tile completed on the performance profile.");
+    await performancePage.evaluate(() => new Promise((resolvePromise) => requestAnimationFrame(() => requestAnimationFrame(resolvePromise))));
+    const timing = { firstFrameMs, recognisableFrameMs, firstTileMs: await performancePage.evaluate(() => performance.now()) };
+    assert(timing.firstFrameMs <= 500, `First tour frame took ${Math.round(timing.firstFrameMs)} ms; budget is 500 ms on the emulated medium mobile / 4G profile.`);
+    assert(timing.recognisableFrameMs <= 1000, `Recognisable tour frame took ${Math.round(timing.recognisableFrameMs)} ms; budget is 1000 ms on the emulated medium mobile / 4G profile.`);
+    await writeFile(join(evidence, "performance.json"), `${JSON.stringify({
+      profile: "Chromium 412x915, 4x CPU, 4 Mbps down / 1 Mbps up, 40 ms RTT",
+      budgets: { firstFrameMs: 500, recognisableFrameMs: 1000 },
+      measured: timing
+    }, null, 2)}\n`);
+    await performanceContext.close();
+    await performanceBrowser.close();
+
     for (const target of [
       { name: "chromium-desktop", engine: chromium, viewport: { width: 1365, height: 768 }, mobile: false },
       { name: "chromium-mobile", engine: chromium, viewport: { width: 390, height: 844 }, mobile: true },

@@ -41,6 +41,26 @@ button {
   inset: 0;
 }
 
+.tour-first-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+.is-tour-ready .tour-first-frame {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-first-frame { transition: none; }
+}
+
 .topbar,
 .scene-panel,
 .floorplan-panel {

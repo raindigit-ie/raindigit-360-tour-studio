@@ -128,8 +128,14 @@ function maxLevel(size, tileSize) {
 }
 
 async function makePreview(input) {
-  const { stdout } = await runMagick([input, "-resize", "256x128!", "-strip", "-quality", "72", "webp:-"]);
-  return `data:image/webp;base64,${Buffer.from(stdout, "binary").toString("base64")}`;
+  const directory = await mkdtemp(join(tmpdir(), "raindigit-tour-preview-"));
+  const output = join(directory, "preview.webp");
+  try {
+    await runMagick([input, "-resize", "256x128!", "-strip", "-quality", "72", output]);
+    return `data:image/webp;base64,${(await readFile(output)).toString("base64")}`;
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 function seoDescription(title) {
@@ -179,7 +185,7 @@ async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
     posterHeight: seoDraft.posterHeight,
     seoDraft: "seo/tour.json",
     fallbackFiles,
-    criticalFiles: ["js/tour-config.js", seoDraft.preview, ...firstLevelTiles]
+    criticalFiles: ["index.html", "css/pannellum.css", "css/tour.css", "js/tour-bootstrap.js", "js/pannellum.js", "js/tour.js", "js/tour-config.js", ...firstLevelTiles]
   };
 }
 
@@ -299,6 +305,16 @@ async function main() {
     }
     await writeFile(configPath, `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
     const performance = await buildSeoAssets(firstSceneSource, stagedRoot, project, sceneBuilds);
+    const entrypointPath = join(stagedRoot, "index.html");
+    const entrypointSource = await readFile(entrypointPath, "utf8");
+    const firstFrameData = project.scenes.find((scene) => scene.id === project.firstScene)?.multiRes?.equirectangularThumbnail;
+    assert(firstFrameData?.startsWith("data:image/webp;base64,"), "The inline first-frame preview is missing.");
+    const entrypointWithPreview = entrypointSource.replace(
+      '<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>',
+      `<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>\n      <img class="tour-first-frame" src="${firstFrameData}" alt="" aria-hidden="true" width="512" height="256" fetchpriority="high" />`
+    );
+    assert(entrypointWithPreview !== entrypointSource, "The first-frame preview could not be inserted into the tour entrypoint.");
+    await writeFile(entrypointPath, entrypointWithPreview, "utf8");
     await rm(join(stagedRoot, "assets", "p"), { recursive: true, force: true });
     performance.criticalBytes = (await Promise.all(performance.criticalFiles.map(async (path) => (await stat(join(stagedRoot, path))).size))).reduce((sum, bytes) => sum + bytes, 0);
     performance.criticalBudgetBytes = 1024 * 1024;
