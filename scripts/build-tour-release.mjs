@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -18,6 +18,8 @@ function parseArguments(argv) {
     single: null,
     embed: null,
     quality: 86,
+    preserveResolution: false,
+    preserveSource: false,
     replace: false
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -28,9 +30,11 @@ function parseArguments(argv) {
     else if (argument === "--single") options.single = resolve(argv[++index] || "");
     else if (argument === "--embed") options.embed = resolve(argv[++index] || "");
     else if (argument === "--quality") options.quality = Number(argv[++index]);
+    else if (argument === "--preserve-resolution") options.preserveResolution = true;
+    else if (argument === "--preserve-source") options.preserveSource = true;
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--quality 84..94] [--replace]");
+      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--quality 84..94] [--preserve-resolution] [--preserve-source] [--replace]");
       process.exit(0);
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -233,7 +237,8 @@ function stripEditorMetadata(project) {
   });
 }
 
-function releaseDimensions(source) {
+function releaseDimensions(source, preserveResolution = false) {
+  if (preserveResolution) return { width: source.width, height: source.height };
   let width = source.width;
   while (width > 8192) width = Math.floor(width / 2);
   if (width % 2 !== 0) width -= 1;
@@ -294,18 +299,33 @@ async function hashFile(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
-async function buildScene(scene, workspace, output, draft, temporaryRoot, quality) {
+function isNeutralAdjustment(adjustment) {
+  return !adjustment || (
+    clamp(adjustment.brightness, 70, 130, 100) === 100 &&
+    clamp(adjustment.contrast, 70, 130, 100) === 100 &&
+    clamp(adjustment.saturation, 0, 160, 100) === 100 &&
+    clamp(adjustment.warmth, -20, 20, 0) === 0
+  );
+}
+
+async function buildScene(scene, workspace, output, draft, temporaryRoot, quality, preserveResolution, preserveSource) {
   const input = join(workspace, scene.panorama);
   const source = await readFile(input);
   const dimensions = jpegDimensions(source);
   assert(dimensions && dimensions.width >= 1600 && Math.abs(dimensions.width / dimensions.height - 2) <= 0.02, `${scene.id} is not a valid 2:1 JPEG panorama.`);
-  const outputDimensions = releaseDimensions(dimensions);
-  const workImage = join(temporaryRoot, `${scene.id}-base.jpg`);
-  await runMagick(imageCommands(input, workImage, draft.sceneAdjustments?.[scene.id], quality, outputDimensions));
+  const outputDimensions = releaseDimensions(dimensions, preserveResolution);
   const areas = Array.isArray(draft.localAdjustments?.[scene.id]) ? draft.localAdjustments[scene.id] : [];
   const finishedImage = join(temporaryRoot, `${scene.id}-finished.jpg`);
-  if (areas.length > 0) await applyLocalAreas(workImage, finishedImage, areas, outputDimensions, temporaryRoot);
-  else await rename(workImage, finishedImage);
+  if (preserveSource) {
+    assert(preserveResolution, "--preserve-source requires --preserve-resolution.");
+    assert(isNeutralAdjustment(draft.sceneAdjustments?.[scene.id]) && areas.length === 0, `${scene.id} has image adjustments and cannot use --preserve-source.`);
+    await copyFile(input, finishedImage);
+  } else {
+    const workImage = join(temporaryRoot, `${scene.id}-base.jpg`);
+    await runMagick(imageCommands(input, workImage, draft.sceneAdjustments?.[scene.id], quality, outputDimensions));
+    if (areas.length > 0) await applyLocalAreas(workImage, finishedImage, areas, outputDimensions, temporaryRoot);
+    else await rename(workImage, finishedImage);
+  }
   const panoramaHash = await hashFile(finishedImage);
   const panoramaRelative = `assets/p/${panoramaHash.slice(0, 20)}.jpg`;
   const panoramaOutput = join(output, panoramaRelative);
@@ -463,7 +483,7 @@ async function main() {
     await copyRuntime(options.output);
     let totalBytes = 0;
     for (const scene of project.scenes) {
-      const result = await buildScene(scene, workspace, options.output, await readJson(join(workspace, "draft.json"), null) || {}, temporaryRoot, options.quality);
+      const result = await buildScene(scene, workspace, options.output, await readJson(join(workspace, "draft.json"), null) || {}, temporaryRoot, options.quality, options.preserveResolution, options.preserveSource);
       scene.panorama = result.panorama;
       scene.thumb = result.thumb;
       delete scene.sourceHash;
@@ -479,7 +499,7 @@ async function main() {
       singleHtml = await createSingleHtml(options.output, project, singleTarget);
     }
     if (options.embed) await createEmbedHtml(singleHtml, options.embed);
-    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality }, null, 2));
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality, preserveResolution: options.preserveResolution, preserveSource: options.preserveSource }, null, 2));
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
     throw error;

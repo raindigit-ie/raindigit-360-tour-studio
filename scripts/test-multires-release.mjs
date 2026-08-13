@@ -195,7 +195,7 @@ async function main() {
     await writeFile(join(workspace, "draft.json"), `${JSON.stringify({ schema: "raindigit-tour-hotspot-overrides/v1", overrides: {}, addedHotspots: {}, sceneViews: {}, sceneAdjustments: {}, localAdjustments: {} }, null, 2)}\n`);
 
     const builder = join(projectRoot, "scripts", "build-multires-release.mjs");
-    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", output, "--zip", zip, "--slug", "future-multires-qa", "--rollback-version", "legacy-0123456789ab", "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", output, "--zip", zip, "--slug", "future-multires-qa", "--rollback-version", "legacy-0123456789ab", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
     const pointer = JSON.parse(await readFile(join(output, "manifests", "future-multires-qa", "current.json"), "utf8"));
     assert(pointer.schema === "raindigit-tour-current/v1" && pointer.previousVersion === "legacy-0123456789ab", "The stable current pointer or rollback reference is invalid.");
     assert(pointer.entrypoint === `${pointer.prefix}index.html` && pointer.releaseManifest === `${pointer.prefix}release-manifest.json`, "The current pointer does not reference the immutable release.");
@@ -241,11 +241,16 @@ async function main() {
     }
     const { stdout: zipListing } = await execFileAsync("unzip", ["-Z1", zip]);
     assert(zipListing.includes(`tours/future-multires-qa/${manifest.version}/index.html`) && zipListing.includes("manifests/future-multires-qa/current.json"), "The deployable archive does not mirror the R2 object layout.");
-    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", secondOutput, "--slug", "future-multires-qa", "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", secondOutput, "--slug", "future-multires-qa", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
     const repeatedPointer = JSON.parse(await readFile(join(secondOutput, "manifests", "future-multires-qa", "current.json"), "utf8"));
     assert(repeatedPointer.version === pointer.version && repeatedPointer.contentDigest === pointer.contentDigest, "Identical source content did not produce a stable version.");
     const pannellumRuntime = await readFile(join(releaseRoot, "js", "pannellum.js"), "utf8");
     assert(pannellumRuntime.includes("m.fallbackExtension||m.extension"), "JPEG fallback extension support is missing from the release runtime.");
+    const tourRuntime = await readFile(join(releaseRoot, "js", "tour.js"), "utf8");
+    assert(tourRuntime.includes("multiRes: scene.multiRes"), "The release runtime does not pass multires scene data to Pannellum.");
+    assert(tourRuntime.includes("function revealRenderedTour"), "The release runtime does not reliably remove the inline first frame after WebGL renders.");
+    const revisedRuntime = await readFile(join(projectRoot, "scripts", "revise-multires-runtime.mjs"), "utf8");
+    assert(revisedRuntime.includes('canvas.style.filter = "url(#legacy-color-matrix)";'), "Legacy parity calibration is lost when the operator previews the original scene adjustment.");
     await runBrowserQa(output, pointer);
     console.log(`Future multires release passed: ${config.scenes.length} scenes, ${webpTiles.length} WebP tiles, 12 JPEG fallback faces.`);
   } finally {

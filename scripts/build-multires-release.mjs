@@ -19,6 +19,7 @@ function parseArguments(argv) {
     zip: null,
     slug: null,
     rollbackVersion: null,
+    runtimeTemplate: null,
     tileSize: 512,
     fallbackSize: 1024,
     webpQuality: 78,
@@ -32,13 +33,14 @@ function parseArguments(argv) {
     else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
     else if (argument === "--slug") options.slug = String(argv[++index] || "");
     else if (argument === "--rollback-version") options.rollbackVersion = String(argv[++index] || "");
+    else if (argument === "--runtime-template") options.runtimeTemplate = resolve(argv[++index] || "");
     else if (argument === "--tile-size") options.tileSize = Number(argv[++index]);
     else if (argument === "--fallback-size") options.fallbackSize = Number(argv[++index]);
     else if (argument === "--webp-quality") options.webpQuality = Number(argv[++index]);
     else if (argument === "--jpeg-quality") options.jpegQuality = Number(argv[++index]);
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug [--zip package.zip] [--rollback-version version] [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]");
+      console.log("Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug [--zip package.zip] [--rollback-version version] [--runtime-template release-root] [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]");
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
   }
@@ -118,7 +120,8 @@ function readTourConfig(source) {
 }
 
 function cubeResolution(width) {
-  return Math.max(512, 8 * Math.floor(width / Math.PI / 8));
+  const idealFace = Math.max(512, width / Math.PI);
+  return 2 ** Math.ceil(Math.log2(idealFace));
 }
 
 function maxLevel(size, tileSize) {
@@ -199,57 +202,100 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
   const contentHash = createHash("sha256").update(await readFile(source)).digest("hex").slice(0, 20);
   const relativeRoot = `assets/mr/${contentHash}`;
   const targetRoot = join(stagedRoot, relativeRoot);
-  const stripPath = join(temporaryRoot, `${scene.id}-cube.png`);
+  const sceneTemporaryRoot = join(temporaryRoot, `multires-${scene.id}`);
+  const stripPath = join(sceneTemporaryRoot, "cube.png");
+  await mkdir(sceneTemporaryRoot, { recursive: true });
   await mkdir(targetRoot, { recursive: true });
-  await run("ffmpeg", [
-    "-hide_banner", "-loglevel", "error", "-y", "-i", source,
-    "-vf", `v360=input=equirect:output=c6x1:out_forder=fbudlr:interp=lanczos:w=${cubeSize * 6}:h=${cubeSize}`,
-    "-frames:v", "1", stripPath
-  ]);
+  try {
+    await run("ffmpeg", [
+      "-hide_banner", "-loglevel", "error", "-y", "-i", source,
+      "-vf", `v360=input=equirect:output=c6x1:out_forder=fbudlr:interp=lanczos:w=${cubeSize * 6}:h=${cubeSize}`,
+      "-frames:v", "1", stripPath
+    ]);
 
-  let tileCount = 0;
-  for (const [faceIndex, face] of faceLetters.entries()) {
-    const facePath = join(temporaryRoot, `${scene.id}-${face}.png`);
-    await runMagick([stripPath, "-crop", `${cubeSize}x${cubeSize}+${faceIndex * cubeSize}+0`, "+repage", facePath]);
-    await mkdir(join(targetRoot, "fallback"), { recursive: true });
-    await runMagick([facePath, "-resize", `${options.fallbackSize}x${options.fallbackSize}!`, "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", String(options.jpegQuality), join(targetRoot, "fallback", `${face}.jpg`)]);
+    let tileCount = 0;
+    for (const [faceIndex, face] of faceLetters.entries()) {
+      const facePath = join(sceneTemporaryRoot, `${face}.png`);
+      await runMagick([stripPath, "-crop", `${cubeSize}x${cubeSize}+${faceIndex * cubeSize}+0`, "+repage", facePath]);
+      await mkdir(join(targetRoot, "fallback"), { recursive: true });
+      await runMagick([facePath, "-resize", `${options.fallbackSize}x${options.fallbackSize}!`, "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", String(options.jpegQuality), join(targetRoot, "fallback", `${face}.jpg`)]);
 
-    for (let level = levels; level >= 1; level -= 1) {
-      const size = Math.max(1, Math.floor(cubeSize / 2 ** (levels - level)));
-      const levelPath = join(targetRoot, String(level));
-      const levelFace = join(temporaryRoot, `${scene.id}-${face}-level-${level}.png`);
-      await mkdir(levelPath, { recursive: true });
-      if (level === levels) await cp(facePath, levelFace);
-      else await runMagick([facePath, "-resize", `${size}x${size}!`, levelFace]);
-      const tiles = Math.ceil(size / options.tileSize);
-      for (let y = 0; y < tiles; y += 1) {
-        for (let x = 0; x < tiles; x += 1) {
-          const width = Math.min(options.tileSize, size - x * options.tileSize);
-          const height = Math.min(options.tileSize, size - y * options.tileSize);
-          const target = join(levelPath, `${face}${y}_${x}.webp`);
-          await runMagick([levelFace, "-crop", `${width}x${height}+${x * options.tileSize}+${y * options.tileSize}`, "+repage", "-strip", "-quality", String(options.webpQuality), target]);
+      for (let level = levels; level >= 1; level -= 1) {
+        const size = Math.max(1, Math.floor(cubeSize / 2 ** (levels - level)));
+        const levelPath = join(targetRoot, String(level));
+        const levelFace = join(sceneTemporaryRoot, `${face}-level-${level}.png`);
+        await mkdir(levelPath, { recursive: true });
+        if (level === levels) await cp(facePath, levelFace);
+        else await runMagick([facePath, "-resize", `${size}x${size}!`, levelFace]);
+        const tiles = Math.ceil(size / options.tileSize);
+        const batchPattern = join(sceneTemporaryRoot, `${face}-level-${level}-tile-%d.webp`);
+        await runMagick([levelFace, "-crop", `${options.tileSize}x${options.tileSize}`, "+repage", "-strip", "-quality", String(options.webpQuality), batchPattern]);
+        for (let index = 0; index < tiles * tiles; index += 1) {
+          const y = Math.floor(index / tiles);
+          const x = index % tiles;
+          await rename(join(sceneTemporaryRoot, `${face}-level-${level}-tile-${index}.webp`), join(levelPath, `${face}${y}_${x}.webp`));
           tileCount += 1;
         }
       }
     }
+
+    const preview = await makePreview(source);
+    return {
+      relativeRoot,
+      tileCount,
+      config: {
+        basePath: relativeRoot,
+        path: "/%l/%s%y_%x",
+        fallbackPath: "/fallback/%s",
+        extension: "webp",
+        fallbackExtension: "jpg",
+        tileResolution: options.tileSize,
+        maxLevel: levels,
+        cubeResolution: cubeSize,
+        equirectangularThumbnail: preview
+      }
+    };
+  } finally {
+    await rm(sceneTemporaryRoot, { recursive: true, force: true });
+  }
+}
+
+async function applyRuntimeTemplate(stagedRoot, templateRoot) {
+  if (!templateRoot) return;
+  await Promise.all([
+    cp(join(templateRoot, "index.html"), join(stagedRoot, "index.html")),
+    cp(join(templateRoot, "css"), join(stagedRoot, "css"), { recursive: true, force: true }),
+    cp(join(templateRoot, "assets", "raindigit-mark.svg"), join(stagedRoot, "assets", "raindigit-mark.svg")),
+    cp(join(templateRoot, "js", "pannellum.js"), join(stagedRoot, "js", "pannellum.js")),
+    cp(join(templateRoot, "js", "tour.js"), join(stagedRoot, "js", "tour.js")),
+    cp(join(templateRoot, "js", "tour-bootstrap.js"), join(stagedRoot, "js", "tour-bootstrap.js"))
+  ]);
+
+  const cssPath = join(stagedRoot, "css", "tour.css");
+  const css = await readFile(cssPath, "utf8");
+  if (!css.includes(".tour-first-frame")) {
+    await writeFile(cssPath, `${css.trimEnd()}\n\n.tour-first-frame { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; pointer-events:none; opacity:1; transition:opacity 180ms ease; }\n.is-tour-ready .tour-first-frame { opacity:0; }\n@media (prefers-reduced-motion: reduce) { .tour-first-frame { transition:none; } }\n`, "utf8");
   }
 
-  const preview = await makePreview(source);
-  return {
-    relativeRoot,
-    tileCount,
-    config: {
-      basePath: relativeRoot,
-      path: "/%l/%s%y_%x",
-      fallbackPath: "/fallback/%s",
-      extension: "webp",
-      fallbackExtension: "jpg",
-      tileResolution: options.tileSize,
-      maxLevel: levels,
-      cubeResolution: cubeSize,
-      equirectangularThumbnail: preview
-    }
-  };
+  const runtimePath = join(stagedRoot, "js", "tour.js");
+  let runtime = await readFile(runtimePath, "utf8");
+  const legacySceneConfig = `    type: "equirectangular",
+    panorama: scene.panorama,`;
+  const multiresSceneConfig = `    type: scene.type === "multires" ? "multires" : "equirectangular",
+    ...(scene.type === "multires" ? { multiRes: scene.multiRes } : { panorama: scene.panorama }),`;
+  if (runtime.includes(legacySceneConfig)) runtime = runtime.replace(legacySceneConfig, multiresSceneConfig);
+  assert(
+    runtime.includes("multiRes: scene.multiRes") && runtime.includes('"multires"'),
+    "The runtime does not support multires scene configuration."
+  );
+  if (!runtime.includes("window.__tourViewer = viewer")) {
+    runtime += `\nif (new URLSearchParams(window.location.search).get("qa") === "1") window.__tourViewer = viewer;\n`;
+  }
+  if (!runtime.includes("function revealRenderedTour")) {
+    runtime = runtime.replace('viewer.on("load", () => {', 'function revealRenderedTour() {\n  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");\n  if (viewer.isLoaded() && canvas) {\n    document.documentElement.classList.add("is-tour-ready");\n    return;\n  }\n  window.requestAnimationFrame(revealRenderedTour);\n}\nviewer.on("load", () => {\n  revealRenderedTour();');
+    runtime = runtime.replace('setActiveScene(initialScene);', 'revealRenderedTour();\nsetActiveScene(initialScene);');
+  }
+  await writeFile(runtimePath, runtime, "utf8");
 }
 
 async function digestDirectory(directory) {
@@ -276,10 +322,16 @@ async function main() {
       join(projectRoot, "scripts", "build-tour-release.mjs"),
       "--workspace", options.workspace,
       "--output", stagedRoot,
-      "--quality", String(options.jpegQuality),
+      // This temporary derivative carries Studio colour / local-area edits into
+      // the pyramid. Keep the complete equirectangular resolution and use a
+      // high-quality intermediate; the delivery fallback is encoded separately.
+      "--quality", "94",
+      "--preserve-resolution",
+      "--preserve-source",
       "--replace"
     ], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
 
+    await applyRuntimeTemplate(stagedRoot, options.runtimeTemplate);
     const configPath = join(stagedRoot, "js", "tour-config.js");
     const pannellumPath = join(stagedRoot, "js", "pannellum.js");
     const pannellumSource = await readFile(pannellumPath, "utf8");
@@ -292,6 +344,7 @@ async function main() {
     const project = readTourConfig(await readFile(configPath, "utf8"));
     const firstSceneSource = join(stagedRoot, project.scenes.find((scene) => scene.id === project.firstScene)?.panorama || "");
     assert(await stat(firstSceneSource).catch(() => null), "First-scene panorama is missing before multires conversion.");
+    const firstSceneDimensions = await imageDimensions(firstSceneSource);
     const sceneIds = project.scenes.map((scene) => scene.id);
     const sceneBuilds = new Map();
     let tileCount = 0;
@@ -351,6 +404,8 @@ async function main() {
       sceneViews,
       hotspotGraph,
       tileSize: options.tileSize,
+      sourceWidth: firstSceneDimensions.width,
+      sourceHeight: firstSceneDimensions.height,
       webpQuality: options.webpQuality,
       fallbackFormat: "jpeg",
       fallbackSize: options.fallbackSize,

@@ -11,6 +11,7 @@
 /.playwright-cli/
 /test-results/
 /output/
+/.artifacts/
 /*.zip
 
 # Browser derivatives are rebuilt from a local workspace.
