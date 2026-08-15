@@ -409,10 +409,8 @@ function setAddedHotspots(sceneId, hotspots) {
   return true;
 }
 
-// Exposed only on explicit QA URLs so source doorway points can be measured.
-if (viewParams.get("qa") === "1") {
-  window.__tourViewer = viewer;
-}
+// Exposed for the shell, capture controls and QA checks.
+window.__tourViewer = viewer;
 
 function updateHotspotCoordinates(sceneId, hotspotIndex, coordinates) {
   const scene = sceneById[sceneId];
@@ -541,6 +539,7 @@ const floorplanClose = document.querySelector("#floorplanClose");
 const floorplanCanvas = document.querySelector("#floorplanCanvas");
 const floorplanPins = [];
 const fullscreenButton = document.querySelector("#fullscreen");
+const captureViewButton = document.querySelector("#captureView");
 let initialViewApplied = false;
 
 function setActiveScene(sceneId) {
@@ -666,6 +665,33 @@ document.querySelector("#resetView").addEventListener("click", () => {
   const scene = sceneById[viewer.getScene()];
   viewer.lookAt(scene.pitch, scene.yaw, scene.hfov, 380);
 });
+
+function downloadCurrentCleanView() {
+  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas") ||
+    viewer.getContainer().querySelector("canvas");
+  if (!canvas) {
+    return;
+  }
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const scene = sceneById[viewer.getScene()];
+    const safeScene = (scene?.title || viewer.getScene() || "view")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "view";
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `raindigit-tour-${safeScene}-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, "image/png");
+}
+
+captureViewButton?.addEventListener("click", downloadCurrentCleanView);
 
 function isFullscreenActive() {
   return Boolean(
