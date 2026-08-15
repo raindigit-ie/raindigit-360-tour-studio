@@ -962,6 +962,36 @@
     })));
   }
 
+  function movementTasks() {
+    return api.scenes.flatMap((scene) => scene.hotspots.map((hotspot, hotspotIndex) => ({
+      scene,
+      hotspot,
+      hotspotIndex,
+      sceneId: scene.id,
+      target: hotspot.target
+    })));
+  }
+
+  function selectedMovementTaskProgress() {
+    const tasks = movementTasks();
+    if (!state.selected) return { task: null, index: -1, total: tasks.length, tasks };
+    const selected = selectedHotspot();
+    const selectedReference = selected ? hotspotReference(selected.scene.id, selected.hotspotIndex) : state.selected;
+    const index = tasks.findIndex((task) => sameHotspotReference(task, selectedReference));
+    return { task: index >= 0 ? tasks[index] : null, index, total: tasks.length, tasks };
+  }
+
+  function focusMovementTask(task, status = "Selected walking button") {
+    if (!task) return false;
+    const reference = hotspotReference(task.scene.id, task.hotspotIndex);
+    if (!reference) return false;
+    state.linkStep = task.hotspot.positionConfirmed ? "review" : "place";
+    focusHotspotTask(reference, "links", false, true);
+    const target = api.sceneById[task.hotspot.target];
+    setStatus(`${status}: ${task.scene.title} to ${target?.title || task.hotspot.label}`);
+    return true;
+  }
+
   function hasArrivalView(hotspot) {
     return Number.isFinite(hotspot.targetPitch)
       && Number.isFinite(hotspot.targetYaw)
@@ -1139,7 +1169,11 @@
     const readiness = releaseReadiness();
     const selected = selectedHotspot();
     const linkReviewReady = state.activeStage === "links" && state.linkStep === "review" && selected?.hotspot.positionConfirmed === true;
+    const movementProgress = state.activeStage === "links" ? selectedMovementTaskProgress() : { index: -1 };
     elements.Back.hidden = ["start", "upload"].includes(state.activeStage);
+    elements.Back.textContent = state.activeStage === "links" && movementProgress.index > 0
+      ? "Previous walking button"
+      : "Back";
     elements.Continue.hidden = ["start", "export"].includes(state.activeStage)
       || (state.activeStage === "links" && readiness.pendingPositions > 0 && !linkReviewReady)
       || (state.activeStage === "arrival" && readiness.pendingArrivals > 0 && !selected);
@@ -2492,19 +2526,10 @@
     if (state.activeStage !== "links") return;
     const selected = selectedHotspot();
     const source = linkSourceScene(scene);
-    const allTasks = api.scenes.flatMap((candidate) => candidate.hotspots.map((hotspot, hotspotIndex) => ({
-      scene: candidate,
-      sceneId: candidate.id,
-      hotspot,
-      hotspotIndex,
-      target: hotspot.target
-    })));
-    const selectedTaskIndex = state.selected
-      ? allTasks.findIndex((task) => sameHotspotReference(task, state.selected))
-      : -1;
-    elements.LinkTaskProgress.textContent = selectedTaskIndex >= 0
-      ? `Walking button ${selectedTaskIndex + 1} of ${allTasks.length}`
-      : `${allTasks.length} walking button${allTasks.length === 1 ? "" : "s"} placed`;
+    const taskProgress = selectedMovementTaskProgress();
+    elements.LinkTaskProgress.textContent = taskProgress.index >= 0
+      ? `Walking button ${taskProgress.index + 1} of ${taskProgress.total}`
+      : `${taskProgress.total} walking button${taskProgress.total === 1 ? "" : "s"} placed`;
     elements.HotspotList.replaceChildren();
     const rows = source.hotspots.map((hotspot, hotspotIndex) => {
       const target = api.sceneById[hotspot.target];
@@ -3469,6 +3494,17 @@
       return;
     }
     if (state.activeStage === "links") {
+      const progress = selectedMovementTaskProgress();
+      if (progress.index > 0) {
+        if (!await queueDraftSave("walking-button-back-step")) return;
+        focusMovementTask(progress.tasks[progress.index - 1], "Back to previous walking button");
+        studioLog("walking-button-back-step", {
+          fromIndex: progress.index,
+          toIndex: progress.index - 1,
+          total: progress.total
+        }, true);
+        return;
+      }
       if (!await queueDraftSave("before-leaving-walking-buttons")) return;
       setStage("light");
       return;
