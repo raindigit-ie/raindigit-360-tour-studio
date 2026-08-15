@@ -146,6 +146,24 @@ async function dragElementCenter(page, selector, deltaX, deltaY) {
   return { start, end: { x: Math.round((start.x + deltaX) * 10) / 10, y: Math.round((start.y + deltaY) * 10) / 10 } };
 }
 
+async function dispatchElementDrag(page, selector, deltaX, deltaY) {
+  return page.evaluate(({ selector, deltaX, deltaY }) => {
+    const element = document.querySelector(selector);
+    if (!element) throw new Error(`Missing draggable element: ${selector}`);
+    const box = element.getBoundingClientRect();
+    const start = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    const end = { x: start.x + deltaX, y: start.y + deltaY };
+    const eventOptions = { bubbles: true, cancelable: true, pointerId: 991, pointerType: "mouse", button: 0, buttons: 1 };
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...eventOptions, clientX: start.x, clientY: start.y }));
+    document.dispatchEvent(new PointerEvent("pointermove", { ...eventOptions, clientX: end.x, clientY: end.y }));
+    document.dispatchEvent(new PointerEvent("pointerup", { ...eventOptions, buttons: 0, clientX: end.x, clientY: end.y }));
+    return {
+      start: { x: Math.round(start.x * 10) / 10, y: Math.round(start.y * 10) / 10 },
+      end: { x: Math.round(end.x * 10) / 10, y: Math.round(end.y * 10) / 10 }
+    };
+  }, { selector, deltaX, deltaY });
+}
+
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "raindigit-guided-flow-"));
   const port = 22000 + Math.floor(Math.random() * 12000);
@@ -831,8 +849,58 @@ async function main() {
     assert(polishState.editButton === "Correct walking buttons", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
     assert(polishState.saveViewButton === "Save this photo opening view", `Polish opening-view button is missing: ${JSON.stringify(polishState)}`);
     assert(polishState.tourVisible !== "hidden", `Polish stage must show the final tour preview: ${JSON.stringify(polishState)}`);
+    const polishDragSceneId = await page.evaluate(async () => {
+      const api = window.__TOUR_EDITOR_API;
+      const scene = api.scenes.find((candidate) => candidate.hotspots.length > 0);
+      if (!scene) return null;
+      await new Promise((resolve) => {
+        if (api.viewer.getScene() === scene.id && api.viewer.isLoaded()) {
+          resolve();
+          return;
+        }
+        const onSceneChange = (sceneId) => {
+          if (sceneId !== scene.id) return;
+          api.viewer.off("scenechange", onSceneChange);
+          window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+        };
+        api.viewer.on("scenechange", onSceneChange);
+        api.viewer.loadScene(scene.id);
+      });
+      return scene.id;
+    });
+    assert(polishDragSceneId, "Polish drag regression needs at least one walking button.");
     await page.getByRole("button", { name: "Correct walking buttons" }).click();
     await page.getByRole("button", { name: "Finish walking-button correction" }).waitFor();
+    await page.locator(".editor-polish-row").first().click();
+    await page.waitForFunction(() => window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot().selected?.sceneId === window.__TOUR_EDITOR_API.viewer.getScene());
+    const polishBeforeDrag = await page.evaluate(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
+      const selected = snapshot.selected;
+      const hotspot = window.__TOUR_EDITOR_API.scenes.find((scene) => scene.id === selected.sceneId).hotspots[selected.hotspotIndex];
+      window.__TOUR_EDITOR_API.viewer.lookAt(hotspot.pitch, hotspot.yaw - 40, 94, false);
+      return {
+        sceneId: selected.sceneId,
+        hotspotIndex: selected.hotspotIndex,
+        target: selected.target,
+        pitch: hotspot.pitch,
+        yaw: hotspot.yaw
+      };
+    });
+    await page.waitForTimeout(200);
+    await dispatchElementDrag(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 48, 18);
+    await page.waitForFunction(() => document.querySelector("#editorStatus")?.textContent?.includes("Saved locally"));
+    const polishAfterDrag = await page.evaluate(({ sceneId, hotspotIndex }) => {
+      const hotspot = window.__TOUR_EDITOR_API.scenes.find((scene) => scene.id === sceneId).hotspots[hotspotIndex];
+      return { pitch: hotspot.pitch, yaw: hotspot.yaw };
+    }, polishBeforeDrag);
+    assert(Math.abs(polishAfterDrag.yaw - polishBeforeDrag.yaw) > 0.3 || Math.abs(polishAfterDrag.pitch - polishBeforeDrag.pitch) > 0.3, `Polish drag did not update runtime coordinates: ${JSON.stringify({ polishBeforeDrag, polishAfterDrag })}`);
+    const polishDraft = await (await page.request.get(`${baseUrl}/__tour-editor/overrides?workspace=1`)).json();
+    const polishBaseCount = await page.evaluate((sceneId) => window.__TOUR_EDITOR_API.getBaseHotspotCount(sceneId), polishBeforeDrag.sceneId);
+    const polishSavedHotspot = polishDraft.addedHotspots?.[polishBeforeDrag.sceneId]?.[polishBeforeDrag.hotspotIndex - polishBaseCount];
+    assert(polishSavedHotspot && Math.abs(polishSavedHotspot.yaw - polishAfterDrag.yaw) <= 0.2 && Math.abs(polishSavedHotspot.pitch - polishAfterDrag.pitch) <= 0.2, `Polish drag was not saved into draft addedHotspots: ${JSON.stringify({ polishBeforeDrag, polishAfterDrag, polishSavedHotspot })}`);
+    const polishPreviewHref = await page.locator("#editorPreviewLink").getAttribute("href");
+    assert(polishPreviewHref.includes("preview=1"), `Dirty Polish changes must invalidate stale release previews: ${polishPreviewHref}`);
+    await page.getByRole("button", { name: "Finish walking-button correction" }).click();
     await page.getByRole("button", { name: "Save this photo opening view" }).click();
     await page.getByRole("button", { name: "Publish" }).click();
     await assertOneTask(page, "Check and publish");

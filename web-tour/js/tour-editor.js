@@ -74,6 +74,7 @@
     placementGuides: {},
     guidePreferences: { visible: true, snapEnabled: true, snapToleranceDeg: 2.2 },
     showOriginalLook: false,
+    draftDirty: false,
     initializing: true,
     routeReferenceMigrated: false,
     viewportSettling: false,
@@ -2920,6 +2921,13 @@
         : releaseSlugValid ? "The tour has not been built yet." : "Use lowercase letters, numbers and hyphens for the tour web name.";
   }
 
+  function invalidateRelease(reason = "draft-changed") {
+    if (!state.release.ready && !state.release.multires?.ready) return;
+    state.release = { ready: false };
+    studioLog("release-invalidated", { reason }, true);
+    renderExportPanel();
+  }
+
   function floorplanPosition(event) {
     const bounds = elements.Floorplan.getBoundingClientRect();
     return {
@@ -3450,12 +3458,14 @@
       });
       if (!response.ok) throw new Error((await response.json()).error || `Save failed (${response.status})`);
       state.savedAt = draft.updatedAt;
+      state.draftDirty = false;
       state.release = { ready: false };
       setStatus("Saved locally");
       renderExportPanel();
       studioLog("draft-save-success", { reason, updatedAt: draft.updatedAt, hotspotCounts }, true);
       return true;
     } catch (error) {
+      state.draftDirty = true;
       setStatus(error.message);
       studioLog("draft-save-failed", { reason, message: error.message, hotspotCounts }, true);
       return false;
@@ -3463,12 +3473,24 @@
   }
 
   function queueDraftSave(reason) {
+    state.draftDirty = true;
+    invalidateRelease(reason);
     if (draftSaveTimer) {
       window.clearTimeout(draftSaveTimer);
       draftSaveTimer = 0;
     }
     draftSavePromise = draftSavePromise.catch(() => false).then(() => saveDraft(reason));
     return draftSavePromise;
+  }
+
+  function flushDraftSave(reason = "before-preview") {
+    if (draftSaveTimer) {
+      window.clearTimeout(draftSaveTimer);
+      draftSaveTimer = 0;
+      return queueDraftSave(reason);
+    }
+    if (state.draftDirty) return queueDraftSave(reason);
+    return draftSavePromise.catch(() => false);
   }
 
   function scheduleDraftSave(reason, delay = 350) {
@@ -3814,6 +3836,21 @@
     continueWizard();
   });
   elements.Build.addEventListener("click", buildRelease);
+  elements.PreviewLink.addEventListener("click", async (event) => {
+    if (!workspaceMode || (!state.draftDirty && !draftSaveTimer)) return;
+    event.preventDefault();
+    const opened = window.open("about:blank", "_blank", "noopener");
+    setStatus("Saving latest changes before preview...");
+    const saved = await flushDraftSave("before-preview");
+    if (!saved) {
+      opened?.close?.();
+      return;
+    }
+    renderExportPanel();
+    const previewUrl = elements.PreviewLink.href;
+    if (opened) opened.location.href = previewUrl;
+    else window.open(previewUrl, "_blank", "noopener");
+  });
   elements.ReleaseSlug.addEventListener("input", renderExportPanel);
   elements.ReleaseSlug.addEventListener("blur", () => {
     elements.ReleaseSlug.value = slugifyTourTitle(elements.ReleaseSlug.value);
