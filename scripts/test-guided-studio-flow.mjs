@@ -849,7 +849,7 @@ async function main() {
     assert(polishState.editButton === "Correct walking buttons", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
     assert(polishState.saveViewButton === "Save this photo opening view", `Polish opening-view button is missing: ${JSON.stringify(polishState)}`);
     assert(polishState.tourVisible !== "hidden", `Polish stage must show the final tour preview: ${JSON.stringify(polishState)}`);
-    await page.getByRole("button", { name: "Hide panel for final view" }).click();
+    await page.getByRole("button", { name: "Correct in full final view" }).click();
     await page.waitForFunction(() => !document.body.classList.contains("is-editor-open"));
     const fullViewLayout = await page.evaluate(() => {
       const shell = document.querySelector(".tour-shell")?.getBoundingClientRect();
@@ -857,6 +857,7 @@ async function main() {
       return {
         stage: document.body.dataset.editorStage,
         editorOpen: document.body.classList.contains("is-editor-open"),
+        polishEditing: document.body.classList.contains("is-polish-editing"),
         shellWidth: Math.round(shell?.width || 0),
         shellHeight: Math.round(shell?.height || 0),
         viewportWidth: window.innerWidth,
@@ -865,6 +866,7 @@ async function main() {
       };
     });
     assert(fullViewLayout.stage === "polish" && !fullViewLayout.editorOpen, `Polish full-view toggle left the editor open: ${JSON.stringify(fullViewLayout)}`);
+    assert(fullViewLayout.polishEditing === true, `Polish full-view correction did not enable marker editing: ${JSON.stringify(fullViewLayout)}`);
     assert(fullViewLayout.shellWidth >= fullViewLayout.viewportWidth - 2 && fullViewLayout.shellHeight >= fullViewLayout.viewportHeight - 2, `Polish full-view toggle did not restore a full-size viewer: ${JSON.stringify(fullViewLayout)}`);
     assert(fullViewLayout.panelDisplay === "none", `Polish full-view toggle did not hide the panel: ${JSON.stringify(fullViewLayout)}`);
     await page.getByRole("button", { name: "Show tour studio" }).click();
@@ -889,7 +891,9 @@ async function main() {
       return scene.id;
     });
     assert(polishDragSceneId, "Polish drag regression needs at least one walking button.");
-    await page.getByRole("button", { name: "Correct walking buttons" }).click();
+    if (await page.getByRole("button", { name: "Correct walking buttons" }).isVisible().catch(() => false)) {
+      await page.getByRole("button", { name: "Correct walking buttons" }).click();
+    }
     await page.getByRole("button", { name: "Finish walking-button correction" }).waitFor();
     await page.locator(".editor-polish-row").first().click();
     await page.waitForFunction(() => window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot().selected?.sceneId === window.__TOUR_EDITOR_API.viewer.getScene());
@@ -910,7 +914,9 @@ async function main() {
     const polishAnchorGeometry = await page.evaluate(() => {
       const viewer = document.querySelector("#panorama")?.getBoundingClientRect();
       const anchor = document.querySelector(".nav-hotspot-anchor.is-editor-selected")?.getBoundingClientRect();
-      const marker = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot")?.getBoundingClientRect();
+      const markerElement = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+      const marker = markerElement?.getBoundingClientRect();
+      const markerStyle = markerElement ? getComputedStyle(markerElement) : null;
       return {
         viewer: viewer && {
           centerX: Math.round((viewer.left + viewer.width / 2) * 10) / 10,
@@ -926,17 +932,23 @@ async function main() {
           width: Math.round(marker.width * 10) / 10,
           height: Math.round(marker.height * 10) / 10,
           centerX: Math.round((marker.left + marker.width / 2) * 10) / 10,
-          centerY: Math.round((marker.top + marker.height / 2) * 10) / 10
+          centerY: Math.round((marker.top + marker.height / 2) * 10) / 10,
+          outlineStyle: markerStyle?.outlineStyle,
+          animationName: markerStyle?.animationName
         }
       };
     });
     assert(polishAnchorGeometry.anchor?.width >= 40 && polishAnchorGeometry.anchor?.height >= 40, `Selected walking button anchor is still zero-sized: ${JSON.stringify(polishAnchorGeometry)}`);
+    assert(polishAnchorGeometry.marker.outlineStyle === "none" && polishAnchorGeometry.marker.animationName === "none", `Polish selected marker still has editor-only visual styling: ${JSON.stringify(polishAnchorGeometry)}`);
     assertNear(polishAnchorGeometry.marker.centerX, polishAnchorGeometry.viewer.centerX, 12, "Selected walking button is horizontally mis-anchored when centred");
     assertNear(polishAnchorGeometry.marker.centerY, polishAnchorGeometry.viewer.centerY, 12, "Selected walking button is vertically mis-anchored when centred");
     await page.evaluate(({ pitch, yaw }) => window.__TOUR_EDITOR_API.viewer.lookAt(pitch, yaw - 40, 94, false), polishBeforeDrag);
     await page.waitForTimeout(200);
-    await dispatchElementDrag(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 48, 18);
+    const polishDrag = await dispatchElementDrag(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 48, 18);
     await page.waitForFunction(() => document.querySelector("#editorStatus")?.textContent?.includes("Saved locally"));
+    const polishMarkerAfterDrag = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
+    assertNear(polishMarkerAfterDrag.x, polishDrag.end.x, 24, "The Polish walking button did not stay near the release pointer");
+    assertNear(polishMarkerAfterDrag.y, polishDrag.end.y, 24, "The Polish walking button did not stay near the release pointer");
     const polishAfterDrag = await page.evaluate(({ sceneId, hotspotIndex }) => {
       const hotspot = window.__TOUR_EDITOR_API.scenes.find((scene) => scene.id === sceneId).hotspots[hotspotIndex];
       return { pitch: hotspot.pitch, yaw: hotspot.yaw };

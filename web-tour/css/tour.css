@@ -432,6 +432,14 @@ body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-selected:active .n
   cursor: grabbing;
 }
 
+body[data-editor-stage="polish"].is-polish-editing .nav-hotspot {
+  cursor: grab;
+}
+
+body[data-editor-stage="polish"].is-polish-editing .nav-hotspot:active {
+  cursor: grabbing;
+}
+
 body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-placement-hidden {
   opacity: 0;
   pointer-events: none !important;
@@ -1386,7 +1394,7 @@ body:not(.is-editor-open) .editor-panel { display: none; }
   border-top: 1px solid rgba(255, 249, 236, 0.13);
 }
 
-.nav-hotspot-anchor.is-editor-selected .nav-hotspot {
+body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-selected .nav-hotspot {
   outline: 3px solid #ffefb9;
   outline-offset: 3px;
 }
@@ -2567,7 +2575,7 @@ body[data-editor-stage="export"] .editor-panel__footer {
 .editor-image-warning { min-height: 16px; margin: 8px 0 0; color: #f4c978; font-size: 10px; line-height: 1.4; }
 .editor-start-copy { min-height: 30px; margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; }
 
-.nav-hotspot-anchor.is-editor-selected .nav-hotspot { animation: editor-marker-review 800ms ease-out 1; }
+body[data-editor-stage="links"] .nav-hotspot-anchor.is-editor-selected .nav-hotspot { animation: editor-marker-review 800ms ease-out 1; }
 @keyframes editor-marker-review { 0% { transform: scale(1); } 42% { transform: scale(1.18); } 100% { transform: scale(1); } }
 
 .editor-button--primary { min-height: 42px; }

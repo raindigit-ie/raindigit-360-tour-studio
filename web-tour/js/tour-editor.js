@@ -236,10 +236,10 @@
           <strong id="editorPolishOpeningTitle">Current photo</strong>
           <p id="editorPolishOpeningHelp">Rotate the camera to the view this photo should open with, then save it.</p>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorPolishSaveView" type="button">Save this photo opening view</button>
-          <button class="editor-button editor-button--wide" id="editorPolishFocusToggle" type="button">Hide panel for final view</button>
         </div>
         <div class="editor-polish-actions" aria-label="Walking button corrections">
           <button class="editor-button" id="editorPolishEditToggle" type="button">Correct walking buttons</button>
+          <button class="editor-button" id="editorPolishFocusToggle" type="button">Correct in full final view</button>
         </div>
         <div class="editor-hotspot-list editor-hotspot-list--polish" id="editorPolishHotspotList" aria-label="Walking buttons in this preview"></div>
       </section>
@@ -1235,6 +1235,7 @@
   function renderStages() {
     panel.dataset.stage = state.activeStage;
     document.body.dataset.editorStage = state.activeStage;
+    document.body.classList.toggle("is-polish-editing", state.activeStage === "polish" && state.polishEditing);
     panel.querySelectorAll(".editor-stage-panel").forEach((section) => {
       section.hidden = section.dataset.stagePanel !== state.activeStage;
     });
@@ -2519,7 +2520,7 @@
       ? `This is the default camera direction for ${scene.title}. It also updates ${incomingCount} incoming walking route${incomingCount === 1 ? "" : "s"} that arrive here.`
       : `This is the default camera direction for ${scene.title}.`;
     elements.PolishHelp.textContent = state.polishEditing
-      ? "Walking-button correction is on. Drag a walking person if its position is wrong. The opening view can still be saved from the card above."
+      ? "Walking-button correction is on. Drag a walking person if its position is wrong. Polish saves the exact cursor position without room-height snapping."
       : "Walk through the tour like a visitor. Rotate the current photo and save its opening view when the first frame is wrong.";
     elements.PolishEditToggle.textContent = state.polishEditing ? "Finish walking-button correction" : "Correct walking buttons";
     elements.PolishEditToggle.classList.toggle("is-active", state.polishEditing);
@@ -3238,7 +3239,8 @@
     const hotspot = scene?.hotspots[hotspotIndex];
     if (!hotspot) return false;
     const [pointerPitch, yaw] = api.viewer.mouseEventToCoords(event);
-    const coordinates = { pitch: roundCoordinate(snappedPitch(scene, pointerPitch, !event.altKey)), yaw: roundCoordinate(yaw) };
+    const allowPitchSnap = state.activeStage === "links" && !event.altKey;
+    const coordinates = { pitch: roundCoordinate(snappedPitch(scene, pointerPitch, allowPitchSnap)), yaw: roundCoordinate(yaw) };
     hotspot.positionConfirmed = true;
     api.updateHotspotCoordinates(sceneId, hotspotIndex, coordinates);
     studioLog(reason, {
@@ -4020,8 +4022,10 @@
   });
   elements.PolishSaveView.addEventListener("click", saveCurrentPolishView);
   elements.PolishFocusToggle.addEventListener("click", () => {
-    setStatus("Full view on. Use the round studio button to bring the panel back.");
-    studioLog("polish-full-view-requested", { sceneId: api.viewer.getScene() }, true);
+    state.polishEditing = true;
+    setStatus("Full final view on. Drag any walking person to correct it; use the round Studio button to bring the panel back.");
+    render();
+    studioLog("polish-full-view-requested", { sceneId: api.viewer.getScene(), correctionEnabled: true }, true);
     setEditorOpen(false, "polish-full-view");
   });
   elements.OpenPolish.addEventListener("click", () => {
