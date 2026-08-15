@@ -327,7 +327,6 @@ async function main() {
       // high-quality intermediate; the delivery fallback is encoded separately.
       "--quality", "94",
       "--preserve-resolution",
-      "--preserve-source",
       "--replace"
     ], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
 

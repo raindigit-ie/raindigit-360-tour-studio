@@ -398,7 +398,7 @@ async function main() {
     assert(sourceDestinationState.destinationCards === sourceDestinationState.sourceCards, `The destination list hid the current source instead of showing it disabled: ${JSON.stringify(sourceDestinationState)}`);
     assert(sourceDestinationState.currentCards.length === 1 && sourceDestinationState.currentCards[0].title === "Kitchen window" && sourceDestinationState.currentCards[0].note === "Current photo" && sourceDestinationState.currentCards[0].disabled, `The current source was not shown as a disabled destination: ${JSON.stringify(sourceDestinationState)}`);
     assert(sourceDestinationState.sourceStatuses.some((item) => item.title === "Kitchen window" && item.status === "Selected source" && item.selected), `The source strip did not keep a clear selected-source marker: ${JSON.stringify(sourceDestinationState)}`);
-    assert(sourceDestinationState.groups[0]?.title === "Suggested" && sourceDestinationState.groups[0]?.firstTitle === "Kitchen window", `The destination list was not grouped with the current source first: ${JSON.stringify(sourceDestinationState)}`);
+    assert(sourceDestinationState.groups[0]?.title === "Same space" && sourceDestinationState.groups[0]?.firstTitle === "Kitchen window", `The destination list was not grouped with the current source first: ${JSON.stringify(sourceDestinationState)}`);
     await page.getByRole("button", { name: "Preview source Kitchen window" }).click();
     await page.getByRole("dialog", { name: "Kitchen window" }).waitFor({ state: "visible" });
     assert((await page.locator("#editorPreviewImage").getAttribute("src")).includes("/__tour-editor/workspace/panoramas/"), "Source route preview must use the full panorama.");
@@ -444,7 +444,7 @@ async function main() {
         cards: Array.from(group.querySelectorAll(".editor-place-choice strong")).map((node) => node.textContent)
       }))
     }));
-    assert(reverseSuggestionState.groups[0]?.title === "Suggested" && reverseSuggestionState.groups[0]?.cards.includes("Kitchen window"), `The reverse return candidate was not suggested first: ${JSON.stringify(reverseSuggestionState)}`);
+    assert(reverseSuggestionState.groups[0]?.title === "Same space" && reverseSuggestionState.groups[0]?.cards.includes("Kitchen window"), `The reverse return candidate was not suggested first: ${JSON.stringify(reverseSuggestionState)}`);
     await page.locator(".editor-place-choice").filter({ hasText: "Kitchen window" }).click();
     await page.getByText("Walking buttons: Kitchen window", { exact: true }).waitFor();
     await page.locator(".editor-photo-choice").filter({ hasText: "Hall entrance" }).click();
@@ -574,6 +574,13 @@ async function main() {
     assert(restoredRouteSelection.stage === "links" && restoredRouteSelection.selected?.sceneId === "scene-001" && restoredRouteSelection.selected?.target === "scene-003", `Reload did not restore the same walking target: ${JSON.stringify(restoredRouteSelection)}`);
     assert(restoredRouteSelection.sourceTitle === "Kitchen window" && restoredRouteSelection.targetTitle === "Hall entrance", `Stale draft scene names overrode the workspace project: ${JSON.stringify(restoredRouteSelection)}`);
     assert(!restoredRouteSelection.guidance.includes("Driveway view 10") && !restoredRouteSelection.runtimeTitles.includes("Driveway view 10"), `Step 4 still showed stale Driveway names after reload: ${JSON.stringify(restoredRouteSelection)}`);
+    await page.getByRole("button", { name: "Previous walking button" }).click();
+    await page.waitForFunction(() => {
+      const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot();
+      return document.body.dataset.editorStage === "links" &&
+        snapshot?.selected?.sceneId === "scene-001" &&
+        snapshot.selected.target === "scene-002";
+    });
     await page.getByRole("button", { name: "Back" }).click();
     await assertOneTask(page, "Choose the look");
     await page.getByRole("button", { name: "Continue" }).click();
@@ -694,6 +701,12 @@ async function main() {
     }
     await page.screenshot({ path: join(outputDir, "02-movements-desktop.png"), fullPage: true });
 
+    for (let guard = 0; guard < 8; guard += 1) {
+      const backLabel = await page.locator("#editorBack").textContent();
+      if (backLabel?.trim() === "Back") break;
+      await page.getByRole("button", { name: "Previous walking button" }).click();
+      await page.waitForTimeout(250);
+    }
     await page.getByRole("button", { name: "Back" }).click();
     await assertOneTask(page, "Choose the look");
     await page.getByRole("button", { name: "Continue" }).click();
@@ -701,8 +714,16 @@ async function main() {
     const confirmedAfterBack = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.positionConfirmed).length);
     assert(confirmedAfterBack === 4, "Back navigation lost saved movement points.");
     assert(await page.locator(".editor-walking-icon").count() >= 1, "Walking buttons do not use one consistent person icon.");
-    const pendingBeforeArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
-    assert(pendingBeforeArrival === 4, `Expected four first views, found ${pendingBeforeArrival}.`);
+    const arrivalReadinessBefore = await page.evaluate(() => {
+      const pendingHotspots = window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false);
+      return {
+        pendingRoutes: pendingHotspots.length,
+        pendingDestinations: new Set(pendingHotspots.map((hotspot) => hotspot.target)).size
+      };
+    });
+    const pendingBeforeArrival = arrivalReadinessBefore.pendingDestinations;
+    assert(arrivalReadinessBefore.pendingRoutes === 4, `Expected four pending incoming routes, found ${arrivalReadinessBefore.pendingRoutes}.`);
+    assert(pendingBeforeArrival === 3, `Repeated destinations must be reviewed once, found ${pendingBeforeArrival} destination views.`);
     await page.setViewportSize({ width: 390, height: 605 });
     await page.getByRole("button", { name: "Choose first views" }).click();
     await page.waitForTimeout(2_000);
@@ -754,8 +775,8 @@ async function main() {
         const hotspot = window.__TOUR_EDITOR_API.sceneById[selected.sceneId].hotspots[selected.hotspotIndex];
         return { source: selected.sceneId, hotspotIndex: selected.hotspotIndex, target: hotspot.target };
       });
-      const taskKey = `${route.source}::${route.target}`;
-      assert(!visitedArrivalTasks.has(taskKey), `First-view flow selected the same movement twice: ${taskKey}`);
+      const taskKey = route.target;
+      assert(!visitedArrivalTasks.has(taskKey), `First-view flow selected the same destination twice: ${taskKey}`);
       visitedArrivalTasks.add(taskKey);
       assert(typeof route.target === "string" && route.source !== route.target, `Movement has an invalid destination: ${JSON.stringify(route)}`);
       await openDestination.click();
@@ -794,7 +815,7 @@ async function main() {
         }, taskKey);
       }
     }
-    assert(visitedArrivalTasks.size === 3, `Repeated destinations should reuse a saved first view instead of asking again: ${visitedArrivalTasks.size}`);
+    assert(visitedArrivalTasks.size === pendingBeforeArrival, `Each destination should be reviewed once: ${visitedArrivalTasks.size}/${pendingBeforeArrival}`);
     const pendingAfterSharedArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
     assert(pendingAfterSharedArrival === 0, `Shared first views did not complete all routes: ${pendingAfterSharedArrival}`);
 
@@ -816,7 +837,24 @@ async function main() {
     await assertOneTask(page, "Check and publish");
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Build the tour" }).click();
-    await page.getByRole("link", { name: "Download web package" }).waitFor({ timeout: 180_000 });
+    try {
+      await page.getByRole("link", { name: "Download web package" }).waitFor({ timeout: 180_000 });
+    } catch (error) {
+      const diagnostics = await page.evaluate(async () => {
+        let releaseStatus = null;
+        try {
+          releaseStatus = await (await fetch("/__tour-editor/release-status?workspace=1", { cache: "no-store" })).json();
+        } catch (releaseError) {
+          releaseStatus = { error: releaseError.message };
+        }
+        return {
+          editorStatus: document.querySelector("#editorStatus")?.textContent,
+          releaseStatus,
+          releasePanelText: document.querySelector("#editorReleaseActions")?.textContent?.replace(/\s+/g, " ").trim()
+        };
+      });
+      throw new Error(`Timed out waiting for the web package link: ${JSON.stringify(diagnostics)}`, { cause: error });
+    }
     await page.screenshot({ path: join(outputDir, "04-publish-ready-mobile.png"), fullPage: true });
     await page.evaluate(() => window.__RAINDIGIT_STUDIO_DEBUG__.flush());
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);

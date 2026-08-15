@@ -962,6 +962,30 @@
     })));
   }
 
+  function arrivalDestinationTasks() {
+    const grouped = new Map();
+    for (const task of arrivalTasks()) {
+      const group = grouped.get(task.target) || {
+        representative: task,
+        pendingRepresentative: null,
+        incomingCount: 0,
+        pendingCount: 0
+      };
+      group.incomingCount += 1;
+      if (task.hotspot.arrivalConfirmed === false) {
+        group.pendingCount += 1;
+        if (!group.pendingRepresentative) group.pendingRepresentative = task;
+      }
+      grouped.set(task.target, group);
+    }
+    return [...grouped.entries()].map(([targetSceneId, group]) => ({
+      ...(group.pendingRepresentative || group.representative),
+      targetSceneId,
+      incomingCount: group.incomingCount,
+      pendingCount: group.pendingCount
+    }));
+  }
+
   function movementTasks() {
     return api.scenes.flatMap((scene) => scene.hotspots.map((hotspot, hotspotIndex) => ({
       scene,
@@ -1039,13 +1063,32 @@
     return updated.length;
   }
 
+  function saveDestinationArrivalView(targetSceneId, view) {
+    const target = api.sceneById[targetSceneId];
+    if (!target || !Number.isFinite(view.pitch) || !Number.isFinite(view.yaw) || !Number.isFinite(view.hfov)) return 0;
+    api.setSceneView(targetSceneId, view);
+    let updated = 0;
+    for (const task of arrivalTasks()) {
+      if (task.hotspot.target !== targetSceneId) continue;
+      if (!api.updateHotspotArrival(task.scene.id, task.hotspotIndex, view)) continue;
+      task.hotspot.arrivalConfirmed = true;
+      updated += 1;
+    }
+    studioLog("destination-arrival-view-saved", {
+      targetSceneId,
+      targetTitle: target.title,
+      incomingRoutes: updated,
+      view
+    }, true);
+    return updated;
+  }
+
   function pendingArrivalTasks() {
-    return arrivalTasks().filter((task) => task.hotspot.arrivalConfirmed === false);
+    return arrivalDestinationTasks().filter((task) => task.pendingCount > 0);
   }
 
   function arrivalTaskKey(task) {
-    const sceneId = task?.sceneId || task?.scene?.id;
-    return `${sceneId}::${task?.target || task?.hotspot?.target || task?.hotspotIndex}`;
+    return `target::${task?.targetSceneId || task?.target || task?.hotspot?.target || task?.sceneId || task?.scene?.id || task?.hotspotIndex}`;
   }
 
   function arrivalTaskFromRef(reference) {
@@ -1106,15 +1149,18 @@
 
   function selectedArrivalTask() {
     if (!state.selected) {
-      const total = state.arrivalQueueTotal || arrivalTasks().length;
+      const total = state.arrivalQueueTotal || arrivalDestinationTasks().length;
       return { task: null, index: -1, total };
     }
-    const tasks = arrivalTasks();
+    const tasks = arrivalDestinationTasks();
     const selected = selectedHotspot();
     const selectedReference = selected ? hotspotReference(selected.scene.id, selected.hotspotIndex) : state.selected;
-    const task = tasks.find((candidate) => sameHotspotReference(candidate, selectedReference)) || null;
-    const queueIndex = state.arrivalQueue.findIndex((reference) => sameHotspotReference(reference, selectedReference));
-    const index = queueIndex >= 0 ? queueIndex : tasks.findIndex((candidate) => sameHotspotReference(candidate, selectedReference));
+    const selectedTarget = selected?.hotspot?.target || state.selected?.target;
+    const task = tasks.find((candidate) => sameHotspotReference(candidate, selectedReference))
+      || tasks.find((candidate) => candidate.target === selectedTarget)
+      || null;
+    const queueIndex = state.arrivalQueue.findIndex((reference) => arrivalTaskKey(reference) === arrivalTaskKey(selectedReference));
+    const index = queueIndex >= 0 ? queueIndex : tasks.findIndex((candidate) => candidate.target === selectedTarget);
     const total = state.arrivalQueueTotal || tasks.length;
     return { task, index, total };
   }
@@ -2637,7 +2683,7 @@
       ? `First view ${arrivalProgress.index + 1} of ${arrivalProgress.total}`
       : `First views ${arrivalProgress.total} of ${arrivalProgress.total}`;
     if (!selected) {
-      elements.ArrivalHelp.textContent = "Every first view is saved. Continue to check and publish the tour.";
+      elements.ArrivalHelp.textContent = "Every location opening view is saved. Continue to check and publish the tour.";
       elements.EditArrival.disabled = true;
       elements.EditArrival.hidden = true;
       elements.SaveArrival.hidden = true;
@@ -2649,14 +2695,14 @@
     if (state.arrival) {
       const target = api.sceneById[selected.hotspot.target];
       elements.ArrivalHelp.textContent = viewerReady
-        ? `${progressLabel}: now showing ${target?.title || "the destination"}. Rotate to the best view, then press Save first view.`
+        ? `${progressLabel}: now setting the one opening view for ${target?.title || "this location"}. Rotate to the best view, then press Save first view.`
         : `Loading ${target?.title || "the destination"}...`;
       elements.SaveArrival.disabled = !viewerReady || state.arrivalSaving;
       return;
     }
     const target = api.sceneById[selected.hotspot.target];
     elements.ArrivalHelp.textContent = viewerReady
-      ? `${progressLabel}: from ${selected.scene.title} to ${target?.title || "the destination"}. Press Open destination, then choose what visitors should see first.`
+      ? `${progressLabel}: set one opening view for ${target?.title || "this location"}. It will be reused every time visitors arrive here.`
       : "Loading the source photo...";
     elements.EditArrival.textContent = `Open ${target?.title || "destination"}`;
     elements.SaveArrival.hidden = true;
@@ -2981,7 +3027,7 @@
   function releaseReadiness() {
     const hotspots = api.scenes.flatMap((scene) => scene.hotspots);
     const pendingPositions = hotspots.filter((hotspot) => hotspot.positionConfirmed === false).length;
-    const pendingArrivals = hotspots.filter((hotspot) => hotspot.arrivalConfirmed === false).length;
+    const pendingArrivals = pendingArrivalTasks().length;
     return { ready: pendingPositions === 0 && pendingArrivals === 0, pendingPositions, pendingArrivals };
   }
 
@@ -3558,7 +3604,7 @@
         return;
       }
       if (!await queueDraftSave("all-walking-buttons-placed")) return;
-      const nextArrival = findPendingHotspot("arrivalConfirmed");
+      const nextArrival = pendingArrivalTasks()[0];
       if (nextArrival) {
         resetArrivalQueue();
         focusNextArrivalTask("Open the destination and choose its first view");
@@ -3621,28 +3667,21 @@
     state.arrivalSaving = true;
     elements.SaveArrival.disabled = true;
     setStatus("Saving first view...");
-    if (selected) selected.hotspot.arrivalConfirmed = true;
-    const arrivalHotspotIndex = resolveHotspotIndex(originSceneId, state.arrival);
-    if (arrivalHotspotIndex < 0) {
-      state.arrivalSaving = false;
-      setStatus("Could not find this first-view task");
-      renderArrivalPanel(currentScene());
-      return;
-    }
-    const updated = api.updateHotspotArrival(originSceneId, arrivalHotspotIndex, {
+    const targetSceneId = selected?.hotspot?.target;
+    const view = {
       pitch: roundCoordinate(api.viewer.getPitch()),
       yaw: roundCoordinate(api.viewer.getYaw()),
       hfov: roundCoordinate(api.viewer.getHfov())
-    });
+    };
+    const updated = saveDestinationArrivalView(targetSceneId, view);
     if (!updated) {
       state.arrivalSaving = false;
       setStatus("Could not save this first view");
       renderArrivalPanel(currentScene());
       return;
     }
-    const inheritedCount = propagateArrivalViewsByTarget();
     state.arrival = null;
-    if (!await queueDraftSave(inheritedCount ? "arrival-view-saved-with-shared-destinations" : "arrival-view-saved")) {
+    if (!await queueDraftSave("destination-arrival-view-saved")) {
       state.arrivalSaving = false;
       renderArrivalPanel(currentScene());
       return;
