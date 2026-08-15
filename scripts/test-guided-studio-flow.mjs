@@ -43,7 +43,7 @@ async function waitForServer(baseUrl) {
   throw new Error("Timed out waiting for guided studio server.");
 }
 
-async function assertOneTask(page, heading) {
+async function assertOneTask(page, heading, options = {}) {
   await page.getByRole("heading", { name: heading }).waitFor();
   const primaryActions = await page.evaluate(() => {
     const active = document.querySelector(".editor-stage-panel:not([hidden])");
@@ -55,7 +55,8 @@ async function assertOneTask(page, heading) {
       .filter((element) => !element.hidden && !element.closest("[hidden]") && getComputedStyle(element).display !== "none")
       .map((element) => element.textContent.trim());
   });
-  assert(primaryActions.length <= 1, `${heading} exposes primary actions: ${primaryActions.join(" | ")}`);
+  const allowedPrimaryActions = options.allowedPrimaryActions || 1;
+  assert(primaryActions.length <= allowedPrimaryActions, `${heading} exposes primary actions: ${primaryActions.join(" | ")}`);
   const layout = await page.evaluate(() => {
     const viewport = document.documentElement.clientWidth;
     const footer = document.querySelector(".editor-panel__footer")?.getBoundingClientRect();
@@ -819,7 +820,7 @@ async function main() {
     const pendingAfterSharedArrival = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.arrivalConfirmed === false).length);
     assert(pendingAfterSharedArrival === 0, `Shared first views did not complete all routes: ${pendingAfterSharedArrival}`);
 
-    await assertOneTask(page, "Polish the preview");
+    await assertOneTask(page, "Final view and polish", { allowedPrimaryActions: 2 });
     const polishState = await page.evaluate(() => ({
       stage: document.body.dataset.editorStage,
       editButton: document.querySelector("#editorPolishEditToggle")?.textContent?.trim(),
@@ -827,12 +828,12 @@ async function main() {
       tourVisible: getComputedStyle(document.querySelector(".tour-shell")).visibility
     }));
     assert(polishState.stage === "polish", `Expected polish stage before publishing: ${JSON.stringify(polishState)}`);
-    assert(polishState.editButton === "Pencil edit", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
-    assert(polishState.saveViewButton?.startsWith("Save current first view"), `Polish first-view button is missing: ${JSON.stringify(polishState)}`);
+    assert(polishState.editButton === "Correct walking buttons", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
+    assert(polishState.saveViewButton === "Save this photo opening view", `Polish opening-view button is missing: ${JSON.stringify(polishState)}`);
     assert(polishState.tourVisible !== "hidden", `Polish stage must show the final tour preview: ${JSON.stringify(polishState)}`);
-    await page.getByRole("button", { name: "Pencil edit" }).click();
-    await page.getByRole("button", { name: "Finish pencil edit" }).waitFor();
-    await page.getByRole("button", { name: /Save current first view/ }).click();
+    await page.getByRole("button", { name: "Correct walking buttons" }).click();
+    await page.getByRole("button", { name: "Finish walking-button correction" }).waitFor();
+    await page.getByRole("button", { name: "Save this photo opening view" }).click();
     await page.getByRole("button", { name: "Publish" }).click();
     await assertOneTask(page, "Check and publish");
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });

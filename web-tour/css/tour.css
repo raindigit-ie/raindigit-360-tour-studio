@@ -1998,6 +1998,40 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
   margin-top: 0;
 }
 
+.editor-opening-view-card {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(229, 192, 101, 0.48);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(229, 192, 101, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(229, 192, 101, 0.12), rgba(105, 194, 163, 0.08)),
+    rgba(16, 15, 12, 0.88);
+}
+
+.editor-opening-view-card > span {
+  color: #e5c065;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.editor-opening-view-card > strong {
+  color: #fff9ec;
+  font-size: 19px;
+  line-height: 1.12;
+}
+
+.editor-opening-view-card > p {
+  margin: 0;
+  color: rgba(255, 249, 236, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .editor-polish-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

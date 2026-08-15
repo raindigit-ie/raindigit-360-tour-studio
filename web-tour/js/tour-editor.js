@@ -228,11 +228,16 @@
         </div>
       </section>
       <section class="editor-stage-panel" data-stage-panel="polish">
-        <div class="editor-step-heading"><span>Step 6</span><h2>Polish the preview</h2></div>
+        <div class="editor-step-heading"><span>Step 6</span><h2>Final view and polish</h2></div>
         <p class="editor-guidance" id="editorPolishHelp"></p>
-        <div class="editor-polish-actions">
-          <button class="editor-button" id="editorPolishEditToggle" type="button">Edit walking buttons</button>
-          <button class="editor-button" id="editorPolishSaveView" type="button">Save current first view</button>
+        <div class="editor-opening-view-card">
+          <span>Opening view</span>
+          <strong id="editorPolishOpeningTitle">Current photo</strong>
+          <p id="editorPolishOpeningHelp">Rotate the camera to the view this photo should open with, then save it.</p>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorPolishSaveView" type="button">Save this photo opening view</button>
+        </div>
+        <div class="editor-polish-actions" aria-label="Walking button corrections">
+          <button class="editor-button" id="editorPolishEditToggle" type="button">Correct walking buttons</button>
         </div>
         <div class="editor-hotspot-list editor-hotspot-list--polish" id="editorPolishHotspotList" aria-label="Walking buttons in this preview"></div>
       </section>
@@ -335,7 +340,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishEditToggle", "PolishSaveView", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -2470,19 +2475,12 @@
       hfov: roundCoordinate(api.viewer.getHfov())
     };
     api.setSceneView(scene.id, view);
-    let updated = 0;
-    api.scenes.forEach((source) => {
-      source.hotspots.forEach((hotspot, hotspotIndex) => {
-        if (hotspot.target !== scene.id) return;
-        hotspot.arrivalConfirmed = true;
-        if (api.updateHotspotArrival(source.id, hotspotIndex, view)) updated += 1;
-      });
-    });
-    await queueDraftSave("polish-first-view-saved");
+    const updated = saveDestinationArrivalView(scene.id, view);
+    await queueDraftSave("polish-opening-view-saved");
     setStatus(updated
-      ? `Saved this first view for ${updated} walking button${updated === 1 ? "" : "s"}`
-      : "Saved this room opening view");
-    studioLog("polish-first-view-saved", { sceneId: scene.id, updated, view }, true);
+      ? `Saved opening view for ${scene.title} and ${updated} incoming route${updated === 1 ? "" : "s"}`
+      : `Saved opening view for ${scene.title}`);
+    studioLog("polish-opening-view-saved", { sceneId: scene.id, updatedIncomingRoutes: updated, view }, true);
     renderPolishPanel(scene);
   }
 
@@ -2490,15 +2488,17 @@
     if (state.activeStage !== "polish") return;
     const selected = selectedHotspot();
     const incomingCount = api.scenes.reduce((total, source) => total + source.hotspots.filter((hotspot) => hotspot.target === scene.id).length, 0);
+    elements.PolishOpeningTitle.textContent = scene.title;
+    elements.PolishOpeningHelp.textContent = incomingCount
+      ? `This is the default camera direction for ${scene.title}. It also updates ${incomingCount} incoming walking route${incomingCount === 1 ? "" : "s"} that arrive here.`
+      : `This is the default camera direction for ${scene.title}.`;
     elements.PolishHelp.textContent = state.polishEditing
-      ? "Pencil mode is on. Drag a walking person if it needs a small correction, or rotate the photo and save the first view."
-      : "Walk through the tour like a visitor. Turn on pencil mode only when a marker needs a small correction.";
-    elements.PolishEditToggle.textContent = state.polishEditing ? "Finish pencil edit" : "Pencil edit";
+      ? "Walking-button correction is on. Drag a walking person if its position is wrong. The opening view can still be saved from the card above."
+      : "Walk through the tour like a visitor. Rotate the current photo and save its opening view when the first frame is wrong.";
+    elements.PolishEditToggle.textContent = state.polishEditing ? "Finish walking-button correction" : "Correct walking buttons";
     elements.PolishEditToggle.classList.toggle("is-active", state.polishEditing);
     elements.PolishSaveView.disabled = !api.viewer.isLoaded() || !state.viewerSettled || state.viewportSettling;
-    elements.PolishSaveView.textContent = incomingCount
-      ? `Save current first view (${incomingCount})`
-      : "Save current first view";
+    elements.PolishSaveView.textContent = "Save this photo opening view";
     elements.PolishHotspotList.replaceChildren();
     if (!scene.hotspots.length) {
       const empty = document.createElement("p");
