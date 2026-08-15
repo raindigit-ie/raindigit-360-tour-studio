@@ -2663,7 +2663,7 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
 .editor-room-board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(250px, 1fr);
+  grid-auto-columns: minmax(300px, 1fr);
   gap: 10px;
   overflow-x: auto;
   padding: 2px 2px 8px;
@@ -2696,17 +2696,83 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
 
 .editor-room-photo {
   display: grid;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
   border: 1px solid rgba(255, 249, 236, 0.14);
-  border-radius: 4px;
-  background: #1d201e;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 236, 0.045), rgba(255, 249, 236, 0.018)),
+    #171a18;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
 }
 
 .editor-photo-meta-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
   gap: 8px;
+}
+
+.editor-room-photo__topline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.editor-room-photo__sequence {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(214, 175, 92, 0.68);
+  border-radius: 50%;
+  color: var(--accent);
+  background: radial-gradient(circle at 50% 28%, rgba(214, 175, 92, 0.18), rgba(14, 16, 15, 0.9));
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+}
+
+.editor-room-photo__context {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.editor-room-photo__context strong,
+.editor-room-photo__context small,
+.editor-room-photo__state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-room-photo__context strong {
+  color: rgba(255, 249, 236, 0.74);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.editor-room-photo__context small {
+  color: #fff9ec;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.editor-room-photo__state {
+  max-width: 92px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 249, 236, 0.14);
+  border-radius: 999px;
+  color: rgba(255, 249, 236, 0.74);
+  background: rgba(14, 16, 15, 0.72);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .editor-room-photo.is-selected {
@@ -2747,25 +2813,29 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
   display: block;
   width: 100%;
   aspect-ratio: 2 / 1;
-  border-radius: 3px;
+  border-radius: 8px;
   object-fit: cover;
 }
 
 .editor-room-photo__select span {
   position: absolute;
-  left: 120px;
-  bottom: 6px;
-  padding: 4px 6px;
-  border-radius: 3px;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 249, 236, 0.14);
+  border-radius: 999px;
   background: rgba(14, 16, 15, 0.86);
-  font-size: 9px;
-  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .editor-room-photo__select em {
   position: absolute;
-  left: 6px;
-  top: 6px;
+  left: 8px;
+  top: 8px;
   max-width: calc(100% - 96px);
   padding: 4px 6px;
   border: 1px solid rgba(255, 249, 236, 0.18);
@@ -2793,25 +2863,40 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
 }
 
 .editor-room-photo__move-controls {
-  position: absolute;
-  left: 6px;
-  bottom: 6px;
-  display: flex;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.editor-room-photo__move-controls > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  min-width: 0;
+}
+
+.editor-room-photo__move-controls span {
+  grid-column: 1 / -1;
+  color: rgba(255, 249, 236, 0.56);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .editor-room-photo__move-controls button {
-  width: 24px;
-  height: 28px;
+  min-width: 0;
+  min-height: 32px;
+  padding-inline: 7px;
   border: 1px solid rgba(214, 175, 92, 0.78);
-  border-radius: 4px;
+  border-radius: 999px;
   color: #fff9ec;
-  background: rgba(14, 16, 15, 0.9);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+  background: rgba(14, 16, 15, 0.78);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
 }
 
 .editor-room-photo__move-controls button:hover,
@@ -2828,8 +2913,8 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
 
 .editor-card-actions {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 8px;
+  right: 8px;
   display: flex;
   gap: 5px;
   align-items: center;
@@ -2837,9 +2922,9 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
 
 .editor-card-preview,
 .editor-card-remove {
-  min-height: 28px;
-  padding: 0 8px;
-  border-radius: 4px;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 999px;
   color: #fff9ec;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
   cursor: pointer;

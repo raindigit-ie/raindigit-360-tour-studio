@@ -1663,6 +1663,9 @@
       });
       const photoList = column.querySelector(".editor-room-column__photos");
       roomScenes.forEach((scene, roomSceneIndex) => {
+        const globalSceneIndex = project.scenes.findIndex((candidate) => candidate.id === scene.id);
+        const sequenceLabel = String(globalSceneIndex + 1).padStart(2, "0");
+        const roomSequenceLabel = String(roomSceneIndex + 1).padStart(2, "0");
         const stats = sceneRouteStats(project, scene);
         const card = document.createElement("article");
         card.className = `editor-room-photo${state.roomPlanSceneId === scene.id ? " is-selected" : ""}${stats.connected ? " is-linked" : " is-unlinked"}`;
@@ -1684,11 +1687,15 @@
           roomPointerDrag = null;
           moveSceneToRoomPosition(event.dataTransfer.getData("text/plain"), room.id, scene.id);
         });
-        card.innerHTML = `<div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span><em></em></button><div class="editor-room-photo__move-controls"><button type="button" data-space-direction="-1" aria-label="Move ${scene.title} to previous space">←</button><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">↑</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">↓</button><button type="button" data-space-direction="1" aria-label="Move ${scene.title} to next space">→</button></div><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div>`;
+        card.innerHTML = `<div class="editor-room-photo__topline"><span class="editor-room-photo__sequence">${sequenceLabel}</span><span class="editor-room-photo__context"><strong>${roomSequenceLabel} in space</strong><small data-scene-room-for="${scene.id}"></small></span><span class="editor-room-photo__state"></span></div><div class="editor-room-photo__media"><button type="button" class="editor-room-photo__select"><img alt="" /><span>Choose routes</span><em></em></button><div class="editor-card-actions"><button class="editor-card-preview" type="button">Preview</button><button class="editor-card-remove" type="button">Remove</button></div></div><label class="editor-field editor-field--stacked editor-room-photo__name"><span>Photo name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-photo-meta-grid"><label class="editor-field editor-field--stacked"><span>Space</span><select></select></label><label class="editor-field editor-field--stacked"><span>Floor</span><select></select></label></div><div class="editor-room-photo__move-controls" aria-label="Photo order controls"><div><span>Order</span><button type="button" data-order-direction="-1" aria-label="Move ${scene.title} up">Earlier</button><button type="button" data-order-direction="1" aria-label="Move ${scene.title} down">Later</button></div><div><span>Space</span><button type="button" data-space-direction="-1" aria-label="Move ${scene.title} to previous space">Prev</button><button type="button" data-space-direction="1" aria-label="Move ${scene.title} to next space">Next</button></div></div>`;
         card.querySelector("img").src = workspaceAsset(scene.thumb);
+        const contextRoom = card.querySelector(`[data-scene-room-for="${scene.id}"]`);
+        contextRoom.textContent = scene.spaceLabel || room.label;
         const choose = card.querySelector(".editor-room-photo__select");
         const badge = choose.querySelector("em");
-        badge.textContent = routeStatusText(project, scene, { selectedSource: state.roomPlanSceneId === scene.id });
+        const statusText = routeStatusText(project, scene, { selectedSource: state.roomPlanSceneId === scene.id });
+        badge.textContent = state.roomPlanSceneId === scene.id ? "Selected" : "Routes";
+        card.querySelector(".editor-room-photo__state").textContent = statusText;
         choose.dataset.sceneChooseFor = scene.id;
         choose.setAttribute("aria-label", `Choose routes from ${scene.title}`);
         choose.draggable = false;
