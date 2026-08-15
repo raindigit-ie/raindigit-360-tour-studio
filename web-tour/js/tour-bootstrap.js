@@ -10,6 +10,18 @@
   const endpoint = editing || framePicking ? "__tour-editor" : previewing ? "__tour-preview" : null;
   const workspace = endpoint && query.get("workspace") === "1";
 
+  function enableCanvasCaptureBuffer() {
+    if (HTMLCanvasElement.prototype.__rainDigitCaptureBuffer) return;
+    const nativeGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function getContextWithCaptureBuffer(type, attributes) {
+      if (type === "webgl" || type === "experimental-webgl") {
+        return nativeGetContext.call(this, type, { ...(attributes || {}), preserveDrawingBuffer: true });
+      }
+      return nativeGetContext.call(this, type, attributes);
+    };
+    Object.defineProperty(HTMLCanvasElement.prototype, "__rainDigitCaptureBuffer", { value: true });
+  }
+
   function loadScript(source) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -21,6 +33,7 @@
   }
 
   (async () => {
+    enableCanvasCaptureBuffer();
     await loadScript("js/pannellum.js?v=20260802-wizard-v1");
     if (framePicking) {
       await loadScript("js/frame-picker.js?v=20260811-frame-picker-v1");
@@ -29,7 +42,7 @@
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");
-    await loadScript("js/tour.js?v=20260815-capture-view-v1");
+    await loadScript("js/tour.js?v=20260815-capture-view-v2");
     if (editing) {
       await loadScript("js/generated/editor-walking-button-list.js?v=20260810-svelte-route-thumbs-v1");
       await loadScript("js/tour-editor.js?v=20260815-polish-stage-resize-v1");
