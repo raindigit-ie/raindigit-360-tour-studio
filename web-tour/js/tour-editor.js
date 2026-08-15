@@ -1383,6 +1383,51 @@
     renderRoomsPanel();
   }
 
+  function reorderScenesByRoomOrder(project = state.workspaceProject) {
+    if (!project?.scenes?.length) return;
+    const roomOrder = new Map(projectRooms(project).map((room, index) => [room.id, index]));
+    project.scenes = project.scenes
+      .map((scene, index) => ({ scene, index }))
+      .sort((left, right) => {
+        const leftRoom = roomOrder.get(left.scene.space) ?? Number.MAX_SAFE_INTEGER;
+        const rightRoom = roomOrder.get(right.scene.space) ?? Number.MAX_SAFE_INTEGER;
+        return leftRoom - rightRoom || left.index - right.index;
+      })
+      .map(({ scene }) => scene);
+  }
+
+  function moveRoomWithinOrder(roomId, direction) {
+    const project = state.workspaceProject;
+    const rooms = projectRooms(project);
+    const index = rooms.findIndex((room) => room.id === roomId);
+    if (!project || index < 0 || ![-1, 1].includes(direction)) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= rooms.length) return;
+    [rooms[index], rooms[targetIndex]] = [rooms[targetIndex], rooms[index]];
+    reorderScenesByRoomOrder(project);
+    refreshAutoSceneTitles(project);
+    const moved = rooms[targetIndex];
+    setStatus(`${moved.label} moved ${direction < 0 ? "earlier" : "later"} in the tour`);
+    studioLog("room-order-changed", { roomId, direction: direction < 0 ? "earlier" : "later", index: targetIndex });
+    queueWorkspaceStructureSave("room-order-changed");
+    renderRoomsPanel();
+  }
+
+  function moveFloorWithinOrder(floorId, direction) {
+    const project = state.workspaceProject;
+    const floors = projectFloors(project);
+    const index = floors.findIndex((floor) => floor.id === floorId);
+    if (!project || index < 0 || ![-1, 1].includes(direction)) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= floors.length) return;
+    [floors[index], floors[targetIndex]] = [floors[targetIndex], floors[index]];
+    const moved = floors[targetIndex];
+    setStatus(`${moved.label} moved ${direction < 0 ? "earlier" : "later"} in the floor list`);
+    studioLog("floor-order-changed", { floorId, direction: direction < 0 ? "earlier" : "later", index: targetIndex });
+    queueWorkspaceStructureSave("floor-order-changed");
+    renderRoomsPanel();
+  }
+
   function moveSceneToRoomPosition(sceneId, roomId, beforeSceneId = null) {
     const project = state.workspaceProject;
     const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
@@ -1558,12 +1603,15 @@
     elements.FloorCount.value = String(floors.length);
 
     for (const [roomIndex, room] of rooms.entries()) {
+      const roomScenes = project.scenes.filter((scene) => scene.space === room.id);
+      const sequenceLabel = String(roomIndex + 1).padStart(2, "0");
       const field = document.createElement("div");
-      field.className = "editor-room-name-card";
-      field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Space name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Quick name</span><select></select></label><button class="editor-small-danger" type="button">Remove</button>`;
+      field.className = "editor-room-name-card editor-structure-card";
+      field.dataset.roomId = room.id;
+      field.innerHTML = `<div class="editor-structure-card__meta"><span>${sequenceLabel}</span><div><strong>Space ${sequenceLabel}</strong><small>${roomScenes.length} photo${roomScenes.length === 1 ? "" : "s"}</small></div></div><label class="editor-field editor-field--stacked"><span>Space name</span><input type="text" maxlength="80" autocomplete="off" /></label><label class="editor-field editor-field--stacked"><span>Quick name</span><select></select></label><div class="editor-structure-card__actions"><div class="editor-structure-card__move" aria-label="Space order controls"><span>Order</span><button type="button" data-room-order-direction="-1" aria-label="Move ${room.label} earlier">Earlier</button><button type="button" data-room-order-direction="1" aria-label="Move ${room.label} later">Later</button></div><button class="editor-small-danger editor-small-danger--text" data-room-remove type="button">Remove</button></div>`;
       const input = field.querySelector("input");
       const templateSelect = field.querySelector("select");
-      const remove = field.querySelector("button");
+      const remove = field.querySelector("[data-room-remove]");
       input.value = room.label;
       input.setAttribute("aria-label", `Name for ${room.label}`);
       templateSelect.setAttribute("aria-label", `Quick name for ${room.label}`);
@@ -1571,6 +1619,14 @@
       spaceNameTemplates.forEach(({ label, hint }) => templateSelect.add(new Option(`${label} - ${hint}`, label)));
       remove.setAttribute("aria-label", `Remove ${room.label}`);
       remove.disabled = rooms.length <= 1;
+      field.querySelectorAll("[data-room-order-direction]").forEach((button) => {
+        const direction = Number(button.dataset.roomOrderDirection);
+        button.disabled = direction < 0 ? roomIndex === 0 : roomIndex === rooms.length - 1;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          moveRoomWithinOrder(room.id, direction);
+        });
+      });
       const commitRoomName = (rerender) => {
         const nextLabel = uniqueRoomLabel(project, input.value, room.id);
         if (!nextLabel) {
@@ -1606,16 +1662,26 @@
       elements.RoomList.appendChild(field);
     }
 
-    for (const floor of floors) {
+    for (const [floorIndex, floor] of floors.entries()) {
+      const floorScenes = project.scenes.filter((scene) => scene.floor === floor.id);
+      const sequenceLabel = String(floorIndex + 1).padStart(2, "0");
       const field = document.createElement("div");
-      field.className = "editor-floor-name-card";
-      field.innerHTML = `<label class="editor-field editor-field--stacked"><span>Floor name</span><input type="text" maxlength="80" autocomplete="off" /></label><button class="editor-small-danger" type="button">Remove</button>`;
+      field.className = "editor-floor-name-card editor-structure-card";
+      field.innerHTML = `<div class="editor-structure-card__meta"><span>${sequenceLabel}</span><div><strong>Floor ${sequenceLabel}</strong><small>${floorScenes.length} photo${floorScenes.length === 1 ? "" : "s"}</small></div></div><label class="editor-field editor-field--stacked"><span>Floor name</span><input type="text" maxlength="80" autocomplete="off" /></label><div class="editor-structure-card__actions"><div class="editor-structure-card__move" aria-label="Floor order controls"><span>Order</span><button type="button" data-floor-order-direction="-1" aria-label="Move ${floor.label} earlier">Earlier</button><button type="button" data-floor-order-direction="1" aria-label="Move ${floor.label} later">Later</button></div><button class="editor-small-danger editor-small-danger--text" data-floor-remove type="button">Remove</button></div>`;
       const input = field.querySelector("input");
-      const remove = field.querySelector("button");
+      const remove = field.querySelector("[data-floor-remove]");
       input.value = floor.label;
       input.setAttribute("aria-label", `Name for ${floor.label}`);
       remove.setAttribute("aria-label", `Remove ${floor.label}`);
       remove.disabled = floors.length <= 1;
+      field.querySelectorAll("[data-floor-order-direction]").forEach((button) => {
+        const direction = Number(button.dataset.floorOrderDirection);
+        button.disabled = direction < 0 ? floorIndex === 0 : floorIndex === floors.length - 1;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          moveFloorWithinOrder(floor.id, direction);
+        });
+      });
       const commitFloorName = (rerender) => {
         const nextLabel = input.value.trim();
         if (!nextLabel) {
