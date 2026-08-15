@@ -849,6 +849,26 @@ async function main() {
     assert(polishState.editButton === "Correct walking buttons", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
     assert(polishState.saveViewButton === "Save this photo opening view", `Polish opening-view button is missing: ${JSON.stringify(polishState)}`);
     assert(polishState.tourVisible !== "hidden", `Polish stage must show the final tour preview: ${JSON.stringify(polishState)}`);
+    await page.getByRole("button", { name: "Hide panel for final view" }).click();
+    await page.waitForFunction(() => !document.body.classList.contains("is-editor-open"));
+    const fullViewLayout = await page.evaluate(() => {
+      const shell = document.querySelector(".tour-shell")?.getBoundingClientRect();
+      const panel = document.querySelector(".editor-panel");
+      return {
+        stage: document.body.dataset.editorStage,
+        editorOpen: document.body.classList.contains("is-editor-open"),
+        shellWidth: Math.round(shell?.width || 0),
+        shellHeight: Math.round(shell?.height || 0),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        panelDisplay: panel ? getComputedStyle(panel).display : null
+      };
+    });
+    assert(fullViewLayout.stage === "polish" && !fullViewLayout.editorOpen, `Polish full-view toggle left the editor open: ${JSON.stringify(fullViewLayout)}`);
+    assert(fullViewLayout.shellWidth >= fullViewLayout.viewportWidth - 2 && fullViewLayout.shellHeight >= fullViewLayout.viewportHeight - 2, `Polish full-view toggle did not restore a full-size viewer: ${JSON.stringify(fullViewLayout)}`);
+    assert(fullViewLayout.panelDisplay === "none", `Polish full-view toggle did not hide the panel: ${JSON.stringify(fullViewLayout)}`);
+    await page.getByRole("button", { name: "Show tour studio" }).click();
+    await page.waitForFunction(() => document.body.classList.contains("is-editor-open") && document.body.dataset.editorStage === "polish");
     const polishDragSceneId = await page.evaluate(async () => {
       const api = window.__TOUR_EDITOR_API;
       const scene = api.scenes.find((candidate) => candidate.hotspots.length > 0);
@@ -877,7 +897,7 @@ async function main() {
       const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
       const selected = snapshot.selected;
       const hotspot = window.__TOUR_EDITOR_API.scenes.find((scene) => scene.id === selected.sceneId).hotspots[selected.hotspotIndex];
-      window.__TOUR_EDITOR_API.viewer.lookAt(hotspot.pitch, hotspot.yaw - 40, 94, false);
+      window.__TOUR_EDITOR_API.viewer.lookAt(hotspot.pitch, hotspot.yaw, 94, false);
       return {
         sceneId: selected.sceneId,
         hotspotIndex: selected.hotspotIndex,
@@ -886,6 +906,34 @@ async function main() {
         yaw: hotspot.yaw
       };
     });
+    await page.waitForTimeout(200);
+    const polishAnchorGeometry = await page.evaluate(() => {
+      const viewer = document.querySelector("#panorama")?.getBoundingClientRect();
+      const anchor = document.querySelector(".nav-hotspot-anchor.is-editor-selected")?.getBoundingClientRect();
+      const marker = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot")?.getBoundingClientRect();
+      return {
+        viewer: viewer && {
+          centerX: Math.round((viewer.left + viewer.width / 2) * 10) / 10,
+          centerY: Math.round((viewer.top + viewer.height / 2) * 10) / 10
+        },
+        anchor: anchor && {
+          width: Math.round(anchor.width * 10) / 10,
+          height: Math.round(anchor.height * 10) / 10,
+          centerX: Math.round((anchor.left + anchor.width / 2) * 10) / 10,
+          centerY: Math.round((anchor.top + anchor.height / 2) * 10) / 10
+        },
+        marker: marker && {
+          width: Math.round(marker.width * 10) / 10,
+          height: Math.round(marker.height * 10) / 10,
+          centerX: Math.round((marker.left + marker.width / 2) * 10) / 10,
+          centerY: Math.round((marker.top + marker.height / 2) * 10) / 10
+        }
+      };
+    });
+    assert(polishAnchorGeometry.anchor?.width >= 40 && polishAnchorGeometry.anchor?.height >= 40, `Selected walking button anchor is still zero-sized: ${JSON.stringify(polishAnchorGeometry)}`);
+    assertNear(polishAnchorGeometry.marker.centerX, polishAnchorGeometry.viewer.centerX, 12, "Selected walking button is horizontally mis-anchored when centred");
+    assertNear(polishAnchorGeometry.marker.centerY, polishAnchorGeometry.viewer.centerY, 12, "Selected walking button is vertically mis-anchored when centred");
+    await page.evaluate(({ pitch, yaw }) => window.__TOUR_EDITOR_API.viewer.lookAt(pitch, yaw - 40, 94, false), polishBeforeDrag);
     await page.waitForTimeout(200);
     await dispatchElementDrag(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 48, 18);
     await page.waitForFunction(() => document.querySelector("#editorStatus")?.textContent?.includes("Saved locally"));

@@ -236,6 +236,7 @@
           <strong id="editorPolishOpeningTitle">Current photo</strong>
           <p id="editorPolishOpeningHelp">Rotate the camera to the view this photo should open with, then save it.</p>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorPolishSaveView" type="button">Save this photo opening view</button>
+          <button class="editor-button editor-button--wide" id="editorPolishFocusToggle" type="button">Hide panel for final view</button>
         </div>
         <div class="editor-polish-actions" aria-label="Walking button corrections">
           <button class="editor-button" id="editorPolishEditToggle" type="button">Correct walking buttons</button>
@@ -341,7 +342,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -533,6 +534,30 @@
 
   function studioUrl(path, workspace = workspaceMode) {
     return `${endpoint}/${path}${workspace ? "?workspace=1" : ""}`;
+  }
+
+  function resizeViewerAfterEditorLayoutChange(reason = "editor-layout-change") {
+    state.viewportSettling = true;
+    window.requestAnimationFrame(() => {
+      api.viewer.resize?.();
+      window.setTimeout(() => {
+        api.viewer.resize?.();
+        state.viewportSettling = false;
+        state.viewerSettled = Boolean(api.viewer.isLoaded());
+        renderStages();
+        studioLog("editor-layout-resized-viewer", {
+          reason,
+          editorOpen: document.body.classList.contains("is-editor-open")
+        }, true);
+      }, 220);
+    });
+  }
+
+  function setEditorOpen(open, reason = "editor-toggle") {
+    document.body.classList.toggle("is-editor-open", open);
+    editorToggle.setAttribute("aria-label", open ? "Hide tour studio" : "Show tour studio");
+    editorToggle.title = editorToggle.getAttribute("aria-label");
+    resizeViewerAfterEditorLayoutChange(reason);
   }
 
   function slugifyTourTitle(value) {
@@ -3889,11 +3914,9 @@
   elements.DownloadMultires.addEventListener("click", () => watchFinishedExport("multires-web-package"));
   elements.DownloadEmbed.addEventListener("click", () => watchFinishedExport("paste-in-html"));
   elements.DownloadZip.addEventListener("click", () => watchFinishedExport("zip"));
-  panel.querySelector("#editorClose").addEventListener("click", () => document.body.classList.remove("is-editor-open"));
+  panel.querySelector("#editorClose").addEventListener("click", () => setEditorOpen(false, "editor-close"));
   editorToggle.addEventListener("click", () => {
-    const isOpen = document.body.classList.toggle("is-editor-open");
-    editorToggle.setAttribute("aria-label", isOpen ? "Hide tour studio" : "Show tour studio");
-    editorToggle.title = editorToggle.getAttribute("aria-label");
+    setEditorOpen(!document.body.classList.contains("is-editor-open"), "editor-toggle");
   });
   panel.querySelector("#editorPreviousScene").addEventListener("click", () => moveScene(-1));
   panel.querySelector("#editorNextScene").addEventListener("click", () => moveScene(1));
@@ -3996,6 +4019,11 @@
     render();
   });
   elements.PolishSaveView.addEventListener("click", saveCurrentPolishView);
+  elements.PolishFocusToggle.addEventListener("click", () => {
+    setStatus("Full view on. Use the round studio button to bring the panel back.");
+    studioLog("polish-full-view-requested", { sceneId: api.viewer.getScene() }, true);
+    setEditorOpen(false, "polish-full-view");
+  });
   elements.OpenPolish.addEventListener("click", () => {
     logOperatorStep("open-polish-from-publish");
     setStage("polish");
