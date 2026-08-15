@@ -1499,6 +1499,7 @@
 
   function roomPlanDestinationGroups(project, source, selectedTargets) {
     const groups = {
+      sameSpace: [],
       suggested: [],
       unstarted: [],
       other: []
@@ -1508,7 +1509,9 @@
       const selected = selectedTargets.includes(target.id);
       const returnsToSource = plannedTargets(target).includes(source.id);
       const stats = sceneRouteStats(project, target);
-      if (isCurrentSource || selected || returnsToSource) {
+      if (target.space === source.space) {
+        groups.sameSpace.push(target);
+      } else if (isCurrentSource || selected || returnsToSource) {
         groups.suggested.push(target);
       } else if (!stats.connected) {
         groups.unstarted.push(target);
@@ -1517,7 +1520,8 @@
       }
     });
     return [
-      { key: "suggested", title: "Suggested", note: "Current, selected, or likely return routes.", scenes: groups.suggested },
+      { key: "same-space", title: "Same space", note: "Other camera points in this room stay together.", scenes: groups.sameSpace },
+      { key: "suggested", title: "Connected routes", note: "Selected, returning, or likely walking routes.", scenes: groups.suggested },
       { key: "unstarted", title: "Not linked yet", note: "Photos with no walking routes yet.", scenes: groups.unstarted },
       { key: "other", title: "Other photos", note: "Already used elsewhere.", scenes: groups.other }
     ].filter((group) => group.scenes.length);
