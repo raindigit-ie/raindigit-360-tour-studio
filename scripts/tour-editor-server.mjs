@@ -40,6 +40,7 @@ const maxUploadBytes = 256 * 1024 * 1024;
 const maxFloorplanBytes = 15 * 1024 * 1024;
 const maxProjectBytes = 512 * 1024 * 1024;
 const maxStudioLogBytes = 5 * 1024 * 1024;
+let activeReleaseBuild = null;
 
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Use a valid local port between 1024 and 65535.");
@@ -1160,29 +1161,41 @@ const server = createServer(async (request, response) => {
         replyJson(response, 400, { error: "Use a short web name made from lowercase letters, numbers and hyphens." });
         return;
       }
-      const { removed } = await pruneUnreachableWorkspaceScenes(project);
-      const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
-      await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--embed", releaseEmbedPath, "--replace"], {
-        cwd: projectRoot,
-        maxBuffer: 4 * 1024 * 1024,
-        timeout: 10 * 60 * 1000
-      });
-      const multiresBuilder = join(projectRoot, "scripts", "build-multires-release.mjs");
-      const { stdout: multiresOutput } = await execFileAsync(process.execPath, [
-        multiresBuilder,
-        "--workspace", workspaceRoot,
-        "--output", releaseMultiresRoot,
-        "--zip", releaseMultiresZipPath,
-        "--slug", requestedSlug,
-        "--replace"
-      ], {
-        cwd: projectRoot,
-        maxBuffer: 8 * 1024 * 1024,
-        timeout: 30 * 60 * 1000
-      });
-      const multiresMetadata = JSON.parse(multiresOutput);
-      await writeJsonAtomic(releaseMultiresMetadataPath, multiresMetadata);
-      replyJson(response, 200, { ...await releaseStatus(), prunedScenes: removed.map((scene) => ({ id: scene.id, title: scene.title })) });
+      if (activeReleaseBuild) {
+        replyJson(response, 409, { error: "A tour build is already running. Wait for it to finish before starting another build." });
+        return;
+      }
+      activeReleaseBuild = (async () => {
+        const { removed } = await pruneUnreachableWorkspaceScenes(project);
+        const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
+        await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--embed", releaseEmbedPath, "--replace"], {
+          cwd: projectRoot,
+          maxBuffer: 4 * 1024 * 1024,
+          timeout: 10 * 60 * 1000
+        });
+        const multiresBuilder = join(projectRoot, "scripts", "build-multires-release.mjs");
+        const { stdout: multiresOutput } = await execFileAsync(process.execPath, [
+          multiresBuilder,
+          "--workspace", workspaceRoot,
+          "--output", releaseMultiresRoot,
+          "--zip", releaseMultiresZipPath,
+          "--slug", requestedSlug,
+          "--replace"
+        ], {
+          cwd: projectRoot,
+          maxBuffer: 8 * 1024 * 1024,
+          timeout: 30 * 60 * 1000
+        });
+        const multiresMetadata = JSON.parse(multiresOutput);
+        await writeJsonAtomic(releaseMultiresMetadataPath, multiresMetadata);
+        return { status: await releaseStatus(), removed };
+      })();
+      try {
+        const { status, removed } = await activeReleaseBuild;
+        replyJson(response, 200, { ...status, prunedScenes: removed.map((scene) => ({ id: scene.id, title: scene.title })) });
+      } finally {
+        activeReleaseBuild = null;
+      }
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-status` && request.method === "GET") {
