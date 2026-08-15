@@ -44,6 +44,7 @@
   const roundCoordinate = (value) => Math.round(value * 10) / 10;
   const hotspotDragStartDistance = 10;
   const studioDefaultHfov = 94;
+  const viewerStageSet = new Set(["light", "links", "arrival", "polish"]);
   const state = {
     activeStage: hasSessionStage ? restoredStage : "start",
     selected: null,
@@ -456,6 +457,7 @@
       },
       selected: state.selected ? { ...state.selected } : null,
       placement: state.placement ? { ...state.placement } : null,
+      viewportSettling: state.viewportSettling,
       arrival: state.arrival ? { ...state.arrival } : null,
       arrivalQueue: {
         index: state.arrivalQueueIndex,
@@ -551,6 +553,11 @@
         }, true);
       }, 220);
     });
+  }
+
+  function resizeViewerForStage(reason = "stage-viewer-layout") {
+    if (!viewerStageSet.has(state.activeStage)) return;
+    resizeViewerAfterEditorLayoutChange(reason);
   }
 
   function setEditorOpen(open, reason = "editor-toggle") {
@@ -959,6 +966,7 @@
     if (stage !== "polish") state.polishEditing = false;
     studioLog("stage-change", { from: previousStage, to: stage }, true);
     render();
+    resizeViewerForStage(`stage-${stage}`);
     scheduleUiStateSave(`stage-${stage}`);
   }
 
@@ -4314,6 +4322,7 @@
           ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
         : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
+    resizeViewerForStage(`startup-${state.activeStage}`);
     if (plannedPlacesChanged || sharedArrivalChanged || state.routeReferenceMigrated || metadataChanged) {
       queueDraftSave(sharedArrivalChanged
         ? "shared-arrival-views-applied"

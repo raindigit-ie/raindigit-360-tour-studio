@@ -849,6 +849,32 @@ async function main() {
     assert(polishState.editButton === "Correct walking buttons", `Polish edit button is unclear: ${JSON.stringify(polishState)}`);
     assert(polishState.saveViewButton === "Save this photo opening view", `Polish opening-view button is missing: ${JSON.stringify(polishState)}`);
     assert(polishState.tourVisible !== "hidden", `Polish stage must show the final tour preview: ${JSON.stringify(polishState)}`);
+    if (await page.locator(".editor-polish-row").count()) {
+      await page.locator(".editor-polish-row").first().click();
+      await page.waitForFunction(() => window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot().selected?.sceneId === window.__TOUR_EDITOR_API.viewer.getScene());
+      await page.waitForFunction(() => !window.__RAINDIGIT_STUDIO_DEBUG__?.snapshot().viewportSettling, null, { timeout: 5000 });
+      const openPanelProjection = await page.evaluate(() => {
+        const selected = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot().selected;
+        const hotspot = window.__TOUR_EDITOR_API.sceneById[selected.sceneId].hotspots[selected.hotspotIndex];
+        window.__TOUR_EDITOR_API.viewer.lookAt(hotspot.pitch, hotspot.yaw, 94, false);
+        return new Promise((resolve) => {
+          window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+            const viewer = document.querySelector("#panorama")?.getBoundingClientRect();
+            const marker = document.querySelector(".nav-hotspot-anchor.is-editor-selected .nav-hotspot")?.getBoundingClientRect();
+            resolve({
+              editorOpen: document.body.classList.contains("is-editor-open"),
+              viewerCenterX: Math.round((viewer.left + viewer.width / 2) * 10) / 10,
+              viewerCenterY: Math.round((viewer.top + viewer.height / 2) * 10) / 10,
+              markerCenterX: Math.round((marker.left + marker.width / 2) * 10) / 10,
+              markerCenterY: Math.round((marker.top + marker.height / 2) * 10) / 10
+            });
+          }));
+        });
+      });
+      assert(openPanelProjection.editorOpen === true, `Polish projection regression must test with the panel open: ${JSON.stringify(openPanelProjection)}`);
+      assertNear(openPanelProjection.markerCenterX, openPanelProjection.viewerCenterX, 12, "Polish open-panel marker is horizontally mis-projected before full view");
+      assertNear(openPanelProjection.markerCenterY, openPanelProjection.viewerCenterY, 12, "Polish open-panel marker is vertically mis-projected before full view");
+    }
     await page.getByRole("button", { name: "Correct in full final view" }).click();
     await page.waitForFunction(() => !document.body.classList.contains("is-editor-open"));
     const fullViewLayout = await page.evaluate(() => {
