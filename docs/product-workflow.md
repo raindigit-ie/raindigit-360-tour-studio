@@ -89,6 +89,9 @@ The studio is local-first. It keeps source material and the editable workspace o
    non-indexable and must not mutate production, R2, DNS or `current.json`.
 8. Production release is a separate, explicitly approved action. Any requested
    change invalidates the previous review and requires a fresh integrated build.
+   A bare request to “deploy” or “publish” means the `review-*` deployment in
+   step 7, never the main Rain Digit address. Production requires a later,
+   explicit approval after the integrated preview has been inspected.
 
 ## Save, conflict and recovery contract
 

@@ -25,3 +25,6 @@ Mandatory integrated review:
 - Share only an isolated `review-*` Pages preview before approval.
 - Do not upload to production R2, change DNS or promote `current.json` before
   explicit approval of that exact integrated artefact.
+- Interpret a bare “deploy” or “publish” request as an integrated `review-*`
+  deployment only. Promote to `raindigit.ie` only in a later turn where the
+  user explicitly approves production/the main address after inspecting it.
