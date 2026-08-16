@@ -2,11 +2,12 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
+import { buildFacePyramid, MEDIA_RECIPE_VERSION, mediaWorkerMetadata, projectCubeFace } from "./lib/media-pyramid.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -17,6 +18,8 @@ function parseArguments(argv) {
     workspace: join(projectRoot, "studio-workspace"),
     output: join(projectRoot, "release-multires"),
     zip: null,
+    cacheDir: null,
+    progressFile: null,
     slug: null,
     rollbackVersion: null,
     runtimeTemplate: null,
@@ -31,6 +34,8 @@ function parseArguments(argv) {
     if (argument === "--workspace") options.workspace = resolve(argv[++index] || "");
     else if (argument === "--output") options.output = resolve(argv[++index] || "");
     else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
+    else if (argument === "--cache-dir") options.cacheDir = resolve(argv[++index] || "");
+    else if (argument === "--progress-file") options.progressFile = resolve(argv[++index] || "");
     else if (argument === "--slug") options.slug = String(argv[++index] || "");
     else if (argument === "--rollback-version") options.rollbackVersion = String(argv[++index] || "");
     else if (argument === "--runtime-template") options.runtimeTemplate = resolve(argv[++index] || "");
@@ -40,7 +45,7 @@ function parseArguments(argv) {
     else if (argument === "--jpeg-quality") options.jpegQuality = Number(argv[++index]);
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug [--zip package.zip] [--rollback-version version] [--runtime-template release-root] [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]");
+      console.log("Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version version] [--runtime-template release-root] [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]");
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
   }
@@ -55,6 +60,14 @@ function parseArguments(argv) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function reportProgress(options, phase, percent, message, extra = {}) {
+  if (!options.progressFile) return;
+  const temporary = `${options.progressFile}.${process.pid}.tmp`;
+  await mkdir(dirname(options.progressFile), { recursive: true });
+  await writeFile(temporary, `${JSON.stringify({ phase, percent, message, updatedAt: new Date().toISOString(), ...extra })}\n`, "utf8");
+  await rename(temporary, options.progressFile);
 }
 
 async function run(command, arguments_, options = {}) {
@@ -93,17 +106,39 @@ async function walk(directory) {
   return output;
 }
 
+async function mapWithConcurrency(values, limit, worker) {
+  const output = new Array(values.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      output[index] = await worker(values[index], index);
+    }
+  }));
+  return output;
+}
+
 async function fileInventory(directory) {
-  const files = [];
-  for (const file of (await walk(directory)).sort()) {
+  const paths = (await walk(directory)).sort();
+  return mapWithConcurrency(paths, 32, async (file) => {
     const body = await readFile(file);
-    files.push({
+    return {
       path: relative(directory, file).split("\\").join("/"),
       bytes: body.byteLength,
       sha256: createHash("sha256").update(body).digest("hex")
-    });
-  }
-  return files;
+    };
+  });
+}
+
+async function fileSizeInventory(directory) {
+  const paths = (await walk(directory)).sort();
+  return mapWithConcurrency(paths, 32, async (file) => (
+    {
+      path: relative(directory, file).split("\\").join("/"),
+      bytes: (await stat(file)).size
+    }
+  ));
 }
 
 async function createZip(directory, zipPath) {
@@ -160,6 +195,68 @@ function maxLevel(size, tileSize) {
   let levels = Math.ceil(Math.log2(size / Math.min(tileSize, size))) + 1;
   if (levels > 1 && Math.floor(size / 2 ** (levels - 2)) === tileSize) levels -= 1;
   return levels;
+}
+
+function multiresCacheKey(sourceHash, cubeSize, levels, options) {
+  return createHash("sha256").update(JSON.stringify({
+    schema: "raindigit-multires-scene-cache/v2",
+    sourceHash,
+    cubeSize,
+    levels,
+    tileSize: options.tileSize,
+    fallbackSize: options.fallbackSize,
+    webpQuality: options.webpQuality,
+    jpegQuality: options.jpegQuality,
+    mediaRecipe: MEDIA_RECIPE_VERSION
+  })).digest("hex");
+}
+
+async function restoreMultiresCache(cacheDir, cacheKey, targetRoot) {
+  if (!cacheDir) return null;
+  const entry = join(cacheDir, "multires-scenes-v2", cacheKey);
+  try {
+    const metadata = JSON.parse(await readFile(join(entry, "metadata.json"), "utf8"));
+    assert(metadata.schema === "raindigit-multires-scene-cache/v2" && metadata.key === cacheKey, "Multires cache metadata is invalid.");
+    for (const file of metadata.files || []) {
+      const info = await stat(join(entry, "assets", file.path));
+      assert(info.size === file.bytes, `Multires cache size mismatch: ${file.path}`);
+    }
+    await cp(join(entry, "assets"), targetRoot, { recursive: true, force: true });
+    const accessedAt = new Date();
+    await utimes(join(entry, "metadata.json"), accessedAt, accessedAt);
+    return { tileCount: metadata.tileCount, config: metadata.config, cacheHit: true };
+  } catch (error) {
+    if (error.code !== "ENOENT") await rm(entry, { recursive: true, force: true });
+    return null;
+  }
+}
+
+async function storeMultiresCache(cacheDir, cacheKey, targetRoot, tileCount, config) {
+  if (!cacheDir) return;
+  const parent = join(cacheDir, "multires-scenes-v2");
+  const entry = join(parent, cacheKey);
+  const temporary = join(parent, `.${cacheKey}.${process.pid}.${Date.now()}.tmp`);
+  const files = await fileSizeInventory(targetRoot);
+  await mkdir(parent, { recursive: true });
+  await rm(temporary, { recursive: true, force: true });
+  await mkdir(temporary, { recursive: true });
+  try {
+    await cp(targetRoot, join(temporary, "assets"), { recursive: true, force: true });
+    await writeFile(join(temporary, "metadata.json"), `${JSON.stringify({
+      schema: "raindigit-multires-scene-cache/v2",
+      key: cacheKey,
+      tileCount,
+      config,
+      files,
+      createdAt: new Date().toISOString()
+    }, null, 2)}\n`, "utf8");
+    await rename(temporary, entry).catch(async (error) => {
+      if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+      await rm(temporary, { recursive: true, force: true });
+    });
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 async function makePreview(input) {
@@ -231,51 +328,38 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
 
   const cubeSize = cubeResolution(dimensions.width);
   const levels = maxLevel(cubeSize, options.tileSize);
-  const contentHash = createHash("sha256").update(await readFile(source)).digest("hex").slice(0, 20);
+  const sourceHash = createHash("sha256").update(await readFile(source)).digest("hex");
+  const cacheKey = multiresCacheKey(sourceHash, cubeSize, levels, options);
+  const contentHash = cacheKey.slice(0, 20);
   const relativeRoot = `assets/mr/${contentHash}`;
   const targetRoot = join(stagedRoot, relativeRoot);
   const sceneTemporaryRoot = join(temporaryRoot, `multires-${scene.id}`);
-  const stripPath = join(sceneTemporaryRoot, "cube.png");
   await mkdir(sceneTemporaryRoot, { recursive: true });
   await mkdir(targetRoot, { recursive: true });
   try {
-    await run("ffmpeg", [
-      "-hide_banner", "-loglevel", "error", "-y", "-i", source,
-      "-vf", `v360=input=equirect:output=c6x1:out_forder=fbudlr:interp=lanczos:w=${cubeSize * 6}:h=${cubeSize}`,
-      "-frames:v", "1", stripPath
-    ]);
+    const cached = await restoreMultiresCache(options.cacheDir, cacheKey, targetRoot);
+    if (cached) return { relativeRoot, ...cached };
 
     let tileCount = 0;
-    for (const [faceIndex, face] of faceLetters.entries()) {
+    for (const face of faceLetters) {
       const facePath = join(sceneTemporaryRoot, `${face}.png`);
-      await runMagick([stripPath, "-crop", `${cubeSize}x${cubeSize}+${faceIndex * cubeSize}+0`, "+repage", facePath]);
-      await mkdir(join(targetRoot, "fallback"), { recursive: true });
-      await runMagick([facePath, "-resize", `${options.fallbackSize}x${options.fallbackSize}!`, "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", String(options.jpegQuality), join(targetRoot, "fallback", `${face}.jpg`)]);
-
-      for (let level = levels; level >= 1; level -= 1) {
-        const size = Math.max(1, Math.floor(cubeSize / 2 ** (levels - level)));
-        const levelPath = join(targetRoot, String(level));
-        const levelFace = join(sceneTemporaryRoot, `${face}-level-${level}.png`);
-        await mkdir(levelPath, { recursive: true });
-        if (level === levels) await cp(facePath, levelFace);
-        else await runMagick([facePath, "-resize", `${size}x${size}!`, levelFace]);
-        const tiles = Math.ceil(size / options.tileSize);
-        const batchPattern = join(sceneTemporaryRoot, `${face}-level-${level}-tile-%d.webp`);
-        await runMagick([levelFace, "-crop", `${options.tileSize}x${options.tileSize}`, "+repage", "-strip", "-quality", String(options.webpQuality), batchPattern]);
-        for (let index = 0; index < tiles * tiles; index += 1) {
-          const y = Math.floor(index / tiles);
-          const x = index % tiles;
-          await rename(join(sceneTemporaryRoot, `${face}-level-${level}-tile-${index}.webp`), join(levelPath, `${face}${y}_${x}.webp`));
-          tileCount += 1;
-        }
-      }
+      await projectCubeFace({ source, face, output: facePath, cubeSize });
+      tileCount += await buildFacePyramid({
+        input: facePath,
+        face,
+        targetRoot,
+        temporaryRoot: sceneTemporaryRoot,
+        levels,
+        tileSize: options.tileSize,
+        fallbackSize: options.fallbackSize,
+        webpQuality: options.webpQuality,
+        jpegQuality: options.jpegQuality
+      });
+      await rm(facePath, { force: true });
     }
 
     const preview = await makePreview(source);
-    return {
-      relativeRoot,
-      tileCount,
-      config: {
+    const config = {
         basePath: relativeRoot,
         path: "/%l/%s%y_%x",
         fallbackPath: "/fallback/%s",
@@ -285,8 +369,9 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
         maxLevel: levels,
         cubeResolution: cubeSize,
         equirectangularThumbnail: preview
-      }
-    };
+      };
+    await storeMultiresCache(options.cacheDir, cacheKey, targetRoot, tileCount, config);
+    return { relativeRoot, tileCount, config, cacheHit: false };
   } finally {
     await rm(sceneTemporaryRoot, { recursive: true, force: true });
   }
@@ -341,14 +426,14 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
   await writeFile(runtimePath, runtime, "utf8");
 }
 
-async function digestDirectory(directory) {
+function digestInventory(files) {
   const digest = createHash("sha256");
-  for (const file of (await walk(directory)).sort()) {
-    const path = relative(directory, file).split("\\").join("/");
-    if (path === "release-manifest.json") continue;
-    digest.update(path);
+  for (const file of files) {
+    digest.update(file.path);
     digest.update("\0");
-    digest.update(await readFile(file));
+    digest.update(String(file.bytes));
+    digest.update("\0");
+    digest.update(file.sha256);
     digest.update("\0");
   }
   return digest.digest("hex");
@@ -356,12 +441,16 @@ async function digestDirectory(directory) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
+  const buildStartedAt = performance.now();
+  const timings = {};
   const temporaryRoot = await mkdtemp(join(tmpdir(), "raindigit-multires-"));
   const stagedRoot = join(temporaryRoot, "staged-release");
   const packageRoot = join(temporaryRoot, "package");
   const finalParent = dirname(options.output);
   try {
-    await run(process.execPath, [
+    await reportProgress(options, "derivatives", 12, "Preparing source panoramas");
+    let phaseStartedAt = performance.now();
+    const baseArguments = [
       join(projectRoot, "scripts", "build-tour-release.mjs"),
       "--workspace", options.workspace,
       "--output", stagedRoot,
@@ -371,8 +460,14 @@ async function main() {
       "--quality", "94",
       "--preserve-resolution",
       "--replace"
-    ], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    ];
+    if (options.cacheDir) baseArguments.push("--cache-dir", options.cacheDir);
+    const { stdout: baseOutput } = await run(process.execPath, baseArguments, { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const baseMetadata = JSON.parse(baseOutput);
+    timings.baseDerivativesMs = Math.round(performance.now() - phaseStartedAt);
 
+    await reportProgress(options, "tiles", 20, "Building optimized scene tiles", { completedScenes: 0, totalScenes: baseMetadata.scenes });
+    phaseStartedAt = performance.now();
     await applyRuntimeTemplate(stagedRoot, options.runtimeTemplate);
     const configPath = join(stagedRoot, "js", "tour-config.js");
     const pannellumPath = join(stagedRoot, "js", "pannellum.js");
@@ -390,16 +485,34 @@ async function main() {
     const sceneIds = project.scenes.map((scene) => scene.id);
     const sceneBuilds = new Map();
     let tileCount = 0;
-    for (const scene of project.scenes) {
+    let multiresCacheHits = 0;
+    let multiresCacheMisses = 0;
+    const sceneTimings = [];
+    for (const [sceneIndex, scene] of project.scenes.entries()) {
+      const sceneStartedAt = performance.now();
       const generated = await buildSceneMultires(scene, stagedRoot, temporaryRoot, options);
       sceneBuilds.set(scene.id, generated);
       scene.type = "multires";
       scene.multiRes = generated.config;
       delete scene.panorama;
       tileCount += generated.tileCount;
+      if (generated.cacheHit) multiresCacheHits += 1;
+      else multiresCacheMisses += 1;
+      sceneTimings.push({ id: scene.id, durationMs: Math.round(performance.now() - sceneStartedAt), cacheHit: generated.cacheHit });
+      const completedScenes = sceneIndex + 1;
+      await reportProgress(
+        options,
+        "tiles",
+        Math.round(20 + completedScenes / project.scenes.length * 65),
+        `${generated.cacheHit ? "Reused" : "Optimized"} view ${completedScenes} of ${project.scenes.length}`,
+        { completedScenes, totalScenes: project.scenes.length, sceneId: scene.id, cacheHit: generated.cacheHit }
+      );
     }
+    timings.runtimeAndTilesMs = Math.round(performance.now() - phaseStartedAt);
+    phaseStartedAt = performance.now();
     await writeFile(configPath, `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
-    const performance = await buildSeoAssets(firstSceneSource, stagedRoot, project, sceneBuilds);
+    await reportProgress(options, "assembling", 88, "Assembling and verifying the website tour");
+    const seoPerformance = await buildSeoAssets(firstSceneSource, stagedRoot, project, sceneBuilds);
     const entrypointPath = join(stagedRoot, "index.html");
     const entrypointSource = deferRuntimeStyles(await deferRuntimeChrome(await readFile(entrypointPath, "utf8"), stagedRoot));
     const firstFrameData = project.scenes.find((scene) => scene.id === project.firstScene)?.multiRes?.equirectangularThumbnail;
@@ -411,14 +524,15 @@ async function main() {
     assert(entrypointWithPreview !== entrypointSource, "The first-frame preview could not be inserted into the tour entrypoint.");
     await writeFile(entrypointPath, entrypointWithPreview, "utf8");
     await rm(join(stagedRoot, "assets", "p"), { recursive: true, force: true });
-    performance.criticalBytes = (await Promise.all(performance.criticalFiles.map(async (path) => (await stat(join(stagedRoot, path))).size))).reduce((sum, bytes) => sum + bytes, 0);
-    performance.criticalBudgetBytes = 1024 * 1024;
-    assert(performance.criticalBytes <= performance.criticalBudgetBytes, `First-scene critical payload is ${performance.criticalBytes} bytes; budget is ${performance.criticalBudgetBytes} bytes.`);
-    const digest = await digestDirectory(stagedRoot);
+    seoPerformance.criticalBytes = (await Promise.all(seoPerformance.criticalFiles.map(async (path) => (await stat(join(stagedRoot, path))).size))).reduce((sum, bytes) => sum + bytes, 0);
+    seoPerformance.criticalBudgetBytes = 1024 * 1024;
+    assert(seoPerformance.criticalBytes <= seoPerformance.criticalBudgetBytes, `First-scene critical payload is ${seoPerformance.criticalBytes} bytes; budget is ${seoPerformance.criticalBudgetBytes} bytes.`);
+    const payloadFiles = await fileInventory(stagedRoot);
+    const digest = digestInventory(payloadFiles);
     const version = `multires-${digest.slice(0, 12)}`;
     const immutablePrefix = `tours/${options.slug}/${version}/`;
-    const payloadFiles = await fileInventory(stagedRoot);
     const payloadBytes = payloadFiles.reduce((sum, file) => sum + file.bytes, 0);
+    timings.seoAndInventoryMs = Math.round(performance.now() - phaseStartedAt);
     const sceneViews = Object.fromEntries(project.scenes.map((scene) => [scene.id, {
       pitch: scene.pitch,
       yaw: scene.yaw,
@@ -457,7 +571,7 @@ async function main() {
       contentDigest: digest,
       immutablePrefix,
       entrypoint: `${immutablePrefix}index.html`,
-      performance
+      performance: seoPerformance
     };
     await writeFile(join(stagedRoot, "release-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
@@ -490,7 +604,17 @@ async function main() {
     await rm(options.output, { recursive: true, force: true });
     await mkdir(finalParent, { recursive: true });
     await rename(packageRoot, options.output);
+    phaseStartedAt = performance.now();
+    await reportProgress(options, "packaging", 96, "Packaging the verified tour");
     if (options.zip) await createZip(options.output, options.zip);
+    timings.packageMs = Math.round(performance.now() - phaseStartedAt);
+    timings.totalMs = Math.round(performance.now() - buildStartedAt);
+    const cache = {
+      enabled: Boolean(options.cacheDir),
+      base: baseMetadata.cache || { enabled: false, hits: 0, misses: project.scenes.length },
+      multires: { hits: multiresCacheHits, misses: multiresCacheMisses }
+    };
+    await reportProgress(options, "complete", 100, "Tour package ready", { cache });
     console.log(JSON.stringify({
       output: options.output,
       zip: options.zip,
@@ -506,7 +630,10 @@ async function main() {
       tiles: tileCount,
       files: payloadFiles.length,
       bytes: payloadBytes,
-      contentDigest: digest
+      contentDigest: digest,
+      cache,
+      mediaWorker: mediaWorkerMetadata(),
+      buildMetrics: { timings, scenes: sceneTimings }
     }, null, 2));
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });

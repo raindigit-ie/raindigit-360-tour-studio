@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { copyFile, cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -17,6 +17,7 @@ function parseArguments(argv) {
     zip: null,
     single: null,
     embed: null,
+    cacheDir: null,
     quality: 86,
     preserveResolution: false,
     preserveSource: false,
@@ -29,12 +30,13 @@ function parseArguments(argv) {
     else if (argument === "--zip") options.zip = resolve(argv[++index] || "");
     else if (argument === "--single") options.single = resolve(argv[++index] || "");
     else if (argument === "--embed") options.embed = resolve(argv[++index] || "");
+    else if (argument === "--cache-dir") options.cacheDir = resolve(argv[++index] || "");
     else if (argument === "--quality") options.quality = Number(argv[++index]);
     else if (argument === "--preserve-resolution") options.preserveResolution = true;
     else if (argument === "--preserve-source") options.preserveSource = true;
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--quality 84..94] [--preserve-resolution] [--preserve-source] [--replace]");
+      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--cache-dir path] [--quality 84..94] [--preserve-resolution] [--preserve-source] [--replace]");
       process.exit(0);
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -299,6 +301,75 @@ async function hashFile(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
+function sceneDerivativeCacheKey(sourceHash, adjustment, areas, quality, dimensions, preserveResolution, preserveSource) {
+  return createHash("sha256").update(JSON.stringify({
+    schema: "raindigit-release-scene-cache/v1",
+    sourceHash,
+    adjustment: adjustment || null,
+    areas,
+    quality,
+    dimensions,
+    preserveResolution,
+    preserveSource
+  })).digest("hex");
+}
+
+async function restoreSceneDerivative(cacheDir, cacheKey, output) {
+  if (!cacheDir) return null;
+  const entry = join(cacheDir, "release-scenes-v1", cacheKey);
+  try {
+    const metadata = JSON.parse(await readFile(join(entry, "metadata.json"), "utf8"));
+    assert(metadata.schema === "raindigit-release-scene-cache/v1" && metadata.key === cacheKey, "Scene cache metadata is invalid.");
+    const panoramaSource = join(entry, "panorama.jpg");
+    const thumbnailSource = join(entry, "thumbnail.jpg");
+    const [panoramaStat, thumbnailStat] = await Promise.all([stat(panoramaSource), stat(thumbnailSource)]);
+    assert(panoramaStat.size === metadata.panoramaBytes && thumbnailStat.size === metadata.thumbnailBytes, "Scene cache file size does not match metadata.");
+    const panoramaOutput = join(output, metadata.panorama);
+    const thumbnailOutput = join(output, metadata.thumb);
+    await Promise.all([mkdir(dirname(panoramaOutput), { recursive: true }), mkdir(dirname(thumbnailOutput), { recursive: true })]);
+    await Promise.all([copyFile(panoramaSource, panoramaOutput), copyFile(thumbnailSource, thumbnailOutput)]);
+    const accessedAt = new Date();
+    await utimes(join(entry, "metadata.json"), accessedAt, accessedAt);
+    return { panorama: metadata.panorama, thumb: metadata.thumb, bytes: panoramaStat.size + thumbnailStat.size, cacheHit: true };
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    await rm(entry, { recursive: true, force: true });
+    return null;
+  }
+}
+
+async function storeSceneDerivative(cacheDir, cacheKey, panoramaPath, thumbnailPath, result) {
+  if (!cacheDir) return;
+  const parent = join(cacheDir, "release-scenes-v1");
+  const entry = join(parent, cacheKey);
+  const temporary = join(parent, `.${cacheKey}.${process.pid}.${Date.now()}.tmp`);
+  const [panoramaStat, thumbnailStat] = await Promise.all([stat(panoramaPath), stat(thumbnailPath)]);
+  await mkdir(parent, { recursive: true });
+  await rm(temporary, { recursive: true, force: true });
+  await mkdir(temporary, { recursive: true });
+  try {
+    await Promise.all([
+      copyFile(panoramaPath, join(temporary, "panorama.jpg")),
+      copyFile(thumbnailPath, join(temporary, "thumbnail.jpg"))
+    ]);
+    await writeFile(join(temporary, "metadata.json"), `${JSON.stringify({
+      schema: "raindigit-release-scene-cache/v1",
+      key: cacheKey,
+      panorama: result.panorama,
+      thumb: result.thumb,
+      panoramaBytes: panoramaStat.size,
+      thumbnailBytes: thumbnailStat.size,
+      createdAt: new Date().toISOString()
+    }, null, 2)}\n`, "utf8");
+    await rename(temporary, entry).catch(async (error) => {
+      if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+      await rm(temporary, { recursive: true, force: true });
+    });
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
 function isNeutralAdjustment(adjustment) {
   return !adjustment || (
     clamp(adjustment.brightness, 70, 130, 100) === 100 &&
@@ -308,13 +379,18 @@ function isNeutralAdjustment(adjustment) {
   );
 }
 
-async function buildScene(scene, workspace, output, draft, temporaryRoot, quality, preserveResolution, preserveSource) {
+async function buildScene(scene, workspace, output, draft, temporaryRoot, quality, preserveResolution, preserveSource, cacheDir) {
   const input = join(workspace, scene.panorama);
   const source = await readFile(input);
   const dimensions = jpegDimensions(source);
   assert(dimensions && dimensions.width >= 1600 && Math.abs(dimensions.width / dimensions.height - 2) <= 0.02, `${scene.id} is not a valid 2:1 JPEG panorama.`);
   const outputDimensions = releaseDimensions(dimensions, preserveResolution);
   const areas = Array.isArray(draft.localAdjustments?.[scene.id]) ? draft.localAdjustments[scene.id] : [];
+  const adjustment = draft.sceneAdjustments?.[scene.id] || null;
+  const sourceHash = createHash("sha256").update(source).digest("hex");
+  const cacheKey = sceneDerivativeCacheKey(sourceHash, adjustment, areas, quality, outputDimensions, preserveResolution, preserveSource);
+  const cached = await restoreSceneDerivative(cacheDir, cacheKey, output);
+  if (cached) return cached;
   const finishedImage = join(temporaryRoot, `${scene.id}-finished.jpg`);
   if (preserveSource) {
     assert(preserveResolution, "--preserve-source requires --preserve-resolution.");
@@ -322,7 +398,7 @@ async function buildScene(scene, workspace, output, draft, temporaryRoot, qualit
     await copyFile(input, finishedImage);
   } else {
     const workImage = join(temporaryRoot, `${scene.id}-base.jpg`);
-    await runMagick(imageCommands(input, workImage, draft.sceneAdjustments?.[scene.id], quality, outputDimensions));
+    await runMagick(imageCommands(input, workImage, adjustment, quality, outputDimensions));
     if (areas.length > 0) await applyLocalAreas(workImage, finishedImage, areas, outputDimensions, temporaryRoot);
     else await rename(workImage, finishedImage);
   }
@@ -338,7 +414,9 @@ async function buildScene(scene, workspace, output, draft, temporaryRoot, qualit
   const thumbnailOutput = join(output, thumbnailRelative);
   await mkdir(dirname(thumbnailOutput), { recursive: true });
   await rename(thumbnailWork, thumbnailOutput);
-  return { panorama: panoramaRelative, thumb: thumbnailRelative, bytes: (await stat(panoramaOutput)).size + (await stat(thumbnailOutput)).size };
+  const result = { panorama: panoramaRelative, thumb: thumbnailRelative, bytes: (await stat(panoramaOutput)).size + (await stat(thumbnailOutput)).size, cacheHit: false };
+  await storeSceneDerivative(cacheDir, cacheKey, panoramaOutput, thumbnailOutput, result);
+  return result;
 }
 
 async function buildFloorplan(project, workspace, output, temporaryRoot) {
@@ -487,12 +565,16 @@ async function main() {
   try {
     await copyRuntime(options.output);
     let totalBytes = 0;
+    let cacheHits = 0;
+    let cacheMisses = 0;
     for (const scene of project.scenes) {
-      const result = await buildScene(scene, workspace, options.output, await readJson(join(workspace, "draft.json"), null) || {}, temporaryRoot, options.quality, options.preserveResolution, options.preserveSource);
+      const result = await buildScene(scene, workspace, options.output, draft || {}, temporaryRoot, options.quality, options.preserveResolution, options.preserveSource, options.cacheDir);
       scene.panorama = result.panorama;
       scene.thumb = result.thumb;
       delete scene.sourceHash;
       totalBytes += result.bytes;
+      if (result.cacheHit) cacheHits += 1;
+      else cacheMisses += 1;
     }
     totalBytes += await buildFloorplan(project, workspace, options.output, temporaryRoot);
     await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
@@ -504,7 +586,7 @@ async function main() {
       singleHtml = await createSingleHtml(options.output, project, singleTarget);
     }
     if (options.embed) await createEmbedHtml(singleHtml, options.embed);
-    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality, preserveResolution: options.preserveResolution, preserveSource: options.preserveSource }, null, 2));
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality, preserveResolution: options.preserveResolution, preserveSource: options.preserveSource, cache: { enabled: Boolean(options.cacheDir), hits: cacheHits, misses: cacheMisses } }, null, 2));
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
     throw error;

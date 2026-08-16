@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-16",
+  "environment": {
+    "platform": "macOS",
+    "processor": "Apple M1",
+    "logicalCpus": 8,
+    "memoryGiB": 16,
+    "filesystem": "APFS clone of the private operator workspace"
+  },
+  "fixture": {
+    "scenes": 20,
+    "sourceWidth": 11904,
+    "sourceHeight": 5952,
+    "webpTiles": 10200,
+    "releaseFiles": 10355
+  },
+  "measurements": {
+    "legacyCold": {
+      "wallSeconds": 2763.68,
+      "maxRssBytes": 7412105216
+    },
+    "optimizedCold": {
+      "wallSeconds": 525.88,
+      "maxRssBytes": 2397372416,
+      "cacheBaseHits": 0,
+      "cacheBaseMisses": 20,
+      "cacheMultiresHits": 0,
+      "cacheMultiresMisses": 20
+    },
+    "optimizedWarm": {
+      "wallSeconds": 23.41,
+      "maxRssBytes": 1106788352,
+      "cacheBaseHits": 20,
+      "cacheBaseMisses": 0,
+      "cacheMultiresHits": 20,
+      "cacheMultiresMisses": 0
+    },
+    "optimizedOneSceneChanged": {
+      "wallSeconds": 47.13,
+      "maxRssBytes": 2378973184,
+      "cacheBaseHits": 19,
+      "cacheBaseMisses": 1,
+      "cacheMultiresHits": 19,
+      "cacheMultiresMisses": 1
+    },
+    "optimizedUnchangedApi": {
+      "buildDurationMs": 0,
+      "reused": true
+    }
+  },
+  "derived": {
+    "coldSpeedup": 5.25,
+    "coldWallReductionPercent": 81.0,
+    "coldPeakRssReductionPercent": 67.7
+  },
+  "notes": [
+    "Reference measurements are engineering baselines, not absolute CI assertions.",
+    "All source work used disposable APFS clones; the private operator workspace was not mutated.",
+    "The optimized pipeline projects one cube face at a time with FFmpeg and builds Deep Zoom pyramids with Sharp/libvips."
+  ]
+}

@@ -3272,8 +3272,12 @@
     elements.ArchiveWorkspace.disabled = !workspaceMode || state.building || !state.workspaceProject?.scenes?.length;
     elements.PreviewMultires.href = state.release.multires?.ready ? `${endpoint}/release-multires/${state.release.multires.entrypoint}` : "";
     elements.DownloadMultires.href = studioUrl("release-multires-download");
+    const lastBuildMs = state.release.buildDurationMs ?? state.release.multires?.buildMetrics?.timings?.totalMs;
+    const reusedViews = state.release.multires?.cache?.multires?.hits || 0;
+    const cacheSummary = reusedViews > 0 ? ` · reused ${reusedViews}/${state.release.multires.scenes} view${reusedViews === 1 ? "" : "s"}` : "";
+    const buildSummary = lastBuildMs === 0 ? " · already current" : Number.isFinite(lastBuildMs) ? ` · built in ${Math.max(1, Math.round(lastBuildMs / 1000))}s` : "";
     elements.MultiresSummary.textContent = state.release.multires?.ready
-      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons${state.release.buildDurationMs ? ` · built in ${Math.max(1, Math.round(state.release.buildDurationMs / 1000))}s` : ""} · immutable ${state.release.multires.version}`
+      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · immutable ${state.release.multires.version}`
       : "Versioned tiles, manifest and rollback pointer are included.";
     elements.BuildPortable.hidden = Boolean(state.release.legacyReady);
     elements.BuildPortable.disabled = !workspaceMode || state.building || !state.release.ready;

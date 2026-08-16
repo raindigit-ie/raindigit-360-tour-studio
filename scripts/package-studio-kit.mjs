@@ -12,8 +12,10 @@ const output = resolve(process.argv[2] || join(projectRoot, "dist", "raindigit-3
 const packageName = "raindigit-360-tour-studio";
 const included = [
   "Dockerfile",
+  ".dockerignore",
   "docker-compose.yml",
   "package.json",
+  "package-lock.json",
   "README.md",
   "Start RainDigit 360 Studio.command",
   "Stop RainDigit 360 Studio.command",
@@ -22,9 +24,12 @@ const included = [
   "docs/product-workflow.md",
   "docs/operator-playbook.md",
   "docs/product-readiness.md",
+  "docs/architecture-performance.md",
   "docs/asset-protection.md",
   "scripts/build-tour-release.mjs",
   "scripts/build-multires-release.mjs",
+  "scripts/lib",
+  "scripts/prune-build-cache.mjs",
   "scripts/start-studio.sh",
   "scripts/stop-studio.sh",
   "scripts/tour-editor-server.mjs",

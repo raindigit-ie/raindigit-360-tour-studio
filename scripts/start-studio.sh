@@ -27,9 +27,17 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 mkdir -p studio-workspace dist release
-if [ "${RAINDIGIT_REBUILD:-0}" = "1" ] || [ -z "$(docker compose images -q studio 2>/dev/null)" ]; then
+IMAGE_FINGERPRINT=$(cksum Dockerfile package.json package-lock.json | cksum | awk '{print $1 ":" $2}')
+IMAGE_FINGERPRINT_PATH="dist/.studio-image-fingerprint"
+SAVED_IMAGE_FINGERPRINT=""
+if [ -f "$IMAGE_FINGERPRINT_PATH" ]; then
+  SAVED_IMAGE_FINGERPRINT=$(sed -n '1p' "$IMAGE_FINGERPRINT_PATH")
+fi
+
+if [ "${RAINDIGIT_REBUILD:-0}" = "1" ] || [ -z "$(docker compose images -q studio 2>/dev/null)" ] || [ "$IMAGE_FINGERPRINT" != "$SAVED_IMAGE_FINGERPRINT" ]; then
   printf '%s\n' "Preparing the RainDigit Studio runtime (first start or requested rebuild)..."
-  docker compose up -d --build studio
+  docker compose up -d --build --force-recreate --renew-anon-volumes studio
+  printf '%s\n' "$IMAGE_FINGERPRINT" > "$IMAGE_FINGERPRINT_PATH"
 else
   printf '%s\n' "Starting the existing RainDigit Studio runtime..."
   docker compose up -d studio

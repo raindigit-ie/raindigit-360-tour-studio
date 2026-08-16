@@ -205,6 +205,9 @@ async function main() {
   const workspace = join(root, "workspace");
   const output = join(root, "package");
   const secondOutput = join(root, "package-repeat");
+  const metadataOnlyOutput = join(root, "package-metadata-only");
+  const oneSceneOutput = join(root, "package-one-scene-change");
+  const cache = join(root, "build-cache");
   const zip = join(root, "future-multires-qa.zip");
   try {
     await mkdir(join(workspace, "panoramas"), { recursive: true });
@@ -229,7 +232,10 @@ async function main() {
     await writeFile(join(workspace, "draft.json"), `${JSON.stringify({ schema: "raindigit-tour-hotspot-overrides/v1", overrides: {}, addedHotspots: {}, sceneViews: {}, sceneAdjustments: {}, localAdjustments: {} }, null, 2)}\n`);
 
     const builder = join(projectRoot, "scripts", "build-multires-release.mjs");
-    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", output, "--zip", zip, "--slug", "future-multires-qa", "--rollback-version", "legacy-0123456789ab", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const { stdout: coldBuildOutput } = await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", output, "--zip", zip, "--cache-dir", cache, "--slug", "future-multires-qa", "--rollback-version", "legacy-0123456789ab", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const coldBuild = JSON.parse(coldBuildOutput);
+    assert(coldBuild.cache.enabled && coldBuild.cache.base.hits === 0 && coldBuild.cache.base.misses === 2, "Cold build did not populate both base-scene cache entries.");
+    assert(coldBuild.cache.multires.hits === 0 && coldBuild.cache.multires.misses === 2, "Cold build did not populate both multires cache entries.");
     const pointer = JSON.parse(await readFile(join(output, "manifests", "future-multires-qa", "current.json"), "utf8"));
     assert(pointer.schema === "raindigit-tour-current/v1" && pointer.previousVersion === "legacy-0123456789ab", "The stable current pointer or rollback reference is invalid.");
     assert(pointer.entrypoint === `${pointer.prefix}index.html` && pointer.releaseManifest === `${pointer.prefix}release-manifest.json`, "The current pointer does not reference the immutable release.");
@@ -275,9 +281,27 @@ async function main() {
     }
     const { stdout: zipListing } = await execFileAsync("unzip", ["-Z1", zip]);
     assert(zipListing.includes(`tours/future-multires-qa/${manifest.version}/index.html`) && zipListing.includes("manifests/future-multires-qa/current.json"), "The deployable archive does not mirror the R2 object layout.");
-    await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", secondOutput, "--slug", "future-multires-qa", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const { stdout: warmBuildOutput } = await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", secondOutput, "--cache-dir", cache, "--slug", "future-multires-qa", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const warmBuild = JSON.parse(warmBuildOutput);
+    assert(warmBuild.cache.base.hits === 2 && warmBuild.cache.base.misses === 0, "Warm build reprocessed unchanged base panoramas.");
+    assert(warmBuild.cache.multires.hits === 2 && warmBuild.cache.multires.misses === 0, "Warm build reprocessed unchanged multires tiles.");
     const repeatedPointer = JSON.parse(await readFile(join(secondOutput, "manifests", "future-multires-qa", "current.json"), "utf8"));
     assert(repeatedPointer.version === pointer.version && repeatedPointer.contentDigest === pointer.contentDigest, "Identical source content did not produce a stable version.");
+
+    project.title = "Future Multires QA — revised description";
+    await writeFile(join(workspace, "tour-project.json"), `${JSON.stringify(project, null, 2)}\n`);
+    const { stdout: metadataBuildOutput } = await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", metadataOnlyOutput, "--cache-dir", cache, "--slug", "future-multires-qa", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const metadataBuild = JSON.parse(metadataBuildOutput);
+    assert(metadataBuild.cache.base.hits === 2 && metadataBuild.cache.base.misses === 0, "Metadata-only edit reprocessed base panoramas.");
+    assert(metadataBuild.cache.multires.hits === 2 && metadataBuild.cache.multires.misses === 0, "Metadata-only edit reprocessed multires tiles.");
+    assert(metadataBuild.version !== pointer.version, "Metadata-only edit did not create a new immutable release version.");
+
+    const changedDraft = { schema: "raindigit-tour-hotspot-overrides/v1", overrides: {}, addedHotspots: {}, sceneViews: {}, sceneAdjustments: { "scene-002": { brightness: 100, contrast: 100, saturation: 108, warmth: 0 } }, localAdjustments: {} };
+    await writeFile(join(workspace, "draft.json"), `${JSON.stringify(changedDraft, null, 2)}\n`);
+    const { stdout: oneSceneBuildOutput } = await execFileAsync(process.execPath, [builder, "--workspace", workspace, "--output", oneSceneOutput, "--cache-dir", cache, "--slug", "future-multires-qa", "--runtime-template", join(projectRoot, "web-tour"), "--replace"], { cwd: projectRoot, timeout: 20 * 60 * 1000 });
+    const oneSceneBuild = JSON.parse(oneSceneBuildOutput);
+    assert(oneSceneBuild.cache.base.hits === 1 && oneSceneBuild.cache.base.misses === 1, "One-scene colour edit did not invalidate exactly one base derivative.");
+    assert(oneSceneBuild.cache.multires.hits === 1 && oneSceneBuild.cache.multires.misses === 1, "One-scene colour edit did not invalidate exactly one multires tile set.");
     const pannellumRuntime = await readFile(join(releaseRoot, "js", "pannellum.js"), "utf8");
     assert(pannellumRuntime.includes("m.fallbackExtension||m.extension"), "JPEG fallback extension support is missing from the release runtime.");
     const tourRuntime = await readFile(join(releaseRoot, "js", "tour.js"), "utf8");

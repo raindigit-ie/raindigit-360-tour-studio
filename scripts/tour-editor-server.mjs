@@ -30,6 +30,11 @@ const releaseEmbedPath = join(artifactRoot, "raindigit-360-tour-embed.html");
 const releasePortableMetadataPath = join(artifactRoot, "raindigit-360-tour-portable.json");
 const releaseMultiresZipPath = join(artifactRoot, "raindigit-360-tour-web-package.zip");
 const releaseMultiresMetadataPath = join(artifactRoot, "raindigit-360-tour-web-package.json");
+const releaseBuildProgressPath = join(artifactRoot, "raindigit-360-tour-build-progress.json");
+const releaseBuildCacheRoot = process.env.INSTA360_TOUR_BUILD_CACHE
+  ? resolve(process.env.INSTA360_TOUR_BUILD_CACHE)
+  : join(artifactRoot, "build-cache");
+const releaseBuildCacheMaxGb = Number(process.env.INSTA360_TOUR_BUILD_CACHE_MAX_GB || 8);
 const projectBackupPath = join(artifactRoot, "raindigit-tour-project.rdtour");
 const projectArchiveRoot = process.env.INSTA360_TOUR_ARCHIVES ? resolve(process.env.INSTA360_TOUR_ARCHIVES) : join(projectRoot, "studio-archives");
 const host = process.env.TOUR_SERVER_HOST || "127.0.0.1";
@@ -64,6 +69,10 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
 
 if (!["127.0.0.1", "0.0.0.0"].includes(host)) {
   throw new Error("TOUR_SERVER_HOST must be 127.0.0.1 or 0.0.0.0.");
+}
+
+if (!Number.isFinite(releaseBuildCacheMaxGb) || releaseBuildCacheMaxGb < 0.25 || releaseBuildCacheMaxGb > 100) {
+  throw new Error("INSTA360_TOUR_BUILD_CACHE_MAX_GB must be between 0.25 and 100.");
 }
 
 const contentTypes = {
@@ -371,11 +380,18 @@ function roomId(label, preferred = "") {
 async function releaseInputFingerprint() {
   const project = JSON.parse(await readFile(workspaceProjectPath, "utf8"));
   const draft = await readDraft(workspaceDraftPath);
+  const mediaPaths = project.scenes.map((scene) => scene.panorama).filter(Boolean);
+  if (project.map?.enabled === true && project.map.asset) mediaPaths.push(project.map.asset);
+  const media = await Promise.all(mediaPaths.map(async (path) => {
+    const info = await stat(join(workspaceRoot, path));
+    return { path, bytes: info.size, modifiedMs: info.mtimeMs };
+  }));
   const stableProject = structuredClone(project);
   delete stableProject.editorStructureRevision;
-  // Keep this contract aligned with build-tour-release.mjs. Editor-only state
-  // (the current step, selected item, visual placement guides and timestamps)
-  // must not make a valid release stale after an autosave.
+  // Editor-only state (the current step, selected item, visual placement guides
+  // and timestamps) must not make a valid release stale after an autosave.
+  // Media metadata keeps externally replaced source files from reusing a stale
+  // release without rehashing every panorama on each status poll.
   const stableDraft = {
     schema: draft.schema,
     overrides: draft.overrides || {},
@@ -385,7 +401,7 @@ async function releaseInputFingerprint() {
     localAdjustments: draft.localAdjustments || {}
   };
   return createHash("sha256")
-    .update(JSON.stringify({ project: stableProject, draft: stableDraft }))
+    .update(JSON.stringify({ project: stableProject, draft: stableDraft, media }))
     .digest("hex");
 }
 
@@ -432,6 +448,9 @@ async function releaseStatus() {
         contentDigest: metadata.contentDigest,
         scenes: metadata.scenes,
         hotspots: metadata.hotspots,
+        cache: metadata.cache || null,
+        cacheMaintenance: metadata.cacheMaintenance || null,
+        buildMetrics: metadata.buildMetrics || null,
         updatedAt: multiresArchive.mtime.toISOString()
       };
     } catch (error) {
@@ -1266,7 +1285,18 @@ const server = createServer(async (request, response) => {
         replyJson(response, 409, { error: "A tour build is already running. Wait for it to finish before starting another build." });
         return;
       }
+      const currentStatus = await releaseStatus();
+      if (currentStatus.ready && currentStatus.multires.slug === requestedSlug) {
+        updateReleaseBuildState("complete", 100, "Tour is already up to date", {
+          startedAt: new Date().toISOString(),
+          buildDurationMs: 0,
+          reused: true
+        });
+        replyJson(response, 200, { ...currentStatus, buildDurationMs: 0, reused: true });
+        return;
+      }
       updateReleaseBuildState("starting", 3, "Preparing build", { startedAt: new Date().toISOString() });
+      await rm(releaseBuildProgressPath, { force: true });
       activeReleaseBuild = (async () => {
         updateReleaseBuildState("preflight", 8, "Checking tour connections");
         await assertWorkspaceReadyForRelease(project);
@@ -1278,6 +1308,8 @@ const server = createServer(async (request, response) => {
           "--workspace", workspaceRoot,
           "--output", releaseMultiresRoot,
           "--zip", releaseMultiresZipPath,
+          "--cache-dir", releaseBuildCacheRoot,
+          "--progress-file", releaseBuildProgressPath,
           "--slug", requestedSlug,
           "--replace"
         ], {
@@ -1288,7 +1320,18 @@ const server = createServer(async (request, response) => {
         updateReleaseBuildState("verifying", 92, "Verifying release integrity");
         const multiresMetadata = JSON.parse(multiresOutput);
         if (await releaseInputFingerprint() !== inputFingerprint) throw new Error("The tour changed during the build. Build it again after saving finishes.");
-        await writeJsonAtomic(releaseMultiresMetadataPath, { ...multiresMetadata, inputFingerprint });
+        let cacheMaintenance = null;
+        try {
+          const { stdout } = await execFileAsync(process.execPath, [
+            join(projectRoot, "scripts", "prune-build-cache.mjs"),
+            "--cache", releaseBuildCacheRoot,
+            "--max-gb", String(releaseBuildCacheMaxGb)
+          ], { cwd: projectRoot, maxBuffer: 1024 * 1024, timeout: 2 * 60 * 1000 });
+          cacheMaintenance = JSON.parse(stdout);
+        } catch (error) {
+          console.warn(`Build cache maintenance failed: ${error.message}`);
+        }
+        await writeJsonAtomic(releaseMultiresMetadataPath, { ...multiresMetadata, inputFingerprint, cacheMaintenance });
         const status = await releaseStatus();
         if (!status.ready) throw new Error("Build finished, but release verification did not pass.");
         return status;
@@ -1353,6 +1396,14 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-build-status` && request.method === "GET") {
+      if (releaseBuildState.active) {
+        try {
+          const progress = JSON.parse(await readFile(releaseBuildProgressPath, "utf8"));
+          updateReleaseBuildState(progress.phase, progress.percent, progress.message, progress);
+        } catch (error) {
+          if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+        }
+      }
       replyJson(response, 200, releaseBuildState);
       return;
     }

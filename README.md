@@ -96,8 +96,26 @@ mirrors the R2 object layout: immutable `tours/<slug>/multires-<digest>/` assets
 the transition graph and an optional rollback version. The portable one-file HTML, paste-in
 block and legacy folder ZIP are a separate optional build so ordinary publishing never
 re-encodes the panoramas twice. Generated output is not committed;
-it is generated from the private workspace. See [the product workflow](docs/product-workflow.md)
-[operator playbook](docs/operator-playbook.md), [product readiness contract](docs/product-readiness.md)
+it is generated from the private workspace.
+
+Expensive image derivatives and multires tile sets use a persistent content-addressed
+cache in `dist/build-cache`. A text, route or ordering change reuses every unchanged
+scene; a picture adjustment invalidates only that scene. An unchanged ready release
+returns immediately. Cache entries are least-recently-used and the Studio prunes them
+automatically after the default 8 GB limit; run `npm run cache:prune` manually when
+needed. Override the location and budget with `INSTA360_TOUR_BUILD_CACHE` and
+`INSTA360_TOUR_BUILD_CACHE_MAX_GB`.
+
+The build coordinator projects one cube face at a time with FFmpeg and sends that
+face to the isolated Sharp/libvips pyramid worker. This avoids the former 24K-wide
+intermediate image. On the reference 20-scene 12K tour, the verified cold build fell
+from 46:03 to 8:46, a cached rebuild takes 23 seconds, and a one-scene picture change
+takes 47 seconds. The Publish screen reports the current phase, scene progress,
+cache reuse and measured build duration instead of leaving the operator waiting.
+
+See [the product workflow](docs/product-workflow.md),
+[operator playbook](docs/operator-playbook.md), [product readiness contract](docs/product-readiness.md),
+[architecture and performance decision](docs/architecture-performance.md)
 and [client handoff](docs/client-handoff.md) for the exact operator, recovery and installation paths.
 
 ## Docker
@@ -108,6 +126,10 @@ docker compose up -d --build studio
 
 The studio binds only to localhost and mounts the local project directory. The
 release service serves only the built static output at `http://127.0.0.1:8080`.
+The launcher fingerprints `Dockerfile`, `package.json` and `package-lock.json`, so it
+rebuilds the runtime automatically after a dependency change and otherwise reuses
+the existing image. Docker build context excludes local media, caches, test output
+and host `node_modules`; an isolated container volume supplies Linux dependencies.
 
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
 studio journey covers create, upload, visual room-count/name setup, drag-and-drop photo assignment, multi-place selection, look, centre-target walking-button placement, first views, preview,
