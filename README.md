@@ -42,6 +42,23 @@ npm run app:start
 npm run app:stop
 ```
 
+After **Build the tour**, assemble and test the candidate inside the complete
+Rain Digit website before production:
+
+```bash
+npm run review:site
+```
+
+This prepares the full-site and standalone-tour review at
+`http://127.0.0.1:4173/__review/`. To create a non-indexable Cloudflare Pages
+preview after local QA:
+
+```bash
+npm run review:site -- --deploy --branch review-<short-name>
+```
+
+Neither command publishes R2 media or promotes a production tour pointer.
+
 Engineers can force a runtime rebuild after changing the Docker image or system
 dependencies with `RAINDIGIT_REBUILD=1 npm run app:start`. Ordinary source edits
 are bind-mounted and do not require rebuilding the image.

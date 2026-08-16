@@ -17,3 +17,11 @@ Rules:
 Default checks:
 - `npm run check`
 - `npm run test:product`
+
+Mandatory integrated review:
+- A built tour is not release-ready until `npm run review:site` passes.
+- Review both the candidate embedded in its Rain Digit story page and the same
+  tour standalone, on desktop Chromium, mobile Chromium and mobile WebKit.
+- Share only an isolated `review-*` Pages preview before approval.
+- Do not upload to production R2, change DNS or promote `current.json` before
+  explicit approval of that exact integrated artefact.

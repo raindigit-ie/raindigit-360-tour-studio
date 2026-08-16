@@ -79,6 +79,16 @@ The studio is local-first. It keeps source material and the editable workspace o
 3. Check every link from its source position and every arrival composition after the image fade completes.
 4. Check desktop, Chromium mobile and WebKit/iOS-mobile emulation for clipping, misplaced controls, a hidden/reopenable navigator, fullscreen and visual paint artefacts.
 5. Do not build or publish until the operator accepts the preview.
+6. After the optimized package exists, run `npm run review:site`. This assembles
+   the candidate into the complete Rain Digit static build and tests both the
+   story-page embed and standalone tour in desktop Chromium, mobile Chromium
+   and mobile WebKit.
+7. When a remote review is needed, run
+   `npm run review:site -- --deploy --branch review-<short-name>`. Give the
+   operator the review hub, full-site and standalone-tour links. The branch is
+   non-indexable and must not mutate production, R2, DNS or `current.json`.
+8. Production release is a separate, explicitly approved action. Any requested
+   change invalidates the previous review and requires a fresh integrated build.
 
 ## Save, conflict and recovery contract
 
