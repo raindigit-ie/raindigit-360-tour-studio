@@ -1,6 +1,49 @@
 import { expect, test } from "@playwright/test";
 
-test("mobile release renders and keeps controls recoverable", async ({ page, browserName }) => {
+test("desktop fullscreen keeps the complete tour control surface", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "Desktop fullscreen regression only.");
+  await page.goto("/?desktop-fullscreen-qa=1");
+  await expect(page.locator(".pnlm-render-container canvas")).toBeVisible();
+
+  const controls = {
+    topbar: page.locator(".topbar"),
+    rooms: page.locator("#navigatorToggle"),
+    reset: page.locator("#resetView"),
+    capture: page.locator("#captureView"),
+    fullscreen: page.locator("#fullscreen")
+  };
+  for (const control of Object.values(controls)) await expect(control).toBeVisible();
+
+  await controls.fullscreen.click();
+  await expect.poll(() => page.evaluate(() => ({
+    fullscreenClass: document.fullscreenElement?.className || "",
+    fallback: document.body.classList.contains("is-cinema-fullscreen")
+  }))).toMatchObject({ fullscreenClass: expect.stringContaining("tour-shell") });
+
+  for (const control of Object.values(controls)) await expect(control).toBeVisible();
+  await controls.rooms.click();
+  await expect(controls.rooms).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#navigatorPanel")).toBeVisible();
+  await expect(page.locator("#routeStrip")).toBeVisible();
+
+  const hitTargets = await page.evaluate(() => {
+    const selectors = ["#navigatorToggle", "#resetView", "#captureView", "#fullscreen"];
+    return selectors.map((selector) => {
+      const element = document.querySelector(selector);
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return { selector, hit: hit === element || element.contains(hit) };
+    });
+  });
+  expect(hitTargets.every((target) => target.hit), JSON.stringify(hitTargets)).toBe(true);
+
+  await page.locator("#navigatorClose").click();
+  await controls.fullscreen.click();
+  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
+});
+
+test("mobile release renders and keeps controls recoverable", async ({ page, browserName }, testInfo) => {
+  test.skip(testInfo.project.name === "chromium-desktop", "Mobile release regression only.");
   const consoleErrors = [];
   page.on("console", (message) => {
     if (message.type() === "error" && message.text() !== "not granted") consoleErrors.push(message.text());
@@ -48,7 +91,8 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   expect(consoleErrors).toEqual([]);
 });
 
-test("mobile release exposes an optional floorplan without blocking the tour", async ({ page }) => {
+test("mobile release exposes an optional floorplan without blocking the tour", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "chromium-desktop", "Mobile release regression only.");
   await page.route(/\/js\/tour-config\.js(?:\?.*)?$/, (route) => route.fulfill({
     contentType: "application/javascript; charset=utf-8",
     body: `window.TOUR_CONFIG=${JSON.stringify({
@@ -82,7 +126,8 @@ test("mobile release exposes an optional floorplan without blocking the tour", a
   await expect(page.locator("#floorplanPanel")).toBeHidden();
 });
 
-test("release hides floorplan control when no map is configured", async ({ page }) => {
+test("release hides floorplan control when no map is configured", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "chromium-desktop", "Mobile release regression only.");
   await page.route(/\/js\/tour-config\.js(?:\?.*)?$/, (route) => route.fulfill({
     contentType: "application/javascript; charset=utf-8",
     body: `window.TOUR_CONFIG=${JSON.stringify({

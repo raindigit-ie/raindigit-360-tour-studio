@@ -10,6 +10,7 @@ export default defineConfig({
     trace: "retain-on-failure"
   },
   projects: [
+    { name: "chromium-desktop", use: { ...devices["Desktop Chrome"] } },
     { name: "webkit-iphone", use: { ...devices["iPhone 13"] } },
     { name: "chromium-android", use: { ...devices["Pixel 7"] } }
   ]

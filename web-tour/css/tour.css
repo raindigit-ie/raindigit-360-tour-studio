@@ -36,6 +36,15 @@ button {
   background: #11100d;
 }
 
+.tour-shell:fullscreen,
+.tour-shell:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #11100d;
+}
+
 .viewer {
   position: absolute;
   inset: 0;

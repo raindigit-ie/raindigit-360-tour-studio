@@ -540,6 +540,7 @@ const floorplanCanvas = document.querySelector("#floorplanCanvas");
 const floorplanPins = [];
 const fullscreenButton = document.querySelector("#fullscreen");
 const captureViewButton = document.querySelector("#captureView");
+const tourShell = document.querySelector(".tour-shell");
 let initialViewApplied = false;
 
 function setActiveScene(sceneId) {
@@ -703,6 +704,32 @@ function isFullscreenActive() {
   );
 }
 
+function getNativeFullscreenElement() {
+  return document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement ||
+    null;
+}
+
+function requestNativeFullscreen(element) {
+  const request = element?.requestFullscreen ||
+    element?.webkitRequestFullscreen ||
+    element?.mozRequestFullScreen ||
+    element?.msRequestFullscreen;
+  if (!request) return null;
+  return Promise.resolve(request.call(element));
+}
+
+function exitNativeFullscreen() {
+  const exit = document.exitFullscreen ||
+    document.webkitExitFullscreen ||
+    document.mozCancelFullScreen ||
+    document.msExitFullscreen;
+  if (!exit) return Promise.resolve();
+  return Promise.resolve(exit.call(document));
+}
+
 function updateFullscreenButton() {
   const isActive = isFullscreenActive();
   fullscreenButton.classList.toggle("is-active", isActive);
@@ -725,21 +752,51 @@ function toggleFullscreenFallback() {
   resizeTourAfterFullscreenChange();
 }
 
-function requestTourFullscreen() {
+async function requestTourFullscreen() {
+  if (getNativeFullscreenElement()) {
+    try {
+      await exitNativeFullscreen();
+    } finally {
+      updateFullscreenButton();
+      resizeTourAfterFullscreenChange();
+    }
+    return;
+  }
+
+  if (document.body.classList.contains("is-cinema-fullscreen")) {
+    toggleFullscreenFallback();
+    return;
+  }
+
   if (window.parent !== window && window.matchMedia("(max-width: 760px)").matches) {
     toggleFullscreenFallback();
     return;
   }
-  viewer.toggleFullscreen();
+
+  try {
+    const request = requestNativeFullscreen(tourShell);
+    if (!request) {
+      toggleFullscreenFallback();
+      return;
+    }
+    await request;
+  } catch {
+    toggleFullscreenFallback();
+    return;
+  }
+
   window.setTimeout(() => {
     if (!isFullscreenActive()) toggleFullscreenFallback();
   }, 450);
 }
 
-fullscreenButton.addEventListener("click", requestTourFullscreen);
+fullscreenButton.addEventListener("click", () => void requestTourFullscreen());
 
 ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"].forEach((eventName) => {
-  document.addEventListener(eventName, updateFullscreenButton);
+  document.addEventListener(eventName, () => {
+    updateFullscreenButton();
+    resizeTourAfterFullscreenChange();
+  });
 });
 
 window.addEventListener("message", (event) => {
