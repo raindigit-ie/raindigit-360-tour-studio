@@ -53,10 +53,13 @@
     arrival: null,
     savedAt: null,
     workspaceProject: null,
+    archives: [],
     importing: false,
     restoring: false,
     importProgress: { current: 0, total: 0 },
     building: false,
+    buildingMode: null,
+    buildProgress: { phase: "idle", percent: 0, message: "" },
     sceneMoving: false,
     pendingFocus: null,
     release: { ready: false },
@@ -76,13 +79,18 @@
     guidePreferences: { visible: true, snapEnabled: true, snapToleranceDeg: 2.2 },
     showOriginalLook: false,
     draftDirty: false,
+    draftRevision: 0,
+    structureDirty: false,
     initializing: true,
     routeReferenceMigrated: false,
     viewportSettling: false,
     viewerSettled: false,
     roomPlanTargetId: null,
     roomPlanTargetAction: null,
-    statusMessage: "Loading project"
+    statusMessage: "Loading project",
+    saveStatus: { phase: "idle", message: "Not saved yet" },
+    draftRetryAttempts: 0,
+    structureRetryAttempts: 0
   };
   window.sessionStorage.removeItem(stageStorageKey);
 
@@ -123,7 +131,7 @@
           </section>
           <section class="editor-start-block">
             <strong id="editorNewProjectHeading">New tour</strong>
-            <p class="editor-start-copy" id="editorNewProjectHelp">Create one active working tour. Finished exports clear the workspace.</p>
+            <p class="editor-start-copy" id="editorNewProjectHelp">Create one active working tour. Downloads never remove the editable project.</p>
             <label class="editor-field editor-field--stacked">
               <span>Tour name</span>
               <input id="editorProjectTitle" type="text" maxlength="100" autocomplete="off" value="Untitled 360 Tour" />
@@ -137,6 +145,11 @@
               <input id="editorProjectBackup" type="file" accept=".rdtour,application/zip" />
             </label>
             <button class="editor-button editor-button--wide" id="editorRestoreProject" type="button" disabled>Open project</button>
+          </section>
+          <section class="editor-start-block">
+            <strong>Recent archived tours</strong>
+            <p class="editor-start-copy">Open a finished editable project without looking for its file.</p>
+            <div class="editor-archive-list" id="editorArchiveList"></div>
           </section>
         </div>
       </section>
@@ -269,7 +282,11 @@
           <input id="editorReleaseSlug" type="text" inputmode="url" autocomplete="off" maxlength="72" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" aria-describedby="editorReleaseSlugHelp" />
           <small id="editorReleaseSlugHelp">Used in the permanent address: raindigit.ie/tours/<b>tour-name</b>/</small>
         </label>
-        <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build the tour</button>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build the tour</button>
+          <div class="editor-build-progress" id="editorBuildProgress" hidden role="status" aria-live="polite">
+            <div><span id="editorBuildProgressLabel">Preparing build</span><strong id="editorBuildProgressPercent">0%</strong></div>
+            <div class="editor-build-progress__track"><i id="editorBuildProgressBar"></i></div>
+          </div>
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
           <div class="editor-publish-card">
             <strong>Optimized website tour is ready</strong>
@@ -284,6 +301,8 @@
           <details class="editor-disclosure editor-disclosure--compact">
             <summary>Add it to a website</summary>
             <div class="editor-publish-card">
+              <button class="editor-button editor-button--wide" id="editorBuildPortable" type="button">Prepare embed & portable files</button>
+              <span id="editorPortableStatus">Optional: prepare these only for another website or offline handover.</span>
               <span>For a website editor, copy or download one paste-in HTML block.</span>
               <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadEmbed" download="raindigit-360-tour-embed.html">Download paste-in code</a>
               <button class="editor-button editor-button--wide" id="editorCopyEmbedBlock" type="button">Copy paste-in code</button>
@@ -304,13 +323,21 @@
             <button class="editor-button editor-button--wide" id="editorDownloadProject" type="button">Download editable backup</button>
             <a class="editor-button editor-button--wide" id="editorDownloadZip" download="raindigit-360-tour.zip">Download folder package (.zip)</a>
           </details>
+          <section class="editor-publish-card editor-publish-card--finish">
+            <strong>Finished with this tour?</strong>
+            <span>First archive the editable project, then clear this computer for the next tour. Downloading files never deletes your work.</span>
+            <button class="editor-button editor-button--wide" id="editorArchiveWorkspace" type="button">Archive and finish tour</button>
+          </section>
         </div>
         <p class="editor-empty" id="editorReleaseStatus"></p>
       </section>
     </div>
     <div class="editor-panel__footer">
       <button class="editor-button" id="editorBack" type="button">Back</button>
-      <span class="editor-panel__status" id="editorStatus" role="status">Loading project</span>
+      <div class="editor-panel__status-group">
+        <span class="editor-panel__status" id="editorStatus" role="status">Loading project</span>
+        <span class="editor-save-status" id="editorSaveStatus" data-state="idle" role="status"><i aria-hidden="true"></i><span>Not saved yet</span></span>
+      </div>
       <button class="editor-button editor-button--primary" id="editorContinue" type="button" hidden>Continue</button>
     </div>
   `;
@@ -343,7 +370,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ReleaseStatus", "Back", "Status", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ArchiveList", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "BuildPortable", "PortableStatus", "BuildProgress", "BuildProgressLabel", "BuildProgressPercent", "BuildProgressBar", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ArchiveWorkspace", "ReleaseStatus", "Back", "Status", "SaveStatus", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -385,8 +412,10 @@
   let suppressPlacementClick = false;
   let draftSavePromise = Promise.resolve(true);
   let draftSaveTimer = 0;
+  let draftRetryTimer = 0;
   let structureSavePromise = Promise.resolve(true);
   let structureSaveTimer = 0;
+  let structureRetryTimer = 0;
   let structureRevision = 0;
   const studioSessionId = window.crypto?.randomUUID?.() || `studio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   let studioLogSequence = 0;
@@ -517,6 +546,39 @@
     state.statusMessage = message;
     elements.Status.textContent = message;
     studioLog("status", { message });
+  }
+
+  function setSaveStatus(phase, message) {
+    state.saveStatus = { phase, message };
+    elements.SaveStatus.dataset.state = phase;
+    elements.SaveStatus.querySelector("span").textContent = message;
+    studioLog("save-status", { phase, message });
+  }
+
+  function retryDelay(attempt) {
+    return Math.min(30_000, 1_000 * 2 ** Math.min(5, Math.max(0, attempt - 1)));
+  }
+
+  function scheduleDraftRetry() {
+    if (!state.draftDirty || draftRetryTimer || !navigator.onLine) return;
+    state.draftRetryAttempts += 1;
+    const delay = retryDelay(state.draftRetryAttempts);
+    draftRetryTimer = window.setTimeout(() => {
+      draftRetryTimer = 0;
+      if (state.draftDirty) queueDraftSave("automatic-save-retry");
+    }, delay);
+    setSaveStatus("error", `Save failed · retrying in ${Math.ceil(delay / 1000)}s`);
+  }
+
+  function scheduleStructureRetry() {
+    if (!state.structureDirty || structureRetryTimer || !navigator.onLine || !canPersistWorkspaceStructure()) return;
+    state.structureRetryAttempts += 1;
+    const delay = retryDelay(state.structureRetryAttempts);
+    structureRetryTimer = window.setTimeout(() => {
+      structureRetryTimer = 0;
+      if (state.structureDirty) queueWorkspaceStructureSave("automatic-setup-save-retry", { updateState: false, bumpRevision: false });
+    }, delay);
+    setSaveStatus("error", `Setup not saved · retrying in ${Math.ceil(delay / 1000)}s`);
   }
 
   function logOperatorStep(action, details = {}) {
@@ -1307,8 +1369,33 @@
     elements.NewProjectHeading.textContent = project ? "Start over" : "New tour";
     elements.NewProjectHelp.textContent = project
       ? "This deletes the unfinished working copy and starts a clean tour."
-      : "Create one active working tour. Finished exports clear the workspace.";
+      : "Create one active working tour. Downloads never remove the editable project.";
     elements.CreateWorkspace.textContent = project ? "Start new tour" : "Create new tour";
+    elements.ArchiveList.replaceChildren();
+    if (!state.archives.length) {
+      const empty = document.createElement("span");
+      empty.className = "editor-archive-list__empty";
+      empty.textContent = "No archived tours yet.";
+      elements.ArchiveList.appendChild(empty);
+      return;
+    }
+    state.archives.forEach((archive) => {
+      const row = document.createElement("article");
+      const copy = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = archive.slug.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+      const meta = document.createElement("span");
+      meta.textContent = `${new Date(archive.updatedAt).toLocaleString()} · ${(archive.size / 1024 / 1024).toFixed(1)} MB`;
+      copy.append(title, meta);
+      const open = document.createElement("button");
+      open.className = "editor-button editor-button--small";
+      open.type = "button";
+      open.textContent = "Open";
+      open.disabled = state.restoring;
+      open.addEventListener("click", () => restoreArchivedProject(archive));
+      row.append(copy, open);
+      elements.ArchiveList.appendChild(row);
+    });
   }
 
   function renderUploadPanel() {
@@ -2103,6 +2190,17 @@
     return state.workspaceProject;
   }
 
+  async function refreshArchives() {
+    try {
+      const response = await fetch(studioUrl("project-archives", false), { cache: "no-store" });
+      if (!response.ok) throw new Error(`Could not read archived tours (${response.status})`);
+      state.archives = (await response.json()).archives || [];
+    } catch (error) {
+      state.archives = [];
+      studioLog("archive-list-failed", { message: error.message });
+    }
+  }
+
   async function createWorkspace(replace = false) {
     const response = await fetch(studioUrl("workspace-project", false), {
       method: "POST",
@@ -2169,8 +2267,13 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify(workspaceStructurePayload())
     });
-    if (!response.ok) throw new Error((await response.json()).error || `Could not save space structure (${response.status})`);
-    const project = await response.json();
+    const body = await response.json();
+    if (!response.ok) {
+      const error = new Error(body.error || `Could not save space structure (${response.status})`);
+      error.code = body.code || "";
+      throw error;
+    }
+    const project = body;
     syncStructureRevision(project);
     if (updateState) state.workspaceProject = project;
     return project;
@@ -2191,7 +2294,12 @@
       window.clearTimeout(structureSaveTimer);
       structureSaveTimer = 0;
     }
+    if (structureRetryTimer) {
+      window.clearTimeout(structureRetryTimer);
+      structureRetryTimer = 0;
+    }
     if (!canPersistWorkspaceStructure()) return structureSavePromise;
+    state.structureDirty = true;
     if (options.bumpRevision !== false && state.workspaceProject) {
       structureRevision += 1;
       state.workspaceProject.editorStructureRevision = structureRevision;
@@ -2199,13 +2307,21 @@
     structureSavePromise = structureSavePromise.catch(() => false).then(async () => {
       if (!canPersistWorkspaceStructure()) return false;
       studioLog("structure-save-start", { reason }, true);
+      setSaveStatus("saving", "Saving setup…");
       try {
         await persistWorkspaceStructure({ updateState: options.updateState === true });
+        state.structureDirty = false;
+        state.structureRetryAttempts = 0;
         state.release = { ready: false };
+        setSaveStatus("saved", "Saved locally");
         studioLog("structure-save-success", { reason }, true);
         return true;
       } catch (error) {
+        state.structureDirty = true;
+        setSaveStatus("error", "Space setup not saved");
+        setStatus(error.message);
         studioLog("structure-save-failed", { reason, message: error.message }, true);
+        if (error.code !== "ESTALE") scheduleStructureRetry();
         return false;
       }
     });
@@ -2215,6 +2331,7 @@
   function scheduleWorkspaceStructureSave(reason, delay = 300) {
     if (state.initializing || !state.workspaceProject?.scenes?.length) return;
     structureRevision += 1;
+    state.structureDirty = true;
     state.workspaceProject.editorStructureRevision = structureRevision;
     window.clearTimeout(structureSaveTimer);
     structureSaveTimer = window.setTimeout(() => {
@@ -2237,6 +2354,9 @@
     if (!project?.scenes?.length) throw new Error("Add at least one 360 photo first.");
     await flushWorkspaceStructureSave("structure-before-continue");
     await persistWorkspaceStructure();
+    state.structureDirty = false;
+    state.structureRetryAttempts = 0;
+    setSaveStatus("saved", "Saved locally");
     setStatus("Space structure saved");
     if (workspaceMode) {
       window.sessionStorage.setItem(stageStorageKey, nextStage || "rooms");
@@ -2309,34 +2429,50 @@
     renderProjectPanel();
     let imported = 0;
     let lastImportedSceneId = null;
+    const failures = [];
     try {
       for (const [index, file] of files.entries()) {
         state.importProgress.current = index + 1;
         renderUploadPanel();
         setStatus(`Preparing ${index + 1} of ${files.length}: ${file.name}`);
-        const response = await fetch(studioUrl("workspace-import", true), {
-          method: "POST",
-          headers: {
-            "content-type": "image/jpeg",
-            "x-tour-file-name": encodeURIComponent(file.name),
-            "x-tour-room-id": encodeURIComponent(roomId),
-            "x-tour-room-label": encodeURIComponent(roomLabel),
-            "x-tour-floor-id": encodeURIComponent(floorId),
-            "x-tour-floor-label": encodeURIComponent(floorLabel)
-          },
-          body: file
-        });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || `Import failed (${response.status})`);
-        state.workspaceProject = body.project;
-        lastImportedSceneId = body.scene?.id || null;
-        syncStructureRevision();
-        imported += 1;
+        try {
+          const response = await fetch(studioUrl("workspace-import", true), {
+            method: "POST",
+            headers: {
+              "content-type": "image/jpeg",
+              "x-tour-file-name": encodeURIComponent(file.name),
+              "x-tour-room-id": encodeURIComponent(roomId),
+              "x-tour-room-label": encodeURIComponent(roomLabel),
+              "x-tour-floor-id": encodeURIComponent(floorId),
+              "x-tour-floor-label": encodeURIComponent(floorLabel)
+            },
+            body: file
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || `Import failed (${response.status})`);
+          state.workspaceProject = body.project;
+          lastImportedSceneId = body.scene?.id || null;
+          syncStructureRevision();
+          imported += 1;
+        } catch (error) {
+          failures.push({ name: file.name, message: error.message });
+          studioLog("photo-import-failed", { name: file.name, message: error.message }, true);
+        }
       }
-      setStatus(`${imported} photo${imported === 1 ? "" : "s"} added`);
+      const summary = `${imported} photo${imported === 1 ? "" : "s"} added`;
+      setStatus(failures.length
+        ? `${summary}; ${failures.length} skipped: ${failures.map((failure) => failure.name).slice(0, 3).join(", ")}${failures.length > 3 ? ` and ${failures.length - 3} more` : ""}`
+        : summary);
       if (lastImportedSceneId && returnStage === "rooms") window.sessionStorage.setItem("raindigit-tour-room-plan-scene", lastImportedSceneId);
-      window.sessionStorage.setItem(stageStorageKey, returnStage === "rooms" ? "rooms" : "upload");
-      window.location.assign(workspaceEditorUrl());
+      if (imported > 0) {
+        window.sessionStorage.setItem(stageStorageKey, returnStage === "rooms" ? "rooms" : "upload");
+        window.location.assign(workspaceEditorUrl());
+      } else {
+        state.importing = false;
+        state.importProgress = { current: 0, total: 0 };
+        input.value = "";
+        renderProjectPanel();
+      }
     } catch (error) {
       setStatus(imported ? `${imported} imported; ${error.message}` : error.message);
       await refreshWorkspaceProject();
@@ -2920,9 +3056,17 @@
     elements.ExportSummary.innerHTML = `<div><strong>${rooms}</strong><span>Spaces</span></div><div><strong>${api.scenes.length}</strong><span>Views</span></div><div><strong>${transitions}</strong><span>Places</span></div><div><strong>${adjusted}</strong><span>Picture changes</span></div>`;
     const readiness = releaseReadiness();
     elements.Readiness.classList.toggle("is-ready", readiness.ready);
-    elements.Readiness.textContent = readiness.ready
-      ? "Ready to publish"
-      : `Finish ${readiness.pendingPositions} point${readiness.pendingPositions === 1 ? "" : "s"} and ${readiness.pendingArrivals} destination view${readiness.pendingArrivals === 1 ? "" : "s"}.`;
+    elements.Readiness.replaceChildren();
+    const readinessTitle = document.createElement("strong");
+    readinessTitle.textContent = readiness.ready ? "Ready to publish" : "Pre-publish check";
+    const readinessList = document.createElement("ul");
+    readiness.checks.forEach((check) => {
+      const item = document.createElement("li");
+      item.classList.toggle("is-ready", check.ready);
+      item.innerHTML = `<i aria-hidden="true">${check.ready ? "✓" : "!"}</i><span>${check.label}</span>`;
+      readinessList.appendChild(item);
+    });
+    elements.Readiness.append(readinessTitle, readinessList);
     if (!elements.ReleaseSlug.value) elements.ReleaseSlug.value = state.release.multires?.slug || slugifyTourTitle(state.workspaceProject?.title || api.title);
     const releaseSlug = elements.ReleaseSlug.value.trim();
     const releaseSlugValid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(releaseSlug) && releaseSlug.length <= 72;
@@ -2935,13 +3079,31 @@
     elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
     elements.Build.disabled = !workspaceMode || state.building || !readiness.ready || !releaseSlugValid;
     elements.Build.hidden = state.release.ready;
-    elements.Build.textContent = state.building ? "Building tour..." : "Build the tour";
+    elements.Build.textContent = state.building ? state.buildProgress.message || "Building tour..." : "Build the tour";
+    elements.BuildProgress.hidden = !state.building;
+    elements.BuildProgressLabel.textContent = state.buildProgress.message || "Preparing build";
+    elements.BuildProgressPercent.textContent = `${Math.max(0, Math.min(100, state.buildProgress.percent || 0))}%`;
+    elements.BuildProgressBar.style.width = `${Math.max(0, Math.min(100, state.buildProgress.percent || 0))}%`;
     elements.ReleaseActions.hidden = !state.release.ready;
+    elements.ArchiveWorkspace.disabled = !workspaceMode || state.building || !state.workspaceProject?.scenes?.length;
     elements.PreviewMultires.href = state.release.multires?.ready ? `${endpoint}/release-multires/${state.release.multires.entrypoint}` : "";
     elements.DownloadMultires.href = studioUrl("release-multires-download");
     elements.MultiresSummary.textContent = state.release.multires?.ready
-      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons · immutable ${state.release.multires.version}`
+      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons${state.release.buildDurationMs ? ` · built in ${Math.max(1, Math.round(state.release.buildDurationMs / 1000))}s` : ""} · immutable ${state.release.multires.version}`
       : "Versioned tiles, manifest and rollback pointer are included.";
+    elements.BuildPortable.hidden = Boolean(state.release.legacyReady);
+    elements.BuildPortable.disabled = !workspaceMode || state.building || !state.release.ready;
+    elements.BuildPortable.textContent = state.building && state.buildingMode === "portable"
+      ? state.buildProgress.message || "Preparing portable files..."
+      : "Prepare embed & portable files";
+    elements.PortableStatus.textContent = state.release.legacyReady
+      ? "Embed, one-file tour and folder package are ready."
+      : "Optional: prepare these only for another website or offline handover.";
+    elements.EmbedTestLink.hidden = !state.release.embedReady;
+    elements.DownloadEmbed.hidden = !state.release.embedReady;
+    elements.CopyEmbedBlock.hidden = !state.release.embedReady;
+    elements.DownloadSingle.hidden = !state.release.legacyReady;
+    elements.DownloadZip.hidden = !state.release.legacyReady;
     elements.EmbedTestLink.href = `${endpoint}/release-embed-test.html`;
     elements.DownloadSingle.href = studioUrl("release-single-download");
     elements.DownloadEmbed.href = studioUrl("release-embed-download");
@@ -3070,7 +3232,30 @@
     const hotspots = api.scenes.flatMap((scene) => scene.hotspots);
     const pendingPositions = hotspots.filter((hotspot) => hotspot.positionConfirmed === false).length;
     const pendingArrivals = pendingArrivalTasks().length;
-    return { ready: pendingPositions === 0 && pendingArrivals === 0, pendingPositions, pendingArrivals };
+    const normalizedTitles = api.scenes.map((scene) => scene.title.trim().toLocaleLowerCase());
+    const uniqueTitles = new Set(normalizedTitles).size === normalizedTitles.length;
+    const assignmentsReady = api.scenes.every((scene) => scene.title.trim() && scene.space && scene.spaceLabel?.trim() && scene.floor && scene.floorLabel?.trim());
+    const firstSceneId = state.workspaceProject?.firstScene || api.scenes[0]?.id;
+    const reachable = new Set(firstSceneId ? [firstSceneId] : []);
+    const queue = firstSceneId ? [firstSceneId] : [];
+    while (queue.length) {
+      const scene = api.sceneById[queue.shift()];
+      (scene?.hotspots || []).forEach((hotspot) => {
+        if (!api.sceneById[hotspot.target] || reachable.has(hotspot.target)) return;
+        reachable.add(hotspot.target);
+        queue.push(hotspot.target);
+      });
+    }
+    const unreachableScenes = api.scenes.filter((scene) => !reachable.has(scene.id));
+    const checks = [
+      { key: "photos", ready: api.scenes.length > 0, label: api.scenes.length > 0 ? `${api.scenes.length} panorama${api.scenes.length === 1 ? "" : "s"} included` : "Add at least one panorama" },
+      { key: "assignments", ready: assignmentsReady, label: assignmentsReady ? "Every photo has a name, space and floor" : "Name and assign every photo" },
+      { key: "unique-titles", ready: uniqueTitles, label: uniqueTitles ? "Photo names are unique" : "Give duplicate photos distinct names" },
+      { key: "reachability", ready: unreachableScenes.length === 0, label: unreachableScenes.length === 0 ? "Every photo is reachable from the start" : `Connect ${unreachableScenes.map((scene) => scene.title).slice(0, 3).join(", ")}${unreachableScenes.length > 3 ? ` and ${unreachableScenes.length - 3} more` : ""}` },
+      { key: "positions", ready: pendingPositions === 0, label: pendingPositions === 0 ? "Walking buttons are positioned" : `Position ${pendingPositions} walking button${pendingPositions === 1 ? "" : "s"}` },
+      { key: "arrivals", ready: pendingArrivals === 0, label: pendingArrivals === 0 ? "First views are set" : `Set ${pendingArrivals} destination view${pendingArrivals === 1 ? "" : "s"}` }
+    ];
+    return { ready: checks.every((check) => check.ready), pendingPositions, pendingArrivals, unreachableScenes, checks };
   }
 
   function updateEmbedCode() {
@@ -3091,7 +3276,7 @@
   }
 
   async function copyEmbedBlock() {
-    if (!workspaceMode || !state.release.ready) return;
+    if (!workspaceMode || !state.release.embedReady) return;
     elements.CopyEmbedBlock.disabled = true;
     setStatus("Copying paste-in code...");
     try {
@@ -3107,22 +3292,9 @@
   }
 
   function watchFinishedExport(kind) {
-    if (!workspaceMode || !state.release.ready) return;
+    if (!workspaceMode || (!state.release.ready && !state.release.legacyReady && !state.release.embedReady)) return;
     studioLog("release-download-started", { kind }, true);
-    window.setTimeout(async () => {
-      try {
-        await refreshWorkspaceProject();
-        if (!state.workspaceProject) {
-          state.release = { ready: false };
-          window.sessionStorage.removeItem(stageStorageKey);
-          state.activeStage = "start";
-          setStatus("Tour exported. Working files cleared.");
-          render();
-        }
-      } catch (error) {
-        studioLog("release-download-cleanup-check-failed", { kind, message: error.message }, true);
-      }
-    }, 1800);
+    setStatus("Download started. Your editable project remains safe on this computer.");
   }
 
   function syncSelectedMarker() {
@@ -3419,6 +3591,7 @@
     });
     return {
       schema: "raindigit-tour-hotspot-overrides/v1",
+      editorDraftRevision: state.draftRevision,
       updatedAt: new Date().toISOString(),
       overrides,
       addedHotspots: Object.fromEntries(api.scenes.map((scene) => [scene.id, api.getAddedHotspots(scene.id)])),
@@ -3478,31 +3651,44 @@
       studioLog("ui-state-restored", { stage: state.activeStage, selected: state.selected }, true);
     }
     state.savedAt = draft.updatedAt || null;
+    state.draftRevision = Number.isSafeInteger(draft.editorDraftRevision) ? draft.editorDraftRevision : 0;
+    setSaveStatus(state.savedAt ? "saved" : "idle", state.savedAt ? "Saved locally" : "Not saved yet");
   }
 
   async function saveDraft(reason = "manual") {
     const draft = createDraft();
     const hotspotCounts = Object.fromEntries(api.scenes.map((scene) => [scene.id, scene.hotspots.length]));
     studioLog("draft-save-start", { reason, updatedAt: draft.updatedAt, hotspotCounts }, true);
-    setStatus("Saving locally...");
+    setSaveStatus("saving", "Saving…");
     try {
       const response = await fetch(studioUrl("save"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(draft)
       });
-      if (!response.ok) throw new Error((await response.json()).error || `Save failed (${response.status})`);
+      const body = await response.json();
+      if (!response.ok) {
+        const error = new Error(body.error || `Save failed (${response.status})`);
+        error.code = body.code || "";
+        throw error;
+      }
       state.savedAt = draft.updatedAt;
+      state.draftRevision = Number.isSafeInteger(body.editorDraftRevision) ? body.editorDraftRevision : state.draftRevision + 1;
       state.draftDirty = false;
-      state.release = { ready: false };
-      setStatus("Saved locally");
+      state.draftRetryAttempts = 0;
+      // The server compares only release-relevant data. A UI-state autosave
+      // therefore preserves a valid build, while a real tour edit invalidates it.
+      state.release = body.release || { ready: false };
+      setSaveStatus("saved", "Saved locally");
       renderExportPanel();
       studioLog("draft-save-success", { reason, updatedAt: draft.updatedAt, hotspotCounts }, true);
       return true;
     } catch (error) {
       state.draftDirty = true;
+      setSaveStatus("error", "Save failed");
       setStatus(error.message);
       studioLog("draft-save-failed", { reason, message: error.message, hotspotCounts }, true);
+      if (error.code !== "ESTALE") scheduleDraftRetry();
       return false;
     }
   }
@@ -3513,6 +3699,10 @@
     if (draftSaveTimer) {
       window.clearTimeout(draftSaveTimer);
       draftSaveTimer = 0;
+    }
+    if (draftRetryTimer) {
+      window.clearTimeout(draftRetryTimer);
+      draftRetryTimer = 0;
     }
     draftSavePromise = draftSavePromise.catch(() => false).then(() => saveDraft(reason));
     return draftSavePromise;
@@ -3761,27 +3951,113 @@
     renderExportPanel();
   }
 
-  async function buildRelease() {
-    if (!workspaceMode || state.building) return;
-    if (!await queueDraftSave("before-build")) return;
-    state.building = true;
-    setStatus("Building tour...");
-    renderExportPanel();
+  async function refreshBuildProgress() {
+    if (!workspaceMode || !state.building) return;
     try {
-      const response = await fetch(studioUrl("build-release"), {
+      const response = await fetch(studioUrl("release-build-status"), { cache: "no-store" });
+      if (!response.ok) return;
+      state.buildProgress = await response.json();
+      renderExportPanel();
+    } catch {
+      // The build request remains authoritative; a missed progress sample is harmless.
+    }
+  }
+
+  async function buildReleaseTarget(mode = "web") {
+    if (!workspaceMode || state.building) return;
+    const portable = mode === "portable";
+    // Lock the action before the pre-build save starts. Without this guard a
+    // second click can start while autosave is still being flushed.
+    state.building = true;
+    state.buildingMode = mode;
+    state.buildProgress = { phase: "saving", percent: 1, message: "Saving latest changes" };
+    renderExportPanel();
+    await flushWorkspaceStructureSave("structure-before-build");
+    if (state.structureDirty) {
+      setStatus("Save the space setup before building the tour.");
+      state.building = false;
+      state.buildingMode = null;
+      renderExportPanel();
+      return;
+    }
+    if (!await queueDraftSave("before-build")) {
+      state.building = false;
+      state.buildingMode = null;
+      renderExportPanel();
+      return;
+    }
+    state.buildProgress = { phase: "starting", percent: 2, message: portable ? "Preparing portable files" : "Preparing build" };
+    setStatus(portable ? "Preparing optional portable files..." : "Building optimized website tour...");
+    renderExportPanel();
+    await refreshBuildProgress();
+    const progressTimer = window.setInterval(refreshBuildProgress, 650);
+    try {
+      const response = await fetch(studioUrl(portable ? "build-portable-release" : "build-release"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug: elements.ReleaseSlug.value.trim() })
+        body: JSON.stringify(portable ? {} : { slug: elements.ReleaseSlug.value.trim() })
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || `Build failed (${response.status})`);
-      state.release = body;
-      setStatus("Tour ready");
+      state.release = { ...state.release, ...body, buildDurationMs: body.buildDurationMs ?? state.release.buildDurationMs };
+      state.buildProgress = { phase: "complete", percent: 100, message: portable ? "Portable files ready" : "Tour ready" };
+      setStatus(portable ? "Portable and embed files ready" : "Optimized website tour ready");
     } catch (error) {
+      state.buildProgress = { phase: "failed", percent: state.buildProgress.percent || 0, message: "Build failed" };
       setStatus(error.message);
     } finally {
+      window.clearInterval(progressTimer);
       state.building = false;
+      state.buildingMode = null;
       renderExportPanel();
+    }
+  }
+
+  async function buildRelease() {
+    return buildReleaseTarget("web");
+  }
+
+  async function buildPortableRelease() {
+    if (!state.release.ready) {
+      setStatus("Build the optimized website tour first.");
+      return;
+    }
+    return buildReleaseTarget("portable");
+  }
+
+  async function archiveAndFinishTour() {
+    if (!workspaceMode || !state.workspaceProject?.scenes?.length || state.building) return;
+    const title = state.workspaceProject.title || "this tour";
+    if (!window.confirm(`Archive the editable project for “${title}”, then clear the studio for the next tour?`)) return;
+    await flushWorkspaceStructureSave("structure-before-archive");
+    if (state.structureDirty || !await flushDraftSave("before-archive")) {
+      setStatus("The tour could not be safely saved. Fix the save error before archiving.");
+      return;
+    }
+    elements.ArchiveWorkspace.disabled = true;
+    setStatus("Archiving editable project...");
+    try {
+      const response = await fetch(studioUrl("archive-workspace"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: true })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || `Could not archive project (${response.status})`);
+      studioLog("workspace-archived-and-cleared", body, true);
+      state.workspaceProject = null;
+      state.release = { ready: false };
+      state.savedAt = null;
+      state.draftDirty = false;
+      setSaveStatus("idle", "No active tour");
+      window.sessionStorage.removeItem(stageStorageKey);
+      state.activeStage = "start";
+      setStatus(`Archived as ${body.fileName}. Ready for the next tour.`);
+      await refreshArchives();
+      render();
+    } catch (error) {
+      elements.ArchiveWorkspace.disabled = false;
+      setStatus(error.message);
     }
   }
 
@@ -3816,6 +4092,30 @@
       setStatus(error.message);
       state.restoring = false;
       elements.RestoreProject.disabled = false;
+    }
+  }
+
+  async function restoreArchivedProject(archive) {
+    if (!archive?.id || state.restoring) return;
+    const replace = Boolean(state.workspaceProject);
+    if (replace && !window.confirm("Replace the current local project with this archived tour?")) return;
+    state.restoring = true;
+    renderStartPanel();
+    setStatus(`Opening archived tour ${archive.slug.replace(/-/g, " ")}...`);
+    try {
+      const response = await fetch(studioUrl("archive-restore", true), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ archive: archive.id, replace })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || `Could not open archived tour (${response.status})`);
+      window.sessionStorage.setItem(stageStorageKey, "upload");
+      window.location.assign(workspaceEditorUrl());
+    } catch (error) {
+      state.restoring = false;
+      setStatus(error.message);
+      renderStartPanel();
     }
   }
 
@@ -3871,6 +4171,8 @@
     continueWizard();
   });
   elements.Build.addEventListener("click", buildRelease);
+  elements.BuildPortable.addEventListener("click", buildPortableRelease);
+  elements.ArchiveWorkspace.addEventListener("click", archiveAndFinishTour);
   elements.PreviewLink.addEventListener("click", async (event) => {
     if (!workspaceMode || (!state.draftDirty && !draftSaveTimer)) return;
     event.preventDefault();
@@ -4221,6 +4523,25 @@
     navigator.sendBeacon(studioUrl("studio-log", false), new Blob([JSON.stringify({ entries })], { type: "application/json" }));
   });
 
+  window.addEventListener("beforeunload", (event) => {
+    if (!state.draftDirty && !state.structureDirty && !draftSaveTimer && !structureSaveTimer && !draftRetryTimer && !structureRetryTimer) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  window.addEventListener("offline", () => {
+    if (!state.draftDirty && !state.structureDirty) return;
+    setSaveStatus("error", "Offline · changes waiting to save");
+    setStatus("The studio is offline. Keep this window open; saving resumes automatically when the connection returns.");
+    studioLog("studio-offline-with-unsaved-work", { draftDirty: state.draftDirty, structureDirty: state.structureDirty }, true);
+  });
+
+  window.addEventListener("online", () => {
+    studioLog("studio-online", { draftDirty: state.draftDirty, structureDirty: state.structureDirty }, true);
+    if (state.structureDirty && canPersistWorkspaceStructure()) queueWorkspaceStructureSave("connection-restored", { updateState: false, bumpRevision: false });
+    if (state.draftDirty) queueDraftSave("connection-restored");
+  });
+
   let viewportTimer = 0;
   window.addEventListener("resize", () => {
     state.viewportSettling = true;
@@ -4278,7 +4599,8 @@
   Promise.all([
     fetch(studioUrl("status")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Local editor server unavailable"))),
     refreshWorkspaceProject(),
-    fetch(studioUrl("overrides")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft")))
+    fetch(studioUrl("overrides")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft"))),
+    refreshArchives()
   ]).then(async ([, , draft]) => {
     await waitForViewerSettled();
     state.viewerSettled = true;

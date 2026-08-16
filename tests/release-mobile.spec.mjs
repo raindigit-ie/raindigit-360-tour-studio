@@ -72,6 +72,22 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   const navigatorToggle = page.locator("#navigatorToggle");
   await navigatorToggle.click();
   await expect(navigatorToggle).toHaveAttribute("aria-expanded", "true");
+
+  const touchTargets = await page.evaluate(() => {
+    const controls = ["#navigatorToggle", "#resetView", "#captureView", "#fullscreen", "#navigatorClose"];
+    const primary = controls.map((selector) => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return { selector, width: rect.width, height: rect.height };
+    });
+    const route = Array.from(document.querySelectorAll(".route-step"), (element) => {
+      const rect = element.getBoundingClientRect();
+      return { selector: ".route-step", width: rect.width, height: rect.height };
+    });
+    return { primary, route };
+  });
+  expect(touchTargets.primary.every(({ width, height }) => width >= 39.5 && height >= 39.5), JSON.stringify(touchTargets.primary)).toBe(true);
+  expect(touchTargets.route.every(({ height }) => height >= 35.5), JSON.stringify(touchTargets.route)).toBe(true);
+
   await page.locator("#navigatorClose").click();
   await expect(navigatorToggle).toHaveAttribute("aria-expanded", "false");
   await navigatorToggle.click();

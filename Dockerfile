@@ -1,4 +1,4 @@
-FROM node:22-alpine AS studio
+FROM node:22.12-alpine AS studio
 
 RUN apk add --no-cache \
     imagemagick \

@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -43,6 +43,21 @@ async function waitForServer(baseUrl) {
   throw new Error("Timed out waiting for guided studio server.");
 }
 
+async function waitForApi(page, path, predicate, timeout = 10_000) {
+  const startedAt = Date.now();
+  let lastBody = null;
+  while (Date.now() - startedAt < timeout) {
+    const url = new URL(path, page.url()).href;
+    const response = await page.request.get(url, { headers: { "cache-control": "no-store" } });
+    if (response.ok()) {
+      lastBody = await response.json();
+      if (predicate(lastBody)) return lastBody;
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`Timed out waiting for ${path}: ${JSON.stringify(lastBody)}`);
+}
+
 async function assertOneTask(page, heading, options = {}) {
   await page.getByRole("heading", { name: heading }).waitFor();
   const primaryActions = await page.evaluate(() => {
@@ -60,15 +75,46 @@ async function assertOneTask(page, heading, options = {}) {
   const layout = await page.evaluate(() => {
     const viewport = document.documentElement.clientWidth;
     const footer = document.querySelector(".editor-panel__footer")?.getBoundingClientRect();
+    const active = document.querySelector(".editor-stage-panel:not([hidden])");
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return !element.hidden && !element.closest("[hidden]") && style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && box.height > 0;
+    };
+    const unnamedButtons = [...(active?.querySelectorAll("button") || []), ...document.querySelectorAll(".editor-panel__footer button")]
+      .filter(visible)
+      .filter((button) => !(button.getAttribute("aria-label") || button.textContent || button.title || "").trim())
+      .map((button) => button.id || button.outerHTML.slice(0, 80));
+    const unlabeledFields = [...(active?.querySelectorAll("input, select, textarea") || [])]
+      .filter(visible)
+      .filter((field) => !field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.closest("label"))
+      .map((field) => field.id || field.outerHTML.slice(0, 80));
+    const smallMobileTargets = viewport <= 500
+      ? [...(active?.querySelectorAll("button") || []), ...document.querySelectorAll(".editor-panel__footer button")]
+          .filter(visible)
+          .map((button) => ({ name: (button.getAttribute("aria-label") || button.textContent || button.title || "").trim(), box: button.getBoundingClientRect() }))
+          .filter(({ box }) => box.width < 36 || box.height < 36)
+          .map(({ name, box }) => `${name || "unnamed"} (${Math.round(box.width)}×${Math.round(box.height)})`)
+      : [];
+    const ids = [...document.querySelectorAll("[id]")].map((element) => element.id);
+    const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
     return {
       viewport,
       scrollWidth: document.documentElement.scrollWidth,
       footerBottom: footer?.bottom || 0,
-      windowHeight: window.innerHeight
+      windowHeight: window.innerHeight,
+      unnamedButtons,
+      unlabeledFields,
+      smallMobileTargets,
+      duplicateIds
     };
   });
   assert(layout.scrollWidth <= layout.viewport, `${heading} has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(layout.footerBottom <= layout.windowHeight + 1, `${heading} footer is outside the viewport: ${JSON.stringify(layout)}`);
+  assert(layout.unnamedButtons.length === 0, `${heading} has unnamed buttons: ${layout.unnamedButtons.join(" | ")}`);
+  assert(layout.unlabeledFields.length === 0, `${heading} has unlabeled fields: ${layout.unlabeledFields.join(" | ")}`);
+  assert(layout.smallMobileTargets.length === 0, `${heading} has mobile targets smaller than 36px: ${layout.smallMobileTargets.join(" | ")}`);
+  assert(layout.duplicateIds.length === 0, `${heading} has duplicate IDs: ${layout.duplicateIds.join(", ")}`);
 }
 
 async function addedHotspots(page, sceneId) {
@@ -83,13 +129,7 @@ async function addedHotspots(page, sceneId) {
 }
 
 async function waitForWorkspaceStructure(page, predicate) {
-  await page.waitForFunction(async (predicateSource) => {
-    const response = await fetch("/__tour-editor/workspace-project", { cache: "no-store" });
-    const body = await response.json();
-    const project = body.project;
-    if (!project) return false;
-    return Function("project", `return (${predicateSource})(project);`)(project);
-  }, predicate.toString(), { timeout: 10_000 });
+  await waitForApi(page, "/__tour-editor/workspace-project", (body) => Boolean(body.project && predicate(body.project)));
 }
 
 async function dragViewer(page, deltaX) {
@@ -176,6 +216,7 @@ async function main() {
       ...process.env,
       INSTA360_TOUR_WORKSPACE: join(root, "workspace"),
       INSTA360_TOUR_ARTIFACTS: join(root, "artifacts"),
+      INSTA360_TOUR_ARCHIVES: join(root, "archives"),
       INSTA360_TOUR_RELEASE: join(root, "release"),
       INSTA360_TOUR_MULTIRES_RELEASE: join(root, "release-multires")
     },
@@ -196,6 +237,10 @@ async function main() {
     await waitForServer(baseUrl);
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
+    let portableBuildRequests = 0;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && request.url().includes("/__tour-editor/build-portable-release")) portableBuildRequests += 1;
+    });
     const consoleErrors = [];
     const requestFailures = [];
     page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
@@ -540,13 +585,11 @@ async function main() {
       const snapshot = window.__RAINDIGIT_STUDIO_DEBUG__.snapshot();
       return snapshot?.selected?.sceneId === "scene-001" && snapshot.selected.target === "scene-003";
     });
-    await page.waitForFunction(async () => {
-      const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
-      const draft = await response.json();
-      return draft.uiState?.stage === "links" &&
+    await waitForApi(page, "/__tour-editor/overrides?workspace=1", (draft) => (
+      draft.uiState?.stage === "links" &&
         draft.uiState?.selected?.sceneId === "scene-001" &&
-        draft.uiState?.selected?.target === "scene-003";
-    });
+        draft.uiState?.selected?.target === "scene-003"
+    ));
     await page.evaluate(async () => {
       const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
       const draft = await response.json();
@@ -756,11 +799,7 @@ async function main() {
     assert(stageAfterMobileContinue.stage === "arrival", `Mobile continue did not advance: ${JSON.stringify(stageAfterMobileContinue)}`);
 
     await assertOneTask(page, "Choose what people see first");
-    await page.waitForFunction(async () => {
-      const response = await fetch("/__tour-editor/overrides?workspace=1", { cache: "no-store" });
-      const draft = await response.json();
-      return draft.uiState?.stage === "arrival";
-    });
+    await waitForApi(page, "/__tour-editor/overrides?workspace=1", (draft) => draft.uiState?.stage === "arrival");
     await page.goto(`${baseUrl}/?edit=1`, { waitUntil: "domcontentloaded" });
     await assertOneTask(page, "Start a tour");
     await page.getByText("Unfinished tour: Guided Staff Journey", { exact: false }).waitFor();
@@ -971,7 +1010,7 @@ async function main() {
     await page.evaluate(({ pitch, yaw }) => window.__TOUR_EDITOR_API.viewer.lookAt(pitch, yaw - 40, 94, false), polishBeforeDrag);
     await page.waitForTimeout(200);
     const polishDrag = await dispatchElementDrag(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot", 48, 18);
-    await page.waitForFunction(() => document.querySelector("#editorStatus")?.textContent?.includes("Saved locally"));
+    await page.waitForFunction(() => document.querySelector("#editorSaveStatus")?.textContent?.includes("Saved locally"));
     const polishMarkerAfterDrag = await elementCenter(page, ".nav-hotspot-anchor.is-editor-selected .nav-hotspot");
     assertNear(polishMarkerAfterDrag.x, polishDrag.end.x, 24, "The Polish walking button did not stay near the release pointer");
     assertNear(polishMarkerAfterDrag.y, polishDrag.end.y, 24, "The Polish walking button did not stay near the release pointer");
@@ -990,6 +1029,9 @@ async function main() {
     await page.getByRole("button", { name: "Save this photo opening view" }).click();
     await page.getByRole("button", { name: "Publish" }).click();
     await assertOneTask(page, "Check and publish");
+    const readinessChecks = await page.locator("#editorReadiness li").allTextContents();
+    const readyCheckCount = await page.locator("#editorReadiness li.is-ready").count();
+    assert(readinessChecks.length >= 6 && readyCheckCount === readinessChecks.length, `Release preflight is incomplete: ${JSON.stringify(readinessChecks)}`);
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Build the tour" }).click();
     try {
@@ -1011,6 +1053,9 @@ async function main() {
       throw new Error(`Timed out waiting for the web package link: ${JSON.stringify(diagnostics)}`, { cause: error });
     }
     await page.screenshot({ path: join(outputDir, "04-publish-ready-mobile.png"), fullPage: true });
+    const completedBuildProgress = await page.request.get(`${baseUrl}/__tour-editor/release-build-status?workspace=1`);
+    const completedBuildState = await completedBuildProgress.json();
+    assert(completedBuildState.phase === "complete" && completedBuildState.percent === 100, `Build progress did not finish cleanly: ${JSON.stringify(completedBuildState)}`);
     await page.evaluate(() => window.__RAINDIGIT_STUDIO_DEBUG__.flush());
     const logResponse = await page.request.get(`${baseUrl}/__tour-editor/studio-log`);
     const logBody = await logResponse.json();
@@ -1027,13 +1072,45 @@ async function main() {
     const href = await page.getByRole("link", { name: "Download web package" }).getAttribute("href");
     const releaseResponse = await page.request.get(new URL(href, baseUrl).href);
     assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The optimized website package was not built correctly.");
-    await page.waitForFunction(async () => {
-      const response = await fetch("/__tour-editor/status", { cache: "no-store" });
-      const status = await response.json();
-      return status.workspaceAvailable === false;
-    }, null, { timeout: 5_000 });
-    const postExportStatus = await page.request.get(`${baseUrl}/__tour-editor/status`);
-    assert((await postExportStatus.json()).workspaceAvailable === false, "Finished export did not clear the active working tour.");
+    const statusBeforePortableBuild = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();
+    const artifactsBeforePortableBuild = await readdir(join(root, "artifacts"));
+    assert(
+      statusBeforePortableBuild.legacyReady === false && statusBeforePortableBuild.embedReady === false,
+      `Primary web build unexpectedly prepared optional files: ${JSON.stringify({ statusBeforePortableBuild, artifactsBeforePortableBuild })}`
+    );
+    await page.getByText("Add it to a website", { exact: true }).click();
+    await page.getByRole("button", { name: "Prepare embed & portable files" }).click();
+    await waitForApi(page, "/__tour-editor/release-build-status?workspace=1", (progress) => (
+      progress.active === false && progress.phase === "complete"
+    ), 60_000);
+    await waitForApi(page, "/__tour-editor/release-status?workspace=1", (status) => (
+      status.legacyReady === true && status.embedReady === true
+    ), 10_000);
+    const portableBuildState = await (await page.request.get(`${baseUrl}/__tour-editor/release-build-status?workspace=1`)).json();
+    assert(portableBuildState.phase === "complete" && portableBuildState.percent === 100, `Portable build progress did not finish cleanly after ${portableBuildRequests} request(s): ${JSON.stringify(portableBuildState)}`);
+    assert(portableBuildRequests === 1, `Portable build started ${portableBuildRequests} times from one employee action.`);
+    const preEmbedStatus = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();
+    const embedResponse = await page.request.get(`${baseUrl}/__tour-editor/release-embed-download?workspace=1`);
+    const embedSource = await embedResponse.text();
+    const postEmbedStatus = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();
+    assert(
+      embedResponse.ok() && embedSource.length > 10_000 && /raindigit|360 virtual tour/i.test(embedSource),
+      `Optional paste-in embed was not prepared correctly: ${JSON.stringify({ status: embedResponse.status(), bytes: embedSource.length, prefix: embedSource.slice(0, 120), preEmbedStatus, postEmbedStatus })}`
+    );
+    const postDownloadStatus = await page.request.get(`${baseUrl}/__tour-editor/status`);
+    assert((await postDownloadStatus.json()).workspaceAvailable === true, "Downloading a release must preserve the editable working tour.");
+    await page.getByRole("button", { name: "Archive and finish tour" }).click();
+    await waitForApi(page, "/__tour-editor/status", (status) => status.workspaceAvailable === false, 20_000);
+    await page.getByText("Recent archived tours", { exact: true }).waitFor({ timeout: 10_000 });
+    const archivedOpenButton = page.locator("#editorArchiveList button", { hasText: "Open" }).first();
+    await archivedOpenButton.waitFor({ timeout: 10_000 });
+    const archiveSlugs = await readdir(join(root, "archives"));
+    assert(archiveSlugs.length === 1, `Expected one safe project archive, found ${archiveSlugs.length}.`);
+    const archivedFiles = await readdir(join(root, "archives", archiveSlugs[0]));
+    assert(archivedFiles.length === 1 && archivedFiles[0].endsWith(".rdtour"), `Safe project archive was not created: ${archivedFiles.join(", ")}`);
+    await archivedOpenButton.click();
+    await waitForApi(page, "/__tour-editor/workspace-project", (body) => body.project?.scenes?.length === 3, 20_000);
+    assert(new URL(page.url()).searchParams.get("workspace") === "1", `Restored archive did not reopen in workspace mode: ${page.url()}`);
 
     console.log(JSON.stringify({
       passed: true,
@@ -1045,15 +1122,25 @@ async function main() {
       backNavigation: true,
       firstViews: visitedArrivalTasks.size,
       releaseBuilt: true,
-      exportClearsWorkspace: true,
+      optionalPortableBuild: true,
+      downloadPreservesWorkspace: true,
+      explicitArchiveClearsWorkspace: true,
+      archiveRestore: true,
+      preflightChecks: readinessChecks.length,
+      buildProgress: completedBuildState.phase,
+      webBuildMs: completedBuildState.buildDurationMs,
+      portableBuildMs: portableBuildState.buildDurationMs,
       mobile: true,
       diagnosticEvents: events.size
     }, null, 2));
   } finally {
     if (browser) await browser.close();
-    server.kill("SIGTERM");
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
-    await rm(root, { recursive: true, force: true });
+    if (server.exitCode === null) {
+      const exited = new Promise((resolvePromise) => server.once("exit", resolvePromise));
+      server.kill("SIGTERM");
+      await Promise.race([exited, new Promise((resolvePromise) => setTimeout(resolvePromise, 3_000))]);
+    }
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     if (server.exitCode && server.exitCode !== 0) throw new Error(`Guided flow server failed: ${serverError}`);
   }
 }

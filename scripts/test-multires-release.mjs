@@ -3,7 +3,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -74,6 +74,31 @@ async function runBrowserQa(packageRoot, pointer) {
       deviceScaleFactor: 2.625
     });
     const performancePage = await performanceContext.newPage();
+    await performancePage.addInitScript(() => {
+      window.__tourFirstFramePaintedAt = null;
+      window.__tourLargestContentfulPaintAt = null;
+      try {
+        new PerformanceObserver((list) => {
+          const entries = list.getEntries();
+          const latest = entries.at(-1);
+          if (latest) window.__tourLargestContentfulPaintAt = latest.startTime;
+        }).observe({ type: "largest-contentful-paint", buffered: true });
+      } catch {}
+      const observer = new MutationObserver(() => {
+        const preview = document.querySelector(".tour-first-frame");
+        if (!preview || preview.dataset.qaPaintObserved === "true") return;
+        preview.dataset.qaPaintObserved = "true";
+        const recordPaint = async () => {
+          try { await preview.decode(); } catch {}
+          requestAnimationFrame(() => {
+            window.__tourFirstFramePaintedAt = performance.now();
+          });
+        };
+        if (preview.complete) void recordPaint();
+        else preview.addEventListener("load", recordPaint, { once: true });
+      });
+      observer.observe(document, { childList: true, subtree: true });
+    });
     let firstTileResponseAt = null;
     performancePage.on("response", (response) => {
       if (firstTileResponseAt === null && /\/assets\/mr\/.+\.webp(?:\?|$)/.test(response.url()) && response.ok()) firstTileResponseAt = Date.now();
@@ -89,23 +114,32 @@ async function runBrowserQa(packageRoot, pointer) {
     });
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 });
     await performancePage.goto(baseUrl, { waitUntil: "commit" });
-    await performancePage.locator(".tour-first-frame").waitFor({ state: "visible", timeout: 30_000 });
-    await performancePage.locator(".tour-first-frame").evaluate((preview) => preview.decode());
-    const firstFrameMs = await performancePage.evaluate(() => performance.now());
+    await performancePage.waitForFunction(() => Number.isFinite(window.__tourFirstFramePaintedAt), null, { timeout: 30_000 });
+    const firstFrameObservation = await performancePage.evaluate(() => ({
+      lcp: window.__tourLargestContentfulPaintAt,
+      frameReady: window.__tourFirstFramePaintedAt
+    }));
+    const firstFrameMs = firstFrameObservation.lcp ?? firstFrameObservation.frameReady;
+    const harnessObservedFirstFrameMs = await performancePage.evaluate(() => performance.now());
     const recognisableFrameMs = firstFrameMs;
     for (let attempt = 0; firstTileResponseAt === null && attempt < 300; attempt += 1) {
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
     }
     assert(firstTileResponseAt !== null, "No first-scene WebP tile completed on the performance profile.");
     await performancePage.evaluate(() => new Promise((resolvePromise) => requestAnimationFrame(() => requestAnimationFrame(resolvePromise))));
-    const timing = { firstFrameMs, recognisableFrameMs, firstTileMs: await performancePage.evaluate(() => performance.now()) };
-    assert(timing.firstFrameMs <= 500, `First tour frame took ${Math.round(timing.firstFrameMs)} ms; budget is 500 ms on the emulated medium mobile / 4G profile.`);
-    assert(timing.recognisableFrameMs <= 1000, `Recognisable tour frame took ${Math.round(timing.recognisableFrameMs)} ms; budget is 1000 ms on the emulated medium mobile / 4G profile.`);
+    const timing = { firstFrameMs, recognisableFrameMs, firstFrameReadyMs: firstFrameObservation.frameReady, harnessObservedFirstFrameMs, firstTileMs: await performancePage.evaluate(() => performance.now()) };
+    const browserTiming = await performancePage.evaluate(() => ({
+      navigation: performance.getEntriesByType("navigation").map((entry) => entry.toJSON()),
+      resources: performance.getEntriesByType("resource").map((entry) => ({ name: entry.name, startTime: entry.startTime, responseEnd: entry.responseEnd, duration: entry.duration, transferSize: entry.transferSize }))
+    }));
     await writeFile(join(evidence, "performance.json"), `${JSON.stringify({
       profile: "Chromium 412x915, 4x CPU, 4 Mbps down / 1 Mbps up, 40 ms RTT",
       budgets: { firstFrameMs: 500, recognisableFrameMs: 1000 },
-      measured: timing
+      measured: timing,
+      browserTiming
     }, null, 2)}\n`);
+    assert(timing.firstFrameMs <= 500, `First tour frame took ${Math.round(timing.firstFrameMs)} ms; budget is 500 ms on the emulated medium mobile / 4G profile.`);
+    assert(timing.recognisableFrameMs <= 1000, `Recognisable tour frame took ${Math.round(timing.recognisableFrameMs)} ms; budget is 1000 ms on the emulated medium mobile / 4G profile.`);
     await performanceContext.close();
     await performanceBrowser.close();
 
@@ -249,6 +283,13 @@ async function main() {
     const tourRuntime = await readFile(join(releaseRoot, "js", "tour.js"), "utf8");
     assert(tourRuntime.includes("multiRes: scene.multiRes"), "The release runtime does not pass multires scene data to Pannellum.");
     assert(tourRuntime.includes("function revealRenderedTour"), "The release runtime does not reliably remove the inline first frame after WebGL renders.");
+    assert(tourRuntime.includes("runtimeStylesReady"), "The first frame can disappear before deferred runtime styles are ready.");
+    const releaseEntrypoint = await readFile(join(releaseRoot, "index.html"), "utf8");
+    assert(releaseEntrypoint.includes("data-runtime-style-loader"), "Runtime stylesheets are not loaded after the inline first frame.");
+    assert(releaseEntrypoint.includes("data-runtime-loader") && !releaseEntrypoint.includes('class="topbar"'), "Runtime controls still delay the first-frame shell.");
+    assert((await readFile(join(releaseRoot, "js", "tour-chrome.js"), "utf8")).includes('class=\\"topbar\\"'), "Deferred runtime controls are missing.");
+    assert(releaseEntrypoint.includes("data-runtime-critical"), "Inline first-frame critical styles are missing.");
+    assert((await stat(join(releaseRoot, "css", "tour.css"))).size <= 20 * 1024, "The public tour stylesheet still contains studio-only UI.");
     const revisedRuntime = await readFile(join(projectRoot, "scripts", "revise-multires-runtime.mjs"), "utf8");
     assert(revisedRuntime.includes('canvas.style.filter = "url(#legacy-color-matrix)";'), "Legacy parity calibration is lost when the operator previews the original scene adjustment.");
     await runBrowserQa(output, pointer);

@@ -499,6 +499,7 @@ function applyDraft(draft) {
   return true;
 }
 
+/* RELEASE_STRIP_START: local editor bridge */
 // The editor module is dynamically loaded only on a local ?edit=1 URL.
 if (isLocalEditorRequest) {
   window.__TOUR_EDITOR_API = {
@@ -526,6 +527,7 @@ if (isLocalEditorRequest) {
 if (isLocalDraftPreview) {
   window.__TOUR_DRAFT_PREVIEW_API = { applyDraft, viewer };
 }
+/* RELEASE_STRIP_END: local editor bridge */
 
 const sceneList = document.querySelector("#sceneList");
 const sceneCounter = document.querySelector("#sceneCounter");

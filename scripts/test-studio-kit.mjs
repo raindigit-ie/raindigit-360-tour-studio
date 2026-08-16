@@ -26,12 +26,16 @@ try {
   const { stdout: listing } = await execFileAsync("unzip", ["-Z1", archive]);
   assert(listing.includes("raindigit-360-tour-studio/Start RainDigit 360 Studio.command"), "The start launcher is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/web-tour/index.html"), "The studio runtime is missing from the operator kit.");
+  assert(listing.includes("raindigit-360-tour-studio/docs/operator-playbook.md"), "The employee operator playbook is missing from the kit.");
   assert(!/x4-raw|raw-benefit|insta360-x4-calibration/i.test(listing), "RAW/DNG research files leaked into the operator kit.");
   assert(!/(studio-workspace|originals|panoramas\/scene-|thumbnails\/scene-|manual-hotspot|\/release\/|\/dist\/|node_modules|\.git\/)/i.test(listing), "Private or generated project data leaked into the operator kit.");
   await execFileAsync("unzip", ["-q", archive, "-d", extracted]);
   const packageRoot = join(extracted, "raindigit-360-tour-studio");
   await execFileAsync("sh", ["-n", join(packageRoot, "scripts", "start-studio.sh")]);
   await execFileAsync("sh", ["-n", join(packageRoot, "scripts", "stop-studio.sh")]);
+  const startScript = await readFile(join(packageRoot, "scripts", "start-studio.sh"), "utf8");
+  assert(startScript.includes("RAINDIGIT_REBUILD"), "The launcher must reuse its existing runtime unless a rebuild is requested.");
+  assert(startScript.includes("docker compose images -q studio"), "The launcher must still build the runtime automatically on first start.");
   const launcher = await stat(join(packageRoot, "Start RainDigit 360 Studio.command"));
   assert((launcher.mode & 0o111) !== 0, "The extracted macOS launcher is not executable.");
   const compose = await readFile(join(packageRoot, "docker-compose.yml"), "utf8");

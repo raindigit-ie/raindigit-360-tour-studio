@@ -365,9 +365,14 @@ async function copyRuntime(output) {
   await cp(join(source, "js", "pannellum.js"), join(output, "js", "pannellum.js"));
   await cp(join(source, "js", "tour-bootstrap-release.js"), join(output, "js", "tour-bootstrap.js"));
   const studioRuntime = await readFile(join(source, "js", "tour.js"), "utf8");
-  const releaseRuntime = studioRuntime
+  const stripStart = "/* RELEASE_STRIP_START: local editor bridge */";
+  const stripEnd = "/* RELEASE_STRIP_END: local editor bridge */";
+  const stripStartIndex = studioRuntime.indexOf(stripStart);
+  const stripEndIndex = studioRuntime.indexOf(stripEnd);
+  assert(stripStartIndex >= 0 && stripEndIndex > stripStartIndex, "Release strip markers are missing or out of order.");
+  const runtimeWithoutEditorBridge = `${studioRuntime.slice(0, stripStartIndex)}${studioRuntime.slice(stripEndIndex + stripEnd.length)}`;
+  const releaseRuntime = runtimeWithoutEditorBridge
     .replace(/const isLocalEditorRequest = viewParams\.get\("edit"\) === "1"[\s\S]*?const localEditorDefaultHfov = 94;/, "const isLocalEditorRequest = false;\nconst isLocalDraftPreview = false;\nconst localEditorDefaultHfov = 94;")
-    .replace(/\/\/ Exposed only on explicit QA URLs[\s\S]*?\/\/ The preview can apply a saved local draft, but deliberately exposes no editor UI or write endpoint\.[\s\S]*?}\n\n/, "")
     .replace(/if \(isLocal(?:EditorRequest \|\| isLocal)?DraftPreview\) setNavigatorOpen\(true\);/, "setNavigatorOpen(false);");
   assert(releaseRuntime.includes("const isLocalEditorRequest = false;") && releaseRuntime.includes("const isLocalDraftPreview = false;"), "Release runtime must define disabled local-editor flags.");
   assert(!/tour-editor|tour-preview|__TOUR_EDITOR|__TOUR_DRAFT_PREVIEW/.test(releaseRuntime), "Release runtime still references local studio code.");
@@ -440,7 +445,7 @@ async function createSingleHtml(output, project, singlePath) {
     .replace(/<link rel="stylesheet" href="css\/pannellum\.css[^"]*" \/>/, `<style>${minifyCss(pannellumCss)}</style>`)
     .replace(/<link rel="stylesheet" href="css\/tour\.css[^"]*" \/>/, `<style>${minifyCss(tourCss)}</style>`)
     .replace('src="assets/raindigit-mark.svg"', `src="${logo}"`)
-    .replace(/<script src="js\/tour-bootstrap\.js[^"]*"><\/script>/, `<script src="${runtimeDataUrl}"></script>`));
+    .replace(/<script(?: defer)? src="js\/tour-bootstrap\.js[^"]*"><\/script>/, `<script src="${runtimeDataUrl}"></script>`));
   assert(!/\n/.test(html), "Single-file release must stay on one line.");
   assert(!/<(?:link|script)[^>]+(?:href|src)="(?!data:|https?:|#)/i.test(html), "Single-file release still has a local runtime dependency.");
   await mkdir(dirname(singlePath), { recursive: true });

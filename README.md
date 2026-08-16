@@ -4,7 +4,7 @@
 - Purpose: local RainDigit application for turning stitched 360 panoramas into a reviewed, self-hosted property tour.
 - Contains: the original Killarney tour, a linear local studio, editable project backup, single-file release builder and Docker delivery files.
 - Read full when: importing the next room set, reviewing a tour, producing a customer package or deploying it.
-- Last update: 2026-08-02
+- Last update: 2026-08-16
 
 ## Current Killarney Source
 - Media card: `/Volumes/Untitled/DCIM/Camera01`.
@@ -29,9 +29,10 @@
 ## Start The Studio
 
 On macOS, double-click `Start RainDigit 360 Studio.command`. The launcher starts
-Docker Desktop when needed, builds the private local service, waits for its health
+Docker Desktop when needed, prepares the private local service on first use, waits for its health
 check and opens `http://127.0.0.1:8767/?edit=1`. No local Node.js or ImageMagick
-installation is required. Double-click `Stop RainDigit 360 Studio.command` when
+installation is required. Later starts reuse the existing runtime and do not rebuild it.
+Double-click `Stop RainDigit 360 Studio.command` when
 finished; the editable workspace remains on disk.
 
 The equivalent terminal commands are:
@@ -40,6 +41,10 @@ The equivalent terminal commands are:
 npm run app:start
 npm run app:stop
 ```
+
+Engineers can force a runtime rebuild after changing the Docker image or system
+dependencies with `RAINDIGIT_REBUILD=1 npm run app:start`. Ordinary source edits
+are bind-mounted and do not require rebuilding the image.
 
 Build a clean operator package for another Mac with:
 
@@ -60,13 +65,13 @@ npm run studio
 
 Open `http://127.0.0.1:8767/?edit=1` and follow the screen sequence:
 
-1. **Start**: create a new tour or explicitly open an editable `.rdtour` project file. The studio does not list or silently reopen a previous local workspace.
+1. **Start**: continue the clearly identified unfinished local tour, create a new tour, open an editable `.rdtour` file, or reopen a recent local archive. Starting over always requires confirmation; nothing is silently replaced.
 2. **Photos**: add all ready stitched 2:1 JPG photos without making room decisions. DNG/RAW import is not part of the operator workflow because local tests did not show a reliable visible quality gain over the camera JPG.
 3. **Rooms and walking routes**: set the room count and names, then arrange every visible photo card into a room by dragging it or using its Room menu. Generic `View 1` names are automatically replaced with room-based camera-point names, while manually typed photo names are preserved. Use **Preview** to open any 360 photo large, then select a source photo and mark every destination photo people can reach from it; this creates the required walking buttons.
 4. **Look**: choose Natural, Bright or Warm. Professional controls and local light areas stay under **Fine tune picture**.
 5. **Walking buttons**: the studio opens every planned walking button in order. Rotate until its real position is under the centre target, then press **Save point here**. All destinations use the same person marker, including another camera position in the same room.
 6. **First views**: open one destination at a time, rotate to its useful first frame and save it. Buttons remain disabled while a photo or cross-fade is loading.
-7. **Publish**: check readiness, confirm the permanent web name, build and download the optimized versioned website package. Preview it before promotion. Portable one-file HTML, paste-in code, editable backup and folder package stay in collapsed options.
+7. **Publish**: check six blocking readiness rules, confirm the permanent web name, build and download the optimized versioned website package. Preview it before promotion. The normal build processes panoramas once; optional one-file HTML, paste-in code and folder package are prepared separately only when needed. Editable backup and debug export stay available without rebuilding.
 
 Every movement placement, removal, arrival view and picture adjustment is saved
 automatically. Scene arrows wait for that save and ignore overlapping clicks, so
@@ -85,13 +90,15 @@ The studio blocks publishing when a planned walking button has not been explicit
 positioned or its destination view has not been saved. This prevents a technically
 valid but unfinished navigation graph from reaching a customer.
 
-The Publish screen builds both delivery forms. Its primary `raindigit-360-tour-web-package.zip`
+The Publish screen builds the normal delivery form first. Its primary `raindigit-360-tour-web-package.zip`
 mirrors the R2 object layout: immutable `tours/<slug>/multires-<digest>/` assets plus
 `manifests/<slug>/current.json`. Every immutable release includes hashes, scene views,
-the transition graph and an optional rollback version. The portable one-file HTML and
-legacy folder ZIP remain available under advanced files. Generated output is not committed;
+the transition graph and an optional rollback version. The portable one-file HTML, paste-in
+block and legacy folder ZIP are a separate optional build so ordinary publishing never
+re-encodes the panoramas twice. Generated output is not committed;
 it is generated from the private workspace. See [the product workflow](docs/product-workflow.md)
-and [client handoff](docs/client-handoff.md) for the exact operator and website-installation paths.
+[operator playbook](docs/operator-playbook.md), [product readiness contract](docs/product-readiness.md)
+and [client handoff](docs/client-handoff.md) for the exact operator, recovery and installation paths.
 
 ## Docker
 
@@ -109,11 +116,15 @@ the downloaded HTML, iframe installation and every wizard screen at a short mobi
 It also enforces a novice-default action budget and checks that technical terms do
 not leak into the visible task surface.
 
+Run `npm run setup:hooks` once after cloning. It installs the repository-owned
+pre-push gate, which runs the complete local suite before Git sends changes. This
+keeps verification on the workstation and consumes no GitHub Actions minutes.
+
 Studio mode writes bounded local diagnostics to
 `studio-workspace/studio-debug.ndjson`. Each event records the stage, scene,
 selected marker, viewer pose and marker IDs in the data model, Pannellum config and
 DOM. The log rotates at 5 MB, redacts secret-like fields, omits embedded image data
-and is excluded from editable backups and public releases.
+and is included in editable archives for support evidence while remaining excluded from public releases.
 
 ## Boundaries
 

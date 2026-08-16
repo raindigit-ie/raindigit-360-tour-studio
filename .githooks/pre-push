@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$ROOT"
+
+printf '%s\n' "[RainDigit] Running the complete local product gate before push..."
+npm run test:all
+printf '%s\n' "[RainDigit] Product gate passed. Continuing push."

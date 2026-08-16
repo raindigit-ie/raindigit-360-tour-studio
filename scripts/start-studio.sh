@@ -27,7 +27,13 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 mkdir -p studio-workspace dist release
-docker compose up -d --build studio
+if [ "${RAINDIGIT_REBUILD:-0}" = "1" ] || [ -z "$(docker compose images -q studio 2>/dev/null)" ]; then
+  printf '%s\n' "Preparing the RainDigit Studio runtime (first start or requested rebuild)..."
+  docker compose up -d --build studio
+else
+  printf '%s\n' "Starting the existing RainDigit Studio runtime..."
+  docker compose up -d studio
+fi
 
 attempts=0
 while ! curl --fail --silent "http://127.0.0.1:8767/__tour-editor/status" >/dev/null 2>&1; do

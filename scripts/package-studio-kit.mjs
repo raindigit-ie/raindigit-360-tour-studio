@@ -20,6 +20,8 @@ const included = [
   "docker",
   "docs/client-handoff.md",
   "docs/product-workflow.md",
+  "docs/operator-playbook.md",
+  "docs/product-readiness.md",
   "docs/asset-protection.md",
   "scripts/build-tour-release.mjs",
   "scripts/build-multires-release.mjs",

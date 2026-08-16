@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { appendFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -27,9 +27,11 @@ const releaseMultiresRoot = process.env.INSTA360_TOUR_MULTIRES_RELEASE
 const releaseZipPath = join(artifactRoot, "raindigit-360-tour.zip");
 const releaseSinglePath = join(artifactRoot, "raindigit-360-tour.html");
 const releaseEmbedPath = join(artifactRoot, "raindigit-360-tour-embed.html");
+const releasePortableMetadataPath = join(artifactRoot, "raindigit-360-tour-portable.json");
 const releaseMultiresZipPath = join(artifactRoot, "raindigit-360-tour-web-package.zip");
 const releaseMultiresMetadataPath = join(artifactRoot, "raindigit-360-tour-web-package.json");
 const projectBackupPath = join(artifactRoot, "raindigit-tour-project.rdtour");
+const projectArchiveRoot = process.env.INSTA360_TOUR_ARCHIVES ? resolve(process.env.INSTA360_TOUR_ARCHIVES) : join(projectRoot, "studio-archives");
 const host = process.env.TOUR_SERVER_HOST || "127.0.0.1";
 const previewMode = process.argv.includes("--preview");
 const portArgument = process.argv.indexOf("--port");
@@ -41,6 +43,20 @@ const maxFloorplanBytes = 15 * 1024 * 1024;
 const maxProjectBytes = 512 * 1024 * 1024;
 const maxStudioLogBytes = 5 * 1024 * 1024;
 let activeReleaseBuild = null;
+let releaseBuildState = { active: false, phase: "idle", percent: 0, message: "No build is running", startedAt: null, updatedAt: new Date().toISOString(), error: null };
+
+function updateReleaseBuildState(phase, percent, message, extra = {}) {
+  releaseBuildState = {
+    ...releaseBuildState,
+    active: !["complete", "failed", "idle"].includes(phase),
+    phase,
+    percent,
+    message,
+    updatedAt: new Date().toISOString(),
+    error: null,
+    ...extra
+  };
+}
 
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Use a valid local port between 1024 and 65535.");
@@ -81,7 +97,7 @@ function replyJson(response, statusCode, body) {
 }
 
 function emptyDraft() {
-  return { schema: "raindigit-tour-hotspot-overrides/v1", overrides: {}, sceneAdjustments: {}, placementGuides: {} };
+  return { schema: "raindigit-tour-hotspot-overrides/v1", editorDraftRevision: 0, overrides: {}, sceneAdjustments: {}, placementGuides: {} };
 }
 
 function emptyWorkspaceProject(title = "Untitled 3D Tour") {
@@ -240,6 +256,7 @@ function validateDraft(value) {
   if (!value || value.schema !== "raindigit-tour-hotspot-overrides/v1" || typeof value.overrides !== "object" || Array.isArray(value.overrides)) {
     return false;
   }
+  if (value.editorDraftRevision !== undefined && (!Number.isSafeInteger(value.editorDraftRevision) || value.editorDraftRevision < 0)) return false;
   const validCoordinates = Object.entries(value.overrides).every(([key, coordinate]) => {
     const validArrival = (coordinate.targetPitch === undefined && coordinate.targetYaw === undefined && coordinate.targetHfov === undefined) || (
       Number.isFinite(coordinate.targetPitch) && coordinate.targetPitch >= -85 && coordinate.targetPitch <= 85 &&
@@ -351,16 +368,51 @@ function roomId(label, preferred = "") {
   return `room-${slug || Date.now().toString(36)}`;
 }
 
+async function releaseInputFingerprint() {
+  const project = JSON.parse(await readFile(workspaceProjectPath, "utf8"));
+  const draft = await readDraft(workspaceDraftPath);
+  const stableProject = structuredClone(project);
+  delete stableProject.editorStructureRevision;
+  // Keep this contract aligned with build-tour-release.mjs. Editor-only state
+  // (the current step, selected item, visual placement guides and timestamps)
+  // must not make a valid release stale after an autosave.
+  const stableDraft = {
+    schema: draft.schema,
+    overrides: draft.overrides || {},
+    addedHotspots: draft.addedHotspots || {},
+    sceneViews: draft.sceneViews || {},
+    sceneAdjustments: draft.sceneAdjustments || {},
+    localAdjustments: draft.localAdjustments || {}
+  };
+  return createHash("sha256")
+    .update(JSON.stringify({ project: stableProject, draft: stableDraft }))
+    .digest("hex");
+}
+
 async function releaseStatus() {
   try {
-    const [archive, single, embed, manifest] = await Promise.all([stat(releaseZipPath), stat(releaseSinglePath), stat(releaseEmbedPath), stat(workspaceProjectPath)]);
-    let latestInput = manifest.mtimeMs;
+    await stat(workspaceProjectPath);
+    const inputFingerprint = await releaseInputFingerprint();
+    let legacy = { ready: false, embedReady: false };
     try {
-      latestInput = Math.max(latestInput, (await stat(workspaceDraftPath)).mtimeMs);
+      const [archive, single, embed, metadata] = await Promise.all([
+        stat(releaseZipPath),
+        stat(releaseSinglePath),
+        stat(releaseEmbedPath),
+        readFile(releasePortableMetadataPath, "utf8").then(JSON.parse)
+      ]);
+      const matchesInput = metadata.inputFingerprint === inputFingerprint;
+      legacy = {
+        ready: matchesInput,
+        embedReady: matchesInput,
+        bytes: archive.size,
+        singleBytes: single.size,
+        embedBytes: embed.size,
+        updatedAt: archive.mtime.toISOString()
+      };
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    const legacyReady = archive.mtimeMs >= latestInput && single.mtimeMs >= latestInput && embed.mtimeMs >= latestInput;
     let multires = { ready: false };
     try {
       const [metadata, multiresArchive] = await Promise.all([
@@ -369,7 +421,7 @@ async function releaseStatus() {
       ]);
       const pointer = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.pointer), "utf8"));
       const releaseManifest = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.releaseManifest), "utf8"));
-      const ready = multiresArchive.mtimeMs >= latestInput && pointer.version === metadata.version && releaseManifest.contentDigest === metadata.contentDigest;
+      const ready = metadata.inputFingerprint === inputFingerprint && pointer.version === metadata.version && releaseManifest.contentDigest === metadata.contentDigest;
       multires = {
         ready,
         bytes: multiresArchive.size,
@@ -386,17 +438,17 @@ async function releaseStatus() {
       if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
     }
     return {
-      ready: legacyReady && multires.ready,
-      legacyReady,
+      ready: multires.ready,
+      legacyReady: legacy.ready,
       multires,
-      embedReady: embed.mtimeMs >= latestInput,
-      bytes: archive.size,
-      singleBytes: single.size,
-      embedBytes: embed.size,
-      updatedAt: archive.mtime.toISOString()
+      embedReady: legacy.embedReady,
+      bytes: legacy.bytes || 0,
+      singleBytes: legacy.singleBytes || 0,
+      embedBytes: legacy.embedBytes || 0,
+      updatedAt: multires.updatedAt || legacy.updatedAt || null
     };
   } catch (error) {
-    if (error.code === "ENOENT") return { ready: false };
+    if (error.code === "ENOENT") return { ready: false, legacyReady: false, embedReady: false, multires: { ready: false } };
     throw error;
   }
 }
@@ -556,74 +608,20 @@ function workspaceReachableSceneIds(project, draft) {
   return reachable;
 }
 
-async function pruneUnreachableWorkspaceScenes(project) {
+async function assertWorkspaceReadyForRelease(project) {
   const draft = await readDraft(workspaceDraftPath);
-  if (!project || project.scenes.length <= 1) return { project, draft, removed: [] };
   const reachable = workspaceReachableSceneIds(project, draft);
-  const removed = project.scenes.filter((scene) => !reachable.has(scene.id));
-  if (!removed.length) return { project, draft, removed };
-  const removedIds = new Set(removed.map((scene) => scene.id));
-  const keptIds = new Set(project.scenes.filter((scene) => reachable.has(scene.id)).map((scene) => scene.id));
-  await Promise.all(removed.flatMap((scene) => [
-    rm(join(workspaceRoot, scene.panorama), { force: true }),
-    rm(join(workspaceRoot, scene.thumb), { force: true })
-  ]));
-  project.scenes = project.scenes
-    .filter((scene) => keptIds.has(scene.id))
-    .map((scene) => ({
-      ...scene,
-      hotspots: scene.hotspots.filter((hotspot) => keptIds.has(hotspot.target)),
-      plannedTargets: (scene.plannedTargets || []).filter((target) => keptIds.has(target))
-    }));
-  project.firstScene = project.scenes[0]?.id || null;
-  const usedRooms = new Set(project.scenes.map((scene) => scene.space));
-  const usedFloors = new Set(project.scenes.map((scene) => scene.floor));
-  project.rooms = (project.rooms || []).filter((room) => usedRooms.has(room.id));
-  project.floors = (project.floors || []).filter((floor) => usedFloors.has(floor.id));
-  if (project.map?.pins) {
-    project.map.pins = Object.fromEntries(Object.entries(project.map.pins).filter(([sceneId]) => keptIds.has(sceneId)));
+  const unreachable = project.scenes.filter((scene) => !reachable.has(scene.id));
+  if (unreachable.length) {
+    throw Object.assign(new Error(`Connect every photo before building. Unreachable: ${unreachable.map((scene) => scene.title).slice(0, 5).join(", ")}${unreachable.length > 5 ? ` and ${unreachable.length - 5} more` : ""}.`), { code: "EINPUT" });
   }
-  Object.keys(draft.overrides || {}).forEach((key) => {
-    const [sceneId] = key.split("::");
-    if (removedIds.has(sceneId)) delete draft.overrides[key];
-  });
-  for (const collection of ["sceneMetadata", "sceneViews", "sceneAdjustments", "localAdjustments"]) {
-    if (!draft[collection]) continue;
-    removedIds.forEach((sceneId) => delete draft[collection][sceneId]);
-  }
-  if (draft.addedHotspots) {
-    removedIds.forEach((sceneId) => delete draft.addedHotspots[sceneId]);
-    Object.keys(draft.addedHotspots).forEach((sourceId) => {
-      draft.addedHotspots[sourceId] = draft.addedHotspots[sourceId].filter((hotspot) => keptIds.has(hotspot.target));
-    });
-  }
-  if (draft.uiState?.selected && removedIds.has(draft.uiState.selected.sceneId)) {
-    draft.uiState.selected = null;
-  }
-  await writeWorkspaceProject(project);
-  await writeJsonAtomic(workspaceDraftPath, draft);
-  await appendStudioLogs([{
-    time: new Date().toISOString(),
-    sessionId: "server",
-    event: "workspace-unreachable-scenes-pruned",
-    details: { removed: removed.map((scene) => ({ id: scene.id, title: scene.title })) }
-  }]);
-  return { project, draft, removed };
 }
 
 async function clearWorkspace() {
   await rm(workspaceRoot, { recursive: true, force: true });
 }
 
-function clearWorkspaceAfterResponse(response) {
-  response.on("finish", () => {
-    void clearWorkspace().catch((error) => {
-      console.error(`Could not clear completed tour workspace: ${error.message}`);
-    });
-  });
-}
-
-async function createProjectBackup() {
+async function createProjectBackup(destinationPath = projectBackupPath) {
   const project = await readWorkspaceProject();
   if (!project || project.scenes.length === 0) throw new Error("Add at least one 360 photo before downloading a saved tour.");
   try {
@@ -632,12 +630,71 @@ async function createProjectBackup() {
     if (error.code !== "ENOENT") throw error;
     await writeJsonAtomic(workspaceDraftPath, emptyDraft());
   }
-  await mkdir(dirname(projectBackupPath), { recursive: true });
-  await rm(projectBackupPath, { force: true });
+  await mkdir(dirname(destinationPath), { recursive: true });
+  await rm(destinationPath, { force: true });
   const entries = ["tour-project.json", "draft.json", "panoramas", "thumbnails"];
   if (project.map?.asset === "floorplan/map.jpg") entries.push("floorplan");
-  await execFileAsync("zip", ["-X", "-r", projectBackupPath, ...entries], { cwd: workspaceRoot, maxBuffer: 1024 * 1024 });
-  return stat(projectBackupPath);
+  for (const optional of ["frame-selections.json", "studio-debug.ndjson"]) {
+    try {
+      if ((await stat(join(workspaceRoot, optional))).isFile()) entries.push(optional);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  await execFileAsync("zip", ["-X", "-r", destinationPath, ...entries], { cwd: workspaceRoot, maxBuffer: 1024 * 1024 });
+  const details = await stat(destinationPath);
+  return { path: destinationPath, size: details.size, updatedAt: details.mtime.toISOString() };
+}
+
+async function archiveAndClearWorkspace() {
+  const project = await readWorkspaceProject();
+  if (!project || project.scenes.length === 0) throw new Error("There is no active tour to archive.");
+  const slug = slugifyTourTitle(project.title);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const destinationPath = join(projectArchiveRoot, slug, `${stamp}.rdtour`);
+  const details = await createProjectBackup(destinationPath);
+  await execFileAsync("unzip", ["-tqq", destinationPath], { maxBuffer: 1024 * 1024 });
+  await clearWorkspace();
+  return {
+    archived: true,
+    cleared: true,
+    fileName: `${stamp}.rdtour`,
+    archive: `${slug}/${stamp}.rdtour`,
+    size: details.size,
+    updatedAt: details.updatedAt
+  };
+}
+
+async function listProjectArchives() {
+  const archives = [];
+  try {
+    const directories = await readdir(projectArchiveRoot, { withFileTypes: true });
+    for (const directory of directories) {
+      if (!directory.isDirectory() || !/^[a-z0-9-]{1,72}$/.test(directory.name)) continue;
+      const files = await readdir(join(projectArchiveRoot, directory.name), { withFileTypes: true });
+      for (const file of files) {
+        if (!file.isFile() || !/^\d{4}-\d{2}-\d{2}T[0-9Z-]+\.rdtour$/.test(file.name)) continue;
+        const details = await stat(join(projectArchiveRoot, directory.name, file.name));
+        archives.push({
+          id: `${directory.name}/${file.name}`,
+          slug: directory.name,
+          fileName: file.name,
+          size: details.size,
+          updatedAt: details.mtime.toISOString()
+        });
+      }
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  return archives.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, 20);
+}
+
+async function restoreProjectArchive(id, replace = false) {
+  if (!/^[a-z0-9-]{1,72}\/\d{4}-\d{2}-\d{2}T[0-9Z-]+\.rdtour$/.test(id)) throw Object.assign(new Error("Archived project reference is invalid."), { code: "EINPUT" });
+  if (await readWorkspaceProject() && !replace) throw Object.assign(new Error("Confirm replacing the current working tour."), { code: "EINPUT" });
+  const source = await readFile(join(projectArchiveRoot, id));
+  return restoreProjectBackup(source);
 }
 
 async function restoreProjectBackup(source) {
@@ -650,7 +707,7 @@ async function restoreProjectBackup(source) {
     const { stdout } = await execFileAsync("unzip", ["-Z1", archivePath], { maxBuffer: 1024 * 1024 });
     const entries = stdout.split(/\r?\n/).filter(Boolean);
     if (!entries.includes("tour-project.json") || !entries.includes("draft.json")) throw new Error("This is not a RainDigit editable project.");
-    if (entries.length > 270 || entries.some((entry) => entry.startsWith("/") || entry.includes("..") || !/^(tour-project\.json|draft\.json|panoramas\/(?:scene-\d{3,}\.jpg)?|thumbnails\/(?:scene-\d{3,}\.jpg)?|floorplan\/?|floorplan\/map\.jpg)$/i.test(entry))) {
+    if (entries.length > 272 || entries.some((entry) => entry.startsWith("/") || entry.includes("..") || !/^(tour-project\.json|draft\.json|frame-selections\.json|studio-debug\.ndjson|panoramas\/(?:scene-\d{3,}\.jpg)?|thumbnails\/(?:scene-\d{3,}\.jpg)?|floorplan\/?|floorplan\/map\.jpg)$/i.test(entry))) {
       throw new Error("Project backup contains unsupported files.");
     }
     await mkdir(extractedRoot, { recursive: true });
@@ -658,6 +715,12 @@ async function restoreProjectBackup(source) {
     const project = JSON.parse(await readFile(join(extractedRoot, "tour-project.json"), "utf8"));
     const draft = JSON.parse(await readFile(join(extractedRoot, "draft.json"), "utf8"));
     if (!validateWorkspaceProject(project) || !validateDraft(draft)) throw new Error("Project backup data is invalid.");
+    try {
+      const frameSelections = JSON.parse(await readFile(join(extractedRoot, "frame-selections.json"), "utf8"));
+      if (!isValidFrameSelections(frameSelections, project)) throw new Error("Project frame selections are invalid.");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
     for (const scene of project.scenes) {
       const [panorama, thumb] = await Promise.all([stat(join(extractedRoot, scene.panorama)), stat(join(extractedRoot, scene.thumb))]);
       if (!panorama.isFile() || !thumb.isFile()) throw new Error(`Project media is missing for ${scene.id}.`);
@@ -919,7 +982,7 @@ const server = createServer(async (request, response) => {
         const incomingRevision = hasIncomingRevision ? body.editorStructureRevision : 0;
         const existingRevision = Number.isSafeInteger(existing.editorStructureRevision) ? existing.editorStructureRevision : 0;
         if (hasIncomingRevision && incomingRevision < existingRevision) {
-          replyJson(response, 200, existing);
+          replyJson(response, 409, { error: "This tour was changed in another window. Reload before making more setup changes.", code: "ESTALE", project: existing });
           return;
         }
         const rooms = Array.isArray(body.rooms)
@@ -968,10 +1031,32 @@ const server = createServer(async (request, response) => {
           replyJson(response, 400, { error: "Every 360 photo must appear once." });
           return;
         }
+        const orderedScenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
+        if (hasIncomingRevision && incomingRevision === existingRevision) {
+          const structureFields = (scene) => ({
+            id: scene.id,
+            title: scene.title,
+            titleAutoGenerated: scene.titleAutoGenerated === true,
+            subtitle: scene.subtitle || "",
+            space: scene.space,
+            spaceLabel: scene.spaceLabel,
+            floor: scene.floor,
+            floorLabel: scene.floorLabel,
+            plannedTargets: scene.plannedTargets || []
+          });
+          const changed = title !== existing.title ||
+            JSON.stringify(rooms) !== JSON.stringify(existing.rooms || []) ||
+            JSON.stringify(floors) !== JSON.stringify(existing.floors || []) ||
+            JSON.stringify(orderedScenes.map(structureFields)) !== JSON.stringify(existing.scenes.map(structureFields));
+          if (changed) {
+            replyJson(response, 409, { error: "This tour was changed in another window. Reload before making more setup changes.", code: "ESTALE", project: existing });
+            return;
+          }
+        }
         existing.title = title;
         existing.rooms = rooms;
         existing.floors = floors;
-        existing.scenes = order.map((id) => nextScenes.find((scene) => scene.id === id));
+        existing.scenes = orderedScenes;
         existing.firstScene = existing.scenes[0]?.id || null;
         existing.editorStructureRevision = hasIncomingRevision ? incomingRevision : existingRevision;
         await writeWorkspaceProject(existing);
@@ -1118,6 +1203,9 @@ const server = createServer(async (request, response) => {
       try {
         await runMagick([preparedInput, "-auto-orient", "-strip", "-interlace", "Plane", "-sampling-factor", "4:2:0", "-quality", "92", outputPanorama]);
         await runMagick([outputPanorama, "-thumbnail", "480x240^", "-gravity", "center", "-extent", "480x240", "-strip", "-interlace", "Plane", "-quality", "84", outputThumb]);
+      } catch (error) {
+        await Promise.all([rm(outputPanorama, { force: true }), rm(outputThumb, { force: true })]);
+        throw error;
       } finally {
         await rm(preparedInput, { force: true });
       }
@@ -1141,7 +1229,13 @@ const server = createServer(async (request, response) => {
       };
       project.scenes.push(scene);
       project.firstScene ||= id;
-      await writeWorkspaceProject(project);
+      try {
+        await writeWorkspaceProject(project);
+      } catch (error) {
+        project.scenes.pop();
+        await Promise.all([rm(outputPanorama, { force: true }), rm(outputThumb, { force: true })]);
+        throw error;
+      }
       replyJson(response, 201, { scene, project });
       return;
     }
@@ -1165,14 +1259,12 @@ const server = createServer(async (request, response) => {
         replyJson(response, 409, { error: "A tour build is already running. Wait for it to finish before starting another build." });
         return;
       }
+      updateReleaseBuildState("starting", 3, "Preparing build", { startedAt: new Date().toISOString() });
       activeReleaseBuild = (async () => {
-        const { removed } = await pruneUnreachableWorkspaceScenes(project);
-        const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
-        await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--embed", releaseEmbedPath, "--replace"], {
-          cwd: projectRoot,
-          maxBuffer: 4 * 1024 * 1024,
-          timeout: 10 * 60 * 1000
-        });
+        updateReleaseBuildState("preflight", 8, "Checking tour connections");
+        await assertWorkspaceReadyForRelease(project);
+        const inputFingerprint = await releaseInputFingerprint();
+        updateReleaseBuildState("optimizing", 18, "Optimizing panoramas and building web tiles");
         const multiresBuilder = join(projectRoot, "scripts", "build-multires-release.mjs");
         const { stdout: multiresOutput } = await execFileAsync(process.execPath, [
           multiresBuilder,
@@ -1186,16 +1278,75 @@ const server = createServer(async (request, response) => {
           maxBuffer: 8 * 1024 * 1024,
           timeout: 30 * 60 * 1000
         });
+        updateReleaseBuildState("verifying", 92, "Verifying release integrity");
         const multiresMetadata = JSON.parse(multiresOutput);
-        await writeJsonAtomic(releaseMultiresMetadataPath, multiresMetadata);
-        return { status: await releaseStatus(), removed };
+        if (await releaseInputFingerprint() !== inputFingerprint) throw new Error("The tour changed during the build. Build it again after saving finishes.");
+        await writeJsonAtomic(releaseMultiresMetadataPath, { ...multiresMetadata, inputFingerprint });
+        const status = await releaseStatus();
+        if (!status.ready) throw new Error("Build finished, but release verification did not pass.");
+        return status;
       })();
       try {
-        const { status, removed } = await activeReleaseBuild;
-        replyJson(response, 200, { ...status, prunedScenes: removed.map((scene) => ({ id: scene.id, title: scene.title })) });
+        const status = await activeReleaseBuild;
+        const buildDurationMs = Math.max(0, Date.now() - Date.parse(releaseBuildState.startedAt));
+        updateReleaseBuildState("complete", 100, "Tour ready", { buildDurationMs });
+        replyJson(response, 200, { ...status, buildDurationMs });
+      } catch (error) {
+        updateReleaseBuildState("failed", releaseBuildState.percent, "Build failed", { error: error.message });
+        throw error;
       } finally {
         activeReleaseBuild = null;
       }
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/build-portable-release` && request.method === "POST") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required to build portable files." });
+        return;
+      }
+      const project = await readWorkspaceProject();
+      if (!project || project.scenes.length === 0) {
+        replyJson(response, 409, { error: "Add at least one 360 photo before building the tour." });
+        return;
+      }
+      if (activeReleaseBuild) {
+        replyJson(response, 409, { error: "A tour build is already running. Wait for it to finish before starting another build." });
+        return;
+      }
+      updateReleaseBuildState("starting", 3, "Preparing portable files", { startedAt: new Date().toISOString() });
+      activeReleaseBuild = (async () => {
+        updateReleaseBuildState("preflight", 10, "Checking tour connections");
+        await assertWorkspaceReadyForRelease(project);
+        const inputFingerprint = await releaseInputFingerprint();
+        updateReleaseBuildState("portable", 24, "Building portable tour files");
+        const builder = join(projectRoot, "scripts", "build-tour-release.mjs");
+        await execFileAsync(process.execPath, [builder, "--workspace", workspaceRoot, "--output", releaseRoot, "--zip", releaseZipPath, "--single", releaseSinglePath, "--embed", releaseEmbedPath, "--replace"], {
+          cwd: projectRoot,
+          maxBuffer: 4 * 1024 * 1024,
+          timeout: 10 * 60 * 1000
+        });
+        updateReleaseBuildState("verifying", 92, "Verifying portable files");
+        if (await releaseInputFingerprint() !== inputFingerprint) throw new Error("The tour changed during the build. Prepare portable files again after saving finishes.");
+        await writeJsonAtomic(releasePortableMetadataPath, { inputFingerprint, createdAt: new Date().toISOString() });
+        const status = await releaseStatus();
+        if (!status.legacyReady || !status.embedReady) throw new Error("Portable build finished, but verification did not pass.");
+        return status;
+      })();
+      try {
+        const status = await activeReleaseBuild;
+        const buildDurationMs = Math.max(0, Date.now() - Date.parse(releaseBuildState.startedAt));
+        updateReleaseBuildState("complete", 100, "Portable files ready", { buildDurationMs });
+        replyJson(response, 200, { ...status, portableBuildDurationMs: buildDurationMs });
+      } catch (error) {
+        updateReleaseBuildState("failed", releaseBuildState.percent, "Portable build failed", { error: error.message });
+        throw error;
+      } finally {
+        activeReleaseBuild = null;
+      }
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/release-build-status` && request.method === "GET") {
+      replyJson(response, 200, releaseBuildState);
       return;
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-status` && request.method === "GET") {
@@ -1204,11 +1355,10 @@ const server = createServer(async (request, response) => {
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-download` && request.method === "GET") {
       const status = await releaseStatus();
-      if (!workspace || !status.ready) {
-        replyJson(response, 404, { error: "Build the current workspace before downloading it." });
+      if (!workspace || !status.legacyReady) {
+        replyJson(response, 404, { error: "Prepare portable files before downloading the folder package." });
         return;
       }
-      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("application/zip"),
         "content-disposition": "attachment; filename=raindigit-360-tour.zip",
@@ -1223,7 +1373,6 @@ const server = createServer(async (request, response) => {
         replyJson(response, 404, { error: "Build the current workspace before downloading its optimized web package." });
         return;
       }
-      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("application/zip"),
         "content-disposition": `attachment; filename=raindigit-${status.multires.slug}-web-package.zip`,
@@ -1234,11 +1383,10 @@ const server = createServer(async (request, response) => {
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-single-download` && request.method === "GET") {
       const status = await releaseStatus();
-      if (!workspace || !status.ready) {
-        replyJson(response, 404, { error: "Build the current workspace before downloading it." });
+      if (!workspace || !status.legacyReady) {
+        replyJson(response, 404, { error: "Prepare portable files before downloading the one-file tour." });
         return;
       }
-      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("text/html; charset=utf-8"),
         "content-disposition": "attachment; filename=raindigit-360-tour.html",
@@ -1249,11 +1397,10 @@ const server = createServer(async (request, response) => {
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-embed-download` && request.method === "GET") {
       const status = await releaseStatus();
-      if (!workspace || !status.ready) {
-        replyJson(response, 404, { error: "Build the current workspace before downloading paste-in code." });
+      if (!workspace || !status.embedReady) {
+        replyJson(response, 404, { error: "Prepare portable files before downloading paste-in code." });
         return;
       }
-      clearWorkspaceAfterResponse(response);
       response.writeHead(200, {
         ...responseHeaders("text/html; charset=utf-8"),
         "content-disposition": "attachment; filename=raindigit-360-tour-embed.html",
@@ -1264,8 +1411,8 @@ const server = createServer(async (request, response) => {
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-single-preview.html` && request.method === "GET") {
       const status = await releaseStatus();
-      if (!workspace || !status.ready) {
-        replyJson(response, 404, { error: "Build the current workspace before previewing it." });
+      if (!workspace || !status.legacyReady) {
+        replyJson(response, 404, { error: "Prepare portable files before previewing the one-file tour." });
         return;
       }
       response.writeHead(200, {
@@ -1289,6 +1436,33 @@ const server = createServer(async (request, response) => {
       createReadStream(projectBackupPath).pipe(response);
       return;
     }
+    if (!readOnly && url.pathname === `${routeEndpoint}/archive-workspace` && request.method === "POST") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required." });
+        return;
+      }
+      const body = await readOptionalJsonBody(request);
+      if (body.confirm !== true) {
+        replyJson(response, 400, { error: "Confirm archiving before clearing the active tour." });
+        return;
+      }
+      replyJson(response, 200, await archiveAndClearWorkspace());
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/project-archives` && request.method === "GET") {
+      replyJson(response, 200, { archives: await listProjectArchives() });
+      return;
+    }
+    if (!readOnly && url.pathname === `${routeEndpoint}/archive-restore` && request.method === "POST") {
+      if (!workspace) {
+        replyJson(response, 400, { error: "Workspace mode is required." });
+        return;
+      }
+      const body = await readOptionalJsonBody(request);
+      const project = await restoreProjectArchive(String(body.archive || ""), body.replace === true);
+      replyJson(response, 200, { restored: true, project });
+      return;
+    }
     if (!readOnly && url.pathname === `${routeEndpoint}/project-import` && request.method === "POST") {
       const source = await readBody(request, maxProjectBytes);
       const project = await restoreProjectBackup(source);
@@ -1297,8 +1471,8 @@ const server = createServer(async (request, response) => {
     }
     if (!readOnly && url.pathname.startsWith(`${routeEndpoint}/release/`) && request.method === "GET") {
       const status = await releaseStatus();
-      if (!status.ready) {
-        replyJson(response, 404, { error: "Build the current workspace before opening its release." });
+      if (!status.legacyReady) {
+        replyJson(response, 404, { error: "Prepare portable files before opening the folder release." });
         return;
       }
       const relativePath = decodeURIComponent(url.pathname.slice(`${routeEndpoint}/release/`.length)) || "index.html";
@@ -1317,8 +1491,8 @@ const server = createServer(async (request, response) => {
     }
     if (!readOnly && url.pathname === `${routeEndpoint}/release-embed-test.html` && request.method === "GET") {
       const status = await releaseStatus();
-      if (!status.ready) {
-        replyJson(response, 404, { error: "Build the current workspace before testing its embed." });
+      if (!status.embedReady) {
+        replyJson(response, 404, { error: "Prepare portable files before testing its embed." });
         return;
       }
       response.writeHead(200, responseHeaders("text/html; charset=utf-8"));
@@ -1332,8 +1506,22 @@ const server = createServer(async (request, response) => {
         return;
       }
       const selectedDraftPath = activeDraftPath(url);
+      const current = await readDraft(selectedDraftPath);
+      const currentRevision = Number.isSafeInteger(current.editorDraftRevision) ? current.editorDraftRevision : 0;
+      const hasIncomingRevision = Number.isSafeInteger(draft.editorDraftRevision) && draft.editorDraftRevision >= 0;
+      if (workspace && hasIncomingRevision && draft.editorDraftRevision !== currentRevision) {
+        replyJson(response, 409, { error: "This tour was changed in another window. Reload before making more edits.", code: "ESTALE", editorDraftRevision: currentRevision });
+        return;
+      }
+      draft.editorDraftRevision = currentRevision + 1;
       await writeJsonAtomic(selectedDraftPath, draft);
-      replyJson(response, 200, { saved: true, draftPath: selectedDraftPath, updatedAt: draft.updatedAt });
+      replyJson(response, 200, {
+        saved: true,
+        draftPath: selectedDraftPath,
+        updatedAt: draft.updatedAt,
+        editorDraftRevision: draft.editorDraftRevision,
+        release: workspace ? await releaseStatus() : null
+      });
       return;
     }
 

@@ -119,6 +119,38 @@ function readTourConfig(source) {
   return context.window.TOUR_CONFIG;
 }
 
+function deferRuntimeStyles(entrypoint) {
+  const stylesheets = [];
+  const deferred = entrypoint.replace(/<link rel="stylesheet" href="([^"]+\.css[^"]*)" \/>/g, (_match, href) => {
+    stylesheets.push(href);
+    return `<noscript><link rel="stylesheet" href="${href}" /></noscript>`;
+  });
+  assert(stylesheets.length === 2, `Expected two runtime stylesheets, found ${stylesheets.length}.`);
+  const criticalStyles = `<style data-runtime-critical>html,body,.tour-shell,.viewer{width:100%;height:100%;margin:0}html,body{overflow:hidden;background:#11100d}.tour-shell{position:relative;min-height:100svh}.viewer{position:absolute;inset:0}.tour-first-frame{position:absolute;inset:0;z-index:2147483000;width:100%;height:100%;object-fit:cover;pointer-events:none;opacity:1}.is-tour-ready .tour-first-frame{z-index:1;opacity:0;transition:opacity 180ms ease}@media(prefers-reduced-motion:reduce){.is-tour-ready .tour-first-frame{transition:none}}</style>`;
+  const styleLoader = `<script data-runtime-style-loader>(()=>{const d=document.documentElement,h=${JSON.stringify(stylesheets)};d.dataset.runtimeStyles="pending";const load=()=>Promise.all(h.map((u)=>new Promise((resolve,reject)=>{const l=document.createElement("link");l.rel="stylesheet";l.href=u;l.dataset.runtimeStyle="";l.onload=resolve;l.onerror=reject;document.head.appendChild(l)}))).then(()=>{d.dataset.runtimeStyles="ready"}).catch(()=>{d.dataset.runtimeStyles="error"});requestAnimationFrame(()=>requestAnimationFrame(load))})()</script>`;
+  assert(deferred.includes("</head>"), "The runtime entrypoint has no closing head element.");
+  return deferred.replace("</head>", `    ${criticalStyles}\n    ${styleLoader}\n  </head>`);
+}
+
+async function deferRuntimeChrome(entrypoint, stagedRoot) {
+  const viewer = '<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>';
+  const viewerIndex = entrypoint.indexOf(viewer);
+  const chromeStart = viewerIndex + viewer.length;
+  const mainEnd = entrypoint.indexOf("</main>", chromeStart);
+  assert(viewerIndex >= 0 && mainEnd > chromeStart, "The runtime chrome could not be separated from the first-frame shell.");
+  const chromeMarkup = entrypoint.slice(chromeStart, mainEnd).trim();
+  assert(chromeMarkup.includes('class="topbar"') && chromeMarkup.includes('id="navigatorPanel"'), "The runtime chrome is incomplete.");
+  const chromeRuntime = `(()=>{const s=document.querySelector(".tour-shell");if(!s||s.querySelector(".topbar"))return;s.insertAdjacentHTML("beforeend",${JSON.stringify(chromeMarkup)})})();\n`;
+  await writeFile(join(stagedRoot, "js", "tour-chrome.js"), chromeRuntime, "utf8");
+  let shellOnly = `${entrypoint.slice(0, chromeStart)}\n    ${entrypoint.slice(mainEnd)}`;
+  const bootstrapPattern = /<script(?: defer)? src="(js\/tour-bootstrap\.js[^"]*)"><\/script>/;
+  const bootstrapMatch = shellOnly.match(bootstrapPattern);
+  assert(bootstrapMatch, "The runtime bootstrap script could not be deferred until after first paint.");
+  const loader = `<script data-runtime-loader>(()=>{const l=(s)=>new Promise((resolve,reject)=>{const e=document.createElement("script");e.src=s;e.onload=resolve;e.onerror=reject;document.body.appendChild(e)});requestAnimationFrame(()=>requestAnimationFrame(async()=>{await l("js/tour-chrome.js");await l(${JSON.stringify(bootstrapMatch[1])})}))})()</script>`;
+  shellOnly = shellOnly.replace(bootstrapPattern, loader);
+  return shellOnly;
+}
+
 function cubeResolution(width) {
   const idealFace = Math.max(512, width / Math.PI);
   return 2 ** Math.ceil(Math.log2(idealFace));
@@ -188,7 +220,7 @@ async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
     posterHeight: seoDraft.posterHeight,
     seoDraft: "seo/tour.json",
     fallbackFiles,
-    criticalFiles: ["index.html", "css/pannellum.css", "css/tour.css", "js/tour-bootstrap.js", "js/pannellum.js", "js/tour.js", "js/tour-config.js", ...firstLevelTiles]
+    criticalFiles: ["index.html", "css/pannellum.css", "css/tour.css", "js/tour-chrome.js", "js/tour-bootstrap.js", "js/pannellum.js", "js/tour.js", "js/tour-config.js", ...firstLevelTiles]
   };
 }
 
@@ -272,10 +304,21 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
   ]);
 
   const cssPath = join(stagedRoot, "css", "tour.css");
-  const css = await readFile(cssPath, "utf8");
+  let css = await readFile(cssPath, "utf8");
+  const studioStylesStart = "/* RELEASE_STRIP_START: studio-only styles */";
+  const studioStylesEnd = "/* RELEASE_STRIP_END: studio-only styles */";
+  const studioStylesStartIndex = css.indexOf(studioStylesStart);
+  const studioStylesEndIndex = css.indexOf(studioStylesEnd);
+  assert(
+    studioStylesStartIndex >= 0 && studioStylesEndIndex > studioStylesStartIndex,
+    "The runtime stylesheet is missing the studio-only release markers."
+  );
+  css = `${css.slice(0, studioStylesStartIndex).trimEnd()}\n`;
+  assert(!css.includes(".editor-panel") && !css.includes(".frame-picker-app"), "Studio-only styles leaked into the public release.");
   if (!css.includes(".tour-first-frame")) {
-    await writeFile(cssPath, `${css.trimEnd()}\n\n.tour-first-frame { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; pointer-events:none; opacity:1; transition:opacity 180ms ease; }\n.is-tour-ready .tour-first-frame { opacity:0; }\n@media (prefers-reduced-motion: reduce) { .tour-first-frame { transition:none; } }\n`, "utf8");
+    css = `${css.trimEnd()}\n\n.tour-first-frame { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; pointer-events:none; opacity:1; transition:opacity 180ms ease; }\n.is-tour-ready .tour-first-frame { opacity:0; }\n@media (prefers-reduced-motion: reduce) { .tour-first-frame { transition:none; } }\n`;
   }
+  await writeFile(cssPath, css, "utf8");
 
   const runtimePath = join(stagedRoot, "js", "tour.js");
   let runtime = await readFile(runtimePath, "utf8");
@@ -292,7 +335,7 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
     runtime += `\nif (new URLSearchParams(window.location.search).get("qa") === "1") window.__tourViewer = viewer;\n`;
   }
   if (!runtime.includes("function revealRenderedTour")) {
-    runtime = runtime.replace('viewer.on("load", () => {', 'function revealRenderedTour() {\n  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");\n  if (viewer.isLoaded() && canvas) {\n    document.documentElement.classList.add("is-tour-ready");\n    return;\n  }\n  window.requestAnimationFrame(revealRenderedTour);\n}\nviewer.on("load", () => {\n  revealRenderedTour();');
+    runtime = runtime.replace('viewer.on("load", () => {', 'function revealRenderedTour() {\n  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");\n  const runtimeStylesReady = document.documentElement.dataset.runtimeStyles === "ready";\n  if (viewer.isLoaded() && canvas && runtimeStylesReady) {\n    document.documentElement.classList.add("is-tour-ready");\n    return;\n  }\n  window.requestAnimationFrame(revealRenderedTour);\n}\nviewer.on("load", () => {\n  revealRenderedTour();');
     runtime = runtime.replace('setActiveScene(initialScene);', 'revealRenderedTour();\nsetActiveScene(initialScene);');
   }
   await writeFile(runtimePath, runtime, "utf8");
@@ -358,7 +401,7 @@ async function main() {
     await writeFile(configPath, `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
     const performance = await buildSeoAssets(firstSceneSource, stagedRoot, project, sceneBuilds);
     const entrypointPath = join(stagedRoot, "index.html");
-    const entrypointSource = await readFile(entrypointPath, "utf8");
+    const entrypointSource = deferRuntimeStyles(await deferRuntimeChrome(await readFile(entrypointPath, "utf8"), stagedRoot));
     const firstFrameData = project.scenes.find((scene) => scene.id === project.firstScene)?.multiRes?.equirectangularThumbnail;
     assert(firstFrameData?.startsWith("data:image/webp;base64,"), "The inline first-frame preview is missing.");
     const entrypointWithPreview = entrypointSource.replace(

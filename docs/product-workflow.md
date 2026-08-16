@@ -4,7 +4,7 @@
 - Purpose: operating protocol for producing a reviewed 360 tour from stitched panoramas.
 - Contains: the linear local workflow, editable project backup, review gate and single-file release contract.
 - Read full when: starting a property, handing a draft to an operator or preparing a customer release.
-- Last update: 2026-08-02
+- Last update: 2026-08-16
 
 ## Operating Model
 
@@ -22,9 +22,10 @@ The studio is local-first. It keeps source material and the editable workspace o
 ## Seven Screens
 
 1. **Start**
-   - Offer exactly two explicit paths: create a clearly named new tour, or open an editable `.rdtour` project file selected by the operator.
-   - Do not list, suggest or silently reopen the previous local workspace on this screen.
+   - Show the unfinished local tour by name and saved time, if one exists; continuing it is always explicit.
+   - Offer a clearly named new tour, opening an editable `.rdtour` file and reopening a recent versioned archive.
    - Project replacement requires an explicit confirmation. Camera originals remain outside the workspace.
+   - A successful **Archive and finish tour** creates and validates a versioned `.rdtour` archive before clearing the active workspace. Downloads never clear it.
 
 2. **Photos**
    - Import ready 2:1 JPG photos. The importer rejects wrong files, undersized images and exact duplicate bytes with plain-language recovery instructions.
@@ -64,9 +65,10 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 7. **Publish**
    - Review the room, view, place and picture-change counts and require a green readiness gate.
-   - Confirm the permanent lower-case web name, build both delivery formats, then show **Download web package** as the only primary result.
+   - Require photos, complete assignments, unique photo names, graph reachability, positioned walking buttons and saved destination views.
+   - Confirm the permanent lower-case web name, build the optimized website format once, then show **Download web package** as the only primary result.
    - Open the optimized preview and complete the desktop Chromium, mobile Chromium and mobile WebKit review before promoting `current.json`.
-   - Keep portable HTML, preview/testing, website-install code, editable backup and legacy folder ZIP in separate collapsed disclosures.
+   - Prepare portable HTML, paste-in code and legacy folder ZIP only from the optional **Prepare embed & portable files** action. Keep them, preview/testing, editable backup and debug output in collapsed disclosures.
    - `raindigit-360-tour-web-package.zip` is the normal Rain Digit/R2 installation. `raindigit-360-tour.html` is the portable fallback. The editable backup is an operator asset, not part of the default customer handoff.
    - `raindigit-360-tour-embed.html` is the secondary paste-in installation for website editors that cannot host a separate file. It must be one compressed body fragment with inline styles, scripts and panorama data, show a preloader immediately, then create the self-contained tour iframe after host page `load` plus idle callback or timeout.
 
@@ -77,6 +79,15 @@ The studio is local-first. It keeps source material and the editable workspace o
 3. Check every link from its source position and every arrival composition after the image fade completes.
 4. Check desktop, Chromium mobile and WebKit/iOS-mobile emulation for clipping, misplaced controls, a hidden/reopenable navigator, fullscreen and visual paint artefacts.
 5. Do not build or publish until the operator accepts the preview.
+
+## Save, conflict and recovery contract
+
+- Project structure and visual/navigation draft are written atomically and display their own save state, separate from step instructions.
+- Temporary network or server failures retry with bounded exponential backoff. Returning online resumes a pending save.
+- Every structure and draft write carries a revision. A stale second browser window receives a conflict and must reload; it cannot silently overwrite newer work.
+- Closing or reloading while a save/retry is pending raises a browser warning.
+- A release build never removes unreachable photos. It stops with the names that still need routes and preserves the workspace unchanged.
+- Editable archives include the project manifest, normalized panoramas, thumbnails, draft, frame selections and bounded diagnostic journal. Archive restore validates the ZIP and every allowed path before replacement.
 
 ## Build And Embed
 

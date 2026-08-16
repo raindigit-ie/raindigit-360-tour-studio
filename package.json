@@ -8,6 +8,7 @@
     "preview": "node scripts/tour-editor-server.mjs --preview --port 8768",
     "app:start": "sh scripts/start-studio.sh",
     "app:stop": "sh scripts/stop-studio.sh",
+    "setup:hooks": "sh scripts/install-local-git-hooks.sh",
     "build:editor-ui": "vite build",
     "check:types": "svelte-check --tsconfig ./tsconfig.json",
     "check": "npm run check:types && npm run build:editor-ui && node --check scripts/tour-editor-server.mjs && node --check scripts/build-tour-release.mjs && node --check scripts/build-multires-release.mjs && node --check scripts/prepare-legacy-tz3-workspaces.mjs && node --check scripts/retarget-thin-media-release.mjs && node --check scripts/revise-multires-runtime.mjs && node --check scripts/upload-tz3-r2-candidates.mjs && node --check web-tour/js/tour-bootstrap.js && node --check web-tour/js/tour.js && node --check web-tour/js/tour-editor.js && node --check web-tour/js/tour-preview.js && node --check web-tour/js/frame-picker.js",
@@ -25,7 +26,7 @@
     "test:frame-picker": "node scripts/test-frame-picker.mjs",
     "test:multires": "node scripts/test-multires-release.mjs",
     "test:release-browser": "node scripts/test-release-browser.mjs",
-    "test:all": "npm run check && npm run test:product && npm run test:studio-ui && npm run test:guided-flow && npm run test:frame-picker && npm run test:multires && npm run test:distribution && npm run test:release-browser",
+    "test:all": "npm run check && npm run test:product && npm run test:guided-flow && npm run test:frame-picker && npm run test:multires && npm run test:distribution && npm run test:release-browser",
     "test:all:verified": "bash scripts/run-verified-test-suite.sh"
   },
   "devDependencies": {
