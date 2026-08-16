@@ -279,7 +279,7 @@ async function main() {
     assert(uploadPreviewMode.imageHidden && !uploadPreviewMode.viewerHidden && uploadPreviewMode.hasCanvas, `360 preview did not render correctly: ${JSON.stringify(uploadPreviewMode)}`);
     await page.keyboard.press("Escape");
     await page.locator(".editor-photo-preview__dialog").waitFor({ state: "hidden" });
-    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
 
     const roomsStageWidth = await page.evaluate(() => {
       const viewport = document.documentElement.clientWidth;
@@ -439,6 +439,13 @@ async function main() {
     assert(await page.locator(".editor-room-column").nth(1).locator(".editor-room-photo").count() === 1, `Reload lost the photo space assignment: ${JSON.stringify(reloadState)}`);
     assert(await page.locator('.editor-room-photo[data-scene-id="scene-003"] select').nth(1).locator("option:checked").textContent() === "Second floor", `Reload lost the photo floor assignment: ${JSON.stringify(reloadState)}`);
 
+    await page.getByRole("button", { name: "Connect in order" }).click();
+    await waitForWorkspaceStructure(page, (project) => project.scenes.reduce((total, scene) => total + (scene.plannedTargets?.length || 0), 0) === 4);
+    await page.getByText("Every neighbouring photo is connected in both directions.", { exact: true }).waitFor();
+    assert(await page.getByText("Every neighbouring photo is connected in both directions.", { exact: true }).count() === 1, "Fast setup did not report a complete ordered route plan.");
+    await page.getByRole("button", { name: "Undo automatic routes" }).click();
+    await waitForWorkspaceStructure(page, (project) => project.scenes.every((scene) => (scene.plannedTargets?.length || 0) === 0));
+
     await page.locator(".editor-photo-choice").filter({ hasText: "Kitchen window" }).click();
     const sourceDestinationState = await page.evaluate(() => ({
       sourceCards: document.querySelectorAll(".editor-photo-choice-card").length,
@@ -523,15 +530,7 @@ async function main() {
     await assertOneTask(page, "Choose the look");
     await page.screenshot({ path: join(outputDir, "01-look-mobile.png"), fullPage: true });
     await page.getByRole("button", { name: "Bright", exact: true }).click();
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const label = (await page.locator("#editorContinue").textContent()).trim();
-      if (label === "Continue") break;
-      assert(label === "Next photo", `Unexpected look-step action: ${label}`);
-      await page.locator("#editorContinue").click();
-      await page.waitForTimeout(500);
-    }
-    assert((await page.locator("#editorContinue").textContent()).trim() === "Continue", "The look step did not reach the final Continue action.");
-    await page.locator("#editorContinue").click();
+    await page.getByRole("button", { name: "Use on all photos & continue" }).click();
 
     await page.setViewportSize({ width: 1280, height: 760 });
     await assertOneTask(page, "Place the walking buttons");
@@ -645,7 +644,7 @@ async function main() {
     });
     await page.getByRole("button", { name: "Back" }).click();
     await assertOneTask(page, "Choose the look");
-    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await assertOneTask(page, "Place the walking buttons");
     await page.locator('.editor-saved-movement[data-saved-movement-target="scene-002"]').click();
     await page.waitForFunction(() => {
@@ -771,7 +770,7 @@ async function main() {
     }
     await page.getByRole("button", { name: "Back" }).click();
     await assertOneTask(page, "Choose the look");
-    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await assertOneTask(page, "Place the walking buttons");
     const confirmedAfterBack = await page.evaluate(() => window.__TOUR_EDITOR_API.scenes.flatMap((scene) => scene.hotspots).filter((hotspot) => hotspot.positionConfirmed).length);
     assert(confirmedAfterBack === 4, "Back navigation lost saved movement points.");
@@ -1033,7 +1032,7 @@ async function main() {
     const readyCheckCount = await page.locator("#editorReadiness li.is-ready").count();
     assert(readinessChecks.length >= 6 && readyCheckCount === readinessChecks.length, `Release preflight is incomplete: ${JSON.stringify(readinessChecks)}`);
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
-    await page.getByRole("button", { name: "Build the tour" }).click();
+    await page.getByRole("button", { name: "Build & download web package" }).click();
     try {
       await page.getByRole("link", { name: "Download web package" }).waitFor({ timeout: 180_000 });
     } catch (error) {

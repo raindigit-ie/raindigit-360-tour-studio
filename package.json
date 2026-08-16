@@ -22,11 +22,12 @@
     "test:product": "node scripts/test-product-flow.mjs",
     "test:studio-ui": "node scripts/test-studio-wizard-ui.mjs",
     "test:guided-flow": "node scripts/test-guided-studio-flow.mjs",
+    "test:fast-flow": "node scripts/test-fast-staff-flow.mjs",
     "test:distribution": "node scripts/test-studio-kit.mjs",
     "test:frame-picker": "node scripts/test-frame-picker.mjs",
     "test:multires": "node scripts/test-multires-release.mjs",
     "test:release-browser": "node scripts/test-release-browser.mjs",
-    "test:all": "npm run check && npm run test:product && npm run test:guided-flow && npm run test:frame-picker && npm run test:multires && npm run test:distribution && npm run test:release-browser",
+    "test:all": "npm run check && npm run test:product && npm run test:guided-flow && npm run test:fast-flow && npm run test:frame-picker && npm run test:multires && npm run test:distribution && npm run test:release-browser",
     "test:all:verified": "bash scripts/run-verified-test-suite.sh"
   },
   "devDependencies": {

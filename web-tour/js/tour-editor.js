@@ -39,8 +39,29 @@
   ];
   const defaultFloorNames = ["First floor", "Second floor", "Third floor", "Fourth floor", "Fifth floor", "Sixth floor", "Seventh floor", "Eighth floor", "Ninth floor", "Tenth floor"];
   const stageStorageKey = "raindigit-tour-studio-stage";
+  const flowStorageKey = "raindigit-tour-studio-flow";
   const restoredStage = window.sessionStorage.getItem(stageStorageKey);
   const hasSessionStage = stageOrder.includes(restoredStage) && restoredStage !== "start";
+  const restoredFlow = (() => {
+    try {
+      const value = JSON.parse(window.sessionStorage.getItem(flowStorageKey) || "null");
+      return value && Number.isFinite(value.startedAt) ? value : null;
+    } catch {
+      return null;
+    }
+  })();
+  if (restoredFlow && hasSessionStage && restoredFlow.currentStage !== restoredStage) {
+    const now = Date.now();
+    const previousStage = restoredFlow.currentStage;
+    if (previousStage && Number.isFinite(restoredFlow.stageEnteredAt)) {
+      restoredFlow.stageDurationsMs ||= {};
+      restoredFlow.stageDurationsMs[previousStage] = (restoredFlow.stageDurationsMs[previousStage] || 0)
+        + Math.max(0, now - restoredFlow.stageEnteredAt);
+    }
+    restoredFlow.currentStage = restoredStage;
+    restoredFlow.stageEnteredAt = now;
+    window.sessionStorage.setItem(flowStorageKey, JSON.stringify(restoredFlow));
+  }
   const roundCoordinate = (value) => Math.round(value * 10) / 10;
   const hotspotDragStartDistance = 10;
   const studioDefaultHfov = 94;
@@ -90,7 +111,15 @@
     statusMessage: "Loading project",
     saveStatus: { phase: "idle", message: "Not saved yet" },
     draftRetryAttempts: 0,
-    structureRetryAttempts: 0
+    structureRetryAttempts: 0,
+    quickRouteUndo: null,
+    flowMetrics: restoredFlow || {
+      startedAt: Date.now(),
+      stageEnteredAt: Date.now(),
+      currentStage: hasSessionStage ? restoredStage : "start",
+      deliberateActions: 0,
+      stageDurationsMs: {}
+    }
   };
   window.sessionStorage.removeItem(stageStorageKey);
 
@@ -190,6 +219,18 @@
         </section>
         <section class="editor-setup-section editor-place-planner">
           <div class="editor-setup-section__heading"><span>3</span><div><strong>Walking routes</strong><small>Pick where the visitor stands, then pick where they can walk.</small></div></div>
+          <div class="editor-fast-path" id="editorQuickRouteCard">
+            <div>
+              <span>Fast setup</span>
+              <strong>Connect photos in visitor order</strong>
+              <p>Put the photos in the order a visitor should walk. Studio adds a two-way route between every neighbouring photo and keeps any routes you already made.</p>
+            </div>
+            <div class="editor-fast-path__actions">
+              <button class="editor-button editor-button--accelerator" id="editorConnectInOrder" type="button">Connect in order</button>
+              <button class="editor-button" id="editorUndoQuickRoutes" type="button" hidden>Undo automatic routes</button>
+            </div>
+            <small id="editorQuickRouteStatus"></small>
+          </div>
           <div class="editor-photo-strip" id="editorRoomChoices" aria-label="Choose the starting photo"></div>
           <p class="editor-task-progress" id="editorRoomTaskProgress"></p>
           <div class="editor-planned-places" id="editorPlannedPlaces"></div>
@@ -200,6 +241,10 @@
         <div class="editor-step-heading"><span>Step 3</span><h2>Choose the look</h2></div>
         <div class="editor-presets" id="editorImagePresets" aria-label="Picture style"></div>
         <div class="editor-picture-actions"><button class="editor-button" id="editorToggleOriginal" type="button">Show original</button><button class="editor-button" id="editorApplyLookRoom" type="button">Apply look to room</button></div>
+        <div class="editor-fast-path editor-fast-path--compact">
+          <div><span>Fast path</span><strong>Happy with this overall look?</strong><p>Apply only the overall colour and brightness to every photo. Fine-tuned light areas stay unique to each photo.</p></div>
+          <button class="editor-button editor-button--accelerator editor-button--wide" id="editorApplyLookAll" type="button">Use on all photos & continue</button>
+        </div>
         <p class="editor-image-warning" id="editorImageWarning"></p>
         <details class="editor-disclosure editor-disclosure--compact">
           <summary>Fine tune picture</summary>
@@ -233,6 +278,10 @@
       </section>
       <section class="editor-stage-panel" data-stage-panel="arrival">
         <div class="editor-step-heading"><span>Step 5</span><h2>Choose what people see first</h2></div>
+        <div class="editor-fast-path editor-fast-path--compact" id="editorOpeningViewsFastPath">
+          <div><span>Fast path</span><strong>Keep the opening views already shown</strong><p>Use each photo's current opening direction everywhere it is entered. You can still correct any photo in Final polish.</p></div>
+          <button class="editor-button editor-button--accelerator editor-button--wide" id="editorKeepOpeningViews" type="button">Keep all current views & continue</button>
+        </div>
         <p class="editor-guidance" id="editorArrivalHelp"></p>
         <div class="editor-hotspot-list" id="editorArrivalList" hidden></div>
         <button class="editor-button" id="editorEditArrival" type="button" hidden>Choose destination view</button>
@@ -277,12 +326,15 @@
           <a class="editor-button editor-button--wide" id="editorPreviewLink" target="_blank" rel="noopener">Open tour preview</a>
           <button class="editor-button editor-button--wide" id="editorOpenPolish" type="button">Polish inside studio</button>
         </details>
-        <label class="editor-field editor-field--stacked editor-web-name">
-          <span>Tour web name</span>
-          <input id="editorReleaseSlug" type="text" inputmode="url" autocomplete="off" maxlength="72" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" aria-describedby="editorReleaseSlugHelp" />
-          <small id="editorReleaseSlugHelp">Used in the permanent address: raindigit.ie/tours/<b>tour-name</b>/</small>
-        </label>
-          <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build the tour</button>
+        <details class="editor-disclosure editor-disclosure--compact editor-web-name">
+          <summary>Web address (created automatically)</summary>
+          <label class="editor-field editor-field--stacked">
+            <span>Tour web name</span>
+            <input id="editorReleaseSlug" type="text" inputmode="url" autocomplete="off" maxlength="72" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" aria-describedby="editorReleaseSlugHelp" />
+            <small id="editorReleaseSlugHelp">Used in the permanent address: raindigit.ie/tours/<b>tour-name</b>/</small>
+          </label>
+        </details>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build & download web package</button>
           <div class="editor-build-progress" id="editorBuildProgress" hidden role="status" aria-live="polite">
             <div><span id="editorBuildProgressLabel">Preparing build</span><strong id="editorBuildProgressPercent">0%</strong></div>
             <div class="editor-build-progress__track"><i id="editorBuildProgressBar"></i></div>
@@ -370,7 +422,7 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ArchiveList", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "BuildPortable", "PortableStatus", "BuildProgress", "BuildProgressLabel", "BuildProgressPercent", "BuildProgressBar", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ArchiveWorkspace", "ReleaseStatus", "Back", "Status", "SaveStatus", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ArchiveList", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "QuickRouteCard", "ConnectInOrder", "UndoQuickRoutes", "QuickRouteStatus", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "OpeningViewsFastPath", "KeepOpeningViews", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "ApplyLookAll", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "BuildPortable", "PortableStatus", "BuildProgress", "BuildProgressLabel", "BuildProgressPercent", "BuildProgressBar", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ArchiveWorkspace", "ReleaseStatus", "Back", "Status", "SaveStatus", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
@@ -493,6 +545,7 @@
         total: state.arrivalQueueTotal,
         keys: state.arrivalQueue.map(arrivalTaskKey)
       },
+      flow: flowMetricsSnapshot(),
       scenes: api.scenes.map((scene) => ({
         id: scene.id,
         modelIds: scene.hotspots.map((_, index) => api.hotspotId(scene.id, index)),
@@ -582,9 +635,12 @@
   }
 
   function logOperatorStep(action, details = {}) {
+    state.flowMetrics.deliberateActions += 1;
+    persistFlowMetrics();
     studioLog("operator-step", {
       action,
       stage: state.activeStage,
+      flow: flowMetricsSnapshot(),
       sceneId: api.viewer.getScene(),
       selected: state.selected ? { ...state.selected } : null,
       pose: {
@@ -594,6 +650,50 @@
       },
       ...details
     }, true);
+  }
+
+  function persistFlowMetrics() {
+    window.sessionStorage.setItem(flowStorageKey, JSON.stringify(state.flowMetrics));
+  }
+
+  function resetFlowMetrics(stage = "start") {
+    const now = Date.now();
+    state.flowMetrics = {
+      startedAt: now,
+      stageEnteredAt: now,
+      currentStage: stage,
+      deliberateActions: 0,
+      stageDurationsMs: {}
+    };
+    persistFlowMetrics();
+  }
+
+  function flowMetricsSnapshot() {
+    const now = Date.now();
+    const durations = { ...state.flowMetrics.stageDurationsMs };
+    const currentStage = state.flowMetrics.currentStage || state.activeStage;
+    if (currentStage && Number.isFinite(state.flowMetrics.stageEnteredAt)) {
+      durations[currentStage] = (durations[currentStage] || 0) + Math.max(0, now - state.flowMetrics.stageEnteredAt);
+    }
+    return {
+      elapsedMs: Math.max(0, now - state.flowMetrics.startedAt),
+      deliberateActions: state.flowMetrics.deliberateActions,
+      currentStage,
+      stageDurationsMs: durations
+    };
+  }
+
+  function recordStageTransition(previousStage, nextStage) {
+    if (state.flowMetrics.currentStage === nextStage && previousStage === nextStage) return;
+    const now = Date.now();
+    const trackedStage = state.flowMetrics.currentStage || previousStage;
+    if (trackedStage && Number.isFinite(state.flowMetrics.stageEnteredAt)) {
+      state.flowMetrics.stageDurationsMs[trackedStage] = (state.flowMetrics.stageDurationsMs[trackedStage] || 0)
+        + Math.max(0, now - state.flowMetrics.stageEnteredAt);
+    }
+    state.flowMetrics.currentStage = nextStage;
+    state.flowMetrics.stageEnteredAt = now;
+    persistFlowMetrics();
   }
 
   function studioUrl(path, workspace = workspaceMode) {
@@ -1009,6 +1109,7 @@
   function setStage(stage) {
     if (!stageOrder.includes(stage)) return;
     const previousStage = state.activeStage;
+    recordStageTransition(previousStage, stage);
     state.activeStage = stage;
     state.placement = null;
     state.pendingFocus = null;
@@ -1277,6 +1378,7 @@
       return false;
     }
     state.pendingFocus = null;
+    recordStageTransition(state.activeStage, focus.stage);
     state.activeStage = focus.stage;
     selectHotspot(focus.sceneId, hotspotIndex);
     state.arrival = null;
@@ -1294,6 +1396,7 @@
     const taskSceneIndex = api.scenes.findIndex((scene) => scene.id === task.sceneId);
     if (taskSceneIndex >= 0) state.linkSceneIndex = taskSceneIndex;
     state.pendingFocus = { ...task, stage, place, lookAtHotspot };
+    recordStageTransition(state.activeStage, stage);
     state.activeStage = stage;
     state.arrival = null;
     state.placement = null;
@@ -1632,6 +1735,7 @@
     if (!project || index < 0 || ![-1, 1].includes(direction)) return;
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= rooms.length) return;
+    state.quickRouteUndo = null;
     [rooms[index], rooms[targetIndex]] = [rooms[targetIndex], rooms[index]];
     reorderScenesByRoomOrder(project);
     refreshAutoSceneTitles(project);
@@ -1662,6 +1766,7 @@
     const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
     const room = projectRooms(project).find((candidate) => candidate.id === roomId);
     if (!scene || !room) return;
+    state.quickRouteUndo = null;
     const previousRoomId = scene.space;
     if (isAutoSceneTitle(scene)) scene.titleAutoGenerated = true;
     scene.space = room.id;
@@ -1694,6 +1799,63 @@
   function plannedTargets(scene) {
     if (!Array.isArray(scene.plannedTargets)) scene.plannedTargets = [];
     return scene.plannedTargets;
+  }
+
+  function orderedRoutePlan(project = state.workspaceProject) {
+    const scenes = project?.scenes || [];
+    const pairs = [];
+    for (let index = 0; index < scenes.length - 1; index += 1) {
+      pairs.push([scenes[index], scenes[index + 1]], [scenes[index + 1], scenes[index]]);
+    }
+    const missing = pairs.filter(([source, target]) => !plannedTargets(source).includes(target.id));
+    return { pairs, missing };
+  }
+
+  async function connectPhotosInOrder() {
+    const project = state.workspaceProject;
+    if (!project || project.scenes.length < 2) {
+      setStatus("Add at least two photos before creating a walking route");
+      return;
+    }
+    const plan = orderedRoutePlan(project);
+    if (!plan.missing.length) {
+      setStatus("Neighbouring photos are already connected in both directions");
+      return;
+    }
+    state.quickRouteUndo = Object.fromEntries(project.scenes.map((scene) => [scene.id, [...plannedTargets(scene)]]));
+    for (const [source, target] of plan.missing) {
+      source.plannedTargets = [...new Set([...plannedTargets(source), target.id])];
+    }
+    syncPlannedPlacesToDraft();
+    await Promise.all([
+      queueWorkspaceStructureSave("photos-connected-in-order"),
+      queueDraftSave("photos-connected-in-order")
+    ]);
+    setStatus(`${plan.missing.length} walking button${plan.missing.length === 1 ? "" : "s"} added. Check the suggested routes below.`);
+    logOperatorStep("photos-connected-in-order", {
+      photos: project.scenes.length,
+      addedRoutes: plan.missing.length,
+      totalRoutes: orderedRoutePlan(project).pairs.length
+    });
+    renderRoomsPanel();
+  }
+
+  async function undoPhotosConnectedInOrder() {
+    const project = state.workspaceProject;
+    const snapshot = state.quickRouteUndo;
+    if (!project || !snapshot) return;
+    project.scenes.forEach((scene) => {
+      scene.plannedTargets = Array.isArray(snapshot[scene.id]) ? [...snapshot[scene.id]] : [];
+    });
+    state.quickRouteUndo = null;
+    syncPlannedPlacesToDraft();
+    await Promise.all([
+      queueWorkspaceStructureSave("automatic-routes-undone"),
+      queueDraftSave("automatic-routes-undone")
+    ]);
+    setStatus("Automatic routes removed. Your earlier manual routes were restored.");
+    logOperatorStep("photos-connected-in-order-undone");
+    renderRoomsPanel();
   }
 
   function sceneRouteStats(project, scene) {
@@ -1760,6 +1922,7 @@
     const source = state.workspaceProject?.scenes.find((scene) => scene.id === sourceId);
     if (!source || source.id === targetId) return;
     const targets = plannedTargets(source);
+    state.quickRouteUndo = null;
     const nextSelected = !targets.includes(targetId);
     source.plannedTargets = nextSelected
       ? [...targets, targetId]
@@ -1776,6 +1939,7 @@
     const project = state.workspaceProject;
     const scene = project?.scenes.find((candidate) => candidate.id === sceneId);
     if (!project || !scene || ![-1, 1].includes(direction)) return;
+    state.quickRouteUndo = null;
     const roomScenes = project.scenes.filter((candidate) => candidate.space === scene.space);
     const roomIndex = roomScenes.findIndex((candidate) => candidate.id === scene.id);
     const target = roomScenes[roomIndex + direction];
@@ -2172,6 +2336,14 @@
     }
     const totalPlaces = project.scenes.reduce((total, scene) => total + plannedTargets(scene).length, 0);
     const unlinkedScenes = project.scenes.filter((scene) => !sceneRouteStats(project, scene).connected).length;
+    const orderedPlan = orderedRoutePlan(project);
+    elements.ConnectInOrder.disabled = project.scenes.length < 2 || orderedPlan.missing.length === 0;
+    elements.UndoQuickRoutes.hidden = !state.quickRouteUndo;
+    elements.QuickRouteStatus.textContent = project.scenes.length < 2
+      ? "Add another photo to use fast setup."
+      : orderedPlan.missing.length
+        ? `${project.scenes.length} photos · ${orderedPlan.missing.length} neighbouring route${orderedPlan.missing.length === 1 ? "" : "s"} can be added.`
+        : "Every neighbouring photo is connected in both directions.";
     elements.AssignmentStatus.textContent = `${project.scenes.length} photos in ${rooms.length} space${rooms.length === 1 ? "" : "s"} across ${floors.length} floor${floors.length === 1 ? "" : "s"}; ${totalPlaces} walking button${totalPlaces === 1 ? "" : "s"}; ${unlinkedScenes ? `${unlinkedScenes} photo${unlinkedScenes === 1 ? "" : "s"} not linked yet` : "all photos linked"}`;
   }
 
@@ -2214,8 +2386,10 @@
     if (!response.ok) throw new Error((await response.json()).error || `Could not create project (${response.status})`);
     state.workspaceProject = await response.json();
     syncStructureRevision();
+    resetFlowMetrics("upload");
     setStatus("Project created");
     window.sessionStorage.setItem(stageStorageKey, "upload");
+    await flushStudioLogs();
     window.location.assign(`${window.location.pathname}?edit=1`);
     return state.workspaceProject;
   }
@@ -2358,6 +2532,7 @@
     state.structureRetryAttempts = 0;
     setSaveStatus("saved", "Saved locally");
     setStatus("Space structure saved");
+    await flushStudioLogs();
     if (workspaceMode) {
       window.sessionStorage.setItem(stageStorageKey, nextStage || "rooms");
       window.location.reload();
@@ -2392,6 +2567,7 @@
     state.workspaceProject = body;
     syncStructureRevision();
     window.sessionStorage.setItem(stageStorageKey, returnStage);
+    await flushStudioLogs();
     window.location.assign(body.scenes.length ? workspaceEditorUrl() : `${window.location.pathname}?edit=1`);
   }
 
@@ -2465,7 +2641,9 @@
         : summary);
       if (lastImportedSceneId && returnStage === "rooms") window.sessionStorage.setItem("raindigit-tour-room-plan-scene", lastImportedSceneId);
       if (imported > 0) {
+        state.quickRouteUndo = null;
         window.sessionStorage.setItem(stageStorageKey, returnStage === "rooms" ? "rooms" : "upload");
+        await flushStudioLogs();
         window.location.assign(workspaceEditorUrl());
       } else {
         state.importing = false;
@@ -2847,6 +3025,12 @@
 
   function renderArrivalPanel(scene) {
     if (state.activeStage !== "arrival") return;
+    const pendingViews = pendingArrivalTasks();
+    elements.OpeningViewsFastPath.hidden = pendingViews.length === 0;
+    elements.KeepOpeningViews.disabled = pendingViews.length === 0 || state.arrivalSaving || state.arrivalLoading;
+    elements.KeepOpeningViews.textContent = pendingViews.length === 1
+      ? "Keep current view & continue"
+      : `Keep ${pendingViews.length} current views & continue`;
     const viewerReady = Boolean(api.viewer.isLoaded() && state.viewerSettled && !state.viewportSettling);
     const selected = selectedHotspot();
     const arrivalProgress = selectedArrivalTask();
@@ -3079,7 +3263,7 @@
     elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
     elements.Build.disabled = !workspaceMode || state.building || !readiness.ready || !releaseSlugValid;
     elements.Build.hidden = state.release.ready;
-    elements.Build.textContent = state.building ? state.buildProgress.message || "Building tour..." : "Build the tour";
+    elements.Build.textContent = state.building ? state.buildProgress.message || "Building tour..." : "Build & download web package";
     elements.BuildProgress.hidden = !state.building;
     elements.BuildProgressLabel.textContent = state.buildProgress.message || "Preparing build";
     elements.BuildProgressPercent.textContent = `${Math.max(0, Math.min(100, state.buildProgress.percent || 0))}%`;
@@ -3940,6 +4124,56 @@
     }
   }
 
+  async function keepCurrentOpeningViews() {
+    if (state.arrivalSaving) return;
+    const pending = pendingArrivalTasks();
+    if (!pending.length) {
+      setStage("polish");
+      return;
+    }
+    state.arrivalSaving = true;
+    renderArrivalPanel(currentScene());
+    let updatedDestinations = 0;
+    for (const task of pending) {
+      const target = api.sceneById[task.targetSceneId || task.target];
+      if (!target) continue;
+      const updatedRoutes = saveDestinationArrivalView(target.id, {
+        pitch: roundCoordinate(target.pitch),
+        yaw: roundCoordinate(target.yaw),
+        hfov: roundCoordinate(target.hfov)
+      });
+      if (updatedRoutes) updatedDestinations += 1;
+    }
+    const saved = updatedDestinations > 0 && await queueDraftSave("current-opening-views-kept");
+    state.arrivalSaving = false;
+    if (!saved) {
+      setStatus("Could not save the current opening views");
+      renderArrivalPanel(currentScene());
+      return;
+    }
+    state.arrival = null;
+    resetArrivalQueue();
+    logOperatorStep("current-opening-views-kept", { destinations: updatedDestinations });
+    setStatus(`${updatedDestinations} opening view${updatedDestinations === 1 ? "" : "s"} kept. You can still correct them in Final polish.`);
+    setStage("polish");
+  }
+
+  async function applyCurrentLookToAllPhotos() {
+    const scene = currentScene();
+    if (!scene || !api.scenes.length) return;
+    const adjustment = api.getSceneAdjustment(scene.id);
+    api.scenes.forEach((candidate) => api.setSceneAdjustment(candidate.id, adjustment));
+    state.showOriginalLook = false;
+    state.lookSceneIndex = api.scenes.length - 1;
+    renderImagePresets(scene.id);
+    renderImageControls(scene.id);
+    const saved = await queueDraftSave("picture-look-applied-to-tour");
+    if (!saved) return;
+    logOperatorStep("picture-look-applied-to-tour", { sourceSceneId: scene.id, photos: api.scenes.length });
+    setStatus(`Look applied to ${api.scenes.length} photos`);
+    await continueWizard();
+  }
+
   async function refreshReleaseStatus() {
     if (!workspaceMode) return;
     try {
@@ -3991,6 +4225,7 @@
     renderExportPanel();
     await refreshBuildProgress();
     const progressTimer = window.setInterval(refreshBuildProgress, 650);
+    let built = false;
     try {
       const response = await fetch(studioUrl(portable ? "build-portable-release" : "build-release"), {
         method: "POST",
@@ -4002,6 +4237,7 @@
       state.release = { ...state.release, ...body, buildDurationMs: body.buildDurationMs ?? state.release.buildDurationMs };
       state.buildProgress = { phase: "complete", percent: 100, message: portable ? "Portable files ready" : "Tour ready" };
       setStatus(portable ? "Portable and embed files ready" : "Optimized website tour ready");
+      built = true;
     } catch (error) {
       state.buildProgress = { phase: "failed", percent: state.buildProgress.percent || 0, message: "Build failed" };
       setStatus(error.message);
@@ -4011,10 +4247,22 @@
       state.buildingMode = null;
       renderExportPanel();
     }
+    return built;
   }
 
   async function buildRelease() {
-    return buildReleaseTarget("web");
+    const built = await buildReleaseTarget("web");
+    if (!built || !state.release.multires?.ready) return false;
+    window.requestAnimationFrame(() => {
+      elements.DownloadMultires.click();
+      setStatus("Tour built and web package download started");
+      logOperatorStep("build-and-download-complete", {
+        bytes: state.release.multires?.bytes || null,
+        buildDurationMs: state.release.buildDurationMs || null,
+        completedFlow: flowMetricsSnapshot()
+      });
+    });
+    return true;
   }
 
   async function buildPortableRelease() {
@@ -4051,6 +4299,7 @@
       state.draftDirty = false;
       setSaveStatus("idle", "No active tour");
       window.sessionStorage.removeItem(stageStorageKey);
+      window.sessionStorage.removeItem(flowStorageKey);
       state.activeStage = "start";
       setStatus(`Archived as ${body.fileName}. Ready for the next tour.`);
       await refreshArchives();
@@ -4157,6 +4406,8 @@
   elements.RoomImportFiles.addEventListener("change", importPanoramas);
   elements.ApplyRoomCount.addEventListener("click", setRoomCount);
   elements.ApplyFloorCount.addEventListener("click", setFloorCount);
+  elements.ConnectInOrder.addEventListener("click", () => connectPhotosInOrder().catch((error) => setStatus(error.message)));
+  elements.UndoQuickRoutes.addEventListener("click", () => undoPhotosConnectedInOrder().catch((error) => setStatus(error.message)));
   elements.RoomCount.addEventListener("change", setRoomCount);
   elements.Home.addEventListener("click", () => {
     logOperatorStep("home");
@@ -4310,8 +4561,10 @@
     setStatus(`Look applied to ${scene.spaceLabel}`);
     logOperatorStep("picture-look-applied-to-room", { roomId: scene.space });
   });
+  elements.ApplyLookAll.addEventListener("click", () => applyCurrentLookToAllPhotos().catch((error) => setStatus(error.message)));
   elements.EditArrival.addEventListener("click", beginArrivalEdit);
   elements.SaveArrival.addEventListener("click", saveArrivalView);
+  elements.KeepOpeningViews.addEventListener("click", () => keepCurrentOpeningViews().catch((error) => setStatus(error.message)));
   elements.SaveSceneView.addEventListener("click", () => {
     const scene = currentScene();
     api.setSceneView(scene.id, {

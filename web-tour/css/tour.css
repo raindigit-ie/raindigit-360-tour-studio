@@ -2808,6 +2808,80 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
 .editor-setup-section__heading strong { color: #fff9ec; font-size: 14px; }
 .editor-setup-section__heading small { color: var(--text-muted); font-size: 10px; }
 
+.editor-fast-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 18px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(105, 194, 163, 0.4);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(105, 194, 163, 0.14), transparent 42%),
+    linear-gradient(135deg, rgba(105, 194, 163, 0.08), rgba(214, 175, 92, 0.06)),
+    rgba(14, 17, 14, 0.9);
+}
+
+.editor-fast-path[hidden] { display: none; }
+
+.editor-fast-path > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.editor-fast-path > div:first-child > span {
+  color: #8be0bf;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.editor-fast-path > div:first-child > strong {
+  color: #fff9ec;
+  font-size: 14px;
+}
+
+.editor-fast-path p,
+.editor-fast-path > small {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.editor-fast-path > small {
+  grid-column: 1 / -1;
+}
+
+.editor-fast-path__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.editor-button--accelerator {
+  border-color: rgba(105, 194, 163, 0.68);
+  color: #eafff7;
+  background: rgba(50, 119, 92, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(105, 194, 163, 0.08);
+}
+
+.editor-button--accelerator:hover {
+  border-color: #8be0bf;
+  background: rgba(64, 145, 112, 0.36);
+}
+
+.editor-fast-path--compact {
+  grid-template-columns: 1fr;
+  margin-top: 12px;
+}
+
+.editor-fast-path--compact .editor-button {
+  justify-self: stretch;
+}
+
 .editor-room-count {
   display: flex;
   gap: 10px;
@@ -3663,6 +3737,9 @@ body[data-editor-stage="rooms"] .editor-stage-panel {
   .editor-photo-meta-grid { grid-template-columns: 1fr; }
   .editor-room-count { align-items: stretch; flex-direction: column; }
   .editor-room-count .editor-field { width: 100%; }
+  .editor-fast-path { grid-template-columns: 1fr; }
+  .editor-fast-path__actions { justify-content: stretch; }
+  .editor-fast-path__actions .editor-button { width: 100%; }
   .editor-photo-preview { padding: 10px; }
   .editor-photo-preview__dialog { max-height: 92vh; }
   .editor-photo-preview__viewport,

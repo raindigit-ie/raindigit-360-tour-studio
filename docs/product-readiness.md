@@ -36,6 +36,16 @@ The Studio is a local-first production application. It turns already stitched pa
 - Release assets contain no editor endpoints, draft data or camera metadata.
 - The employee launcher reuses a healthy local runtime. It rebuilds only on first use or when an engineer explicitly sets `RAINDIGIT_REBUILD=1`.
 
+## Fast-path contract
+
+- The detailed path remains available for unusual layouts, but a normal linear tour has accelerators for the three repetitive decisions: neighbouring two-way routes, one overall look and existing opening views.
+- Fast route setup is reversible and additive. It never removes a manual route and is invalidated when photo/room order changes, so an old undo snapshot cannot overwrite newer structure work.
+- Picture acceleration copies only global adjustment values; local light/colour areas remain photo-specific.
+- Opening-view acceleration reuses each destination photo's one canonical saved view. It does not create per-route duplicate views.
+- Walking-button coordinates remain a manual review gate. No image heuristic may publish an inferred doorway without operator placement and review.
+- The normal web build and ZIP download are one primary action. Slug editing and optional portable outputs stay collapsed.
+- Session-only flow metrics record elapsed time, deliberate actions and stage durations in the local diagnostic stream. They contain no image payload and are not transmitted externally.
+
 ## Automated gates
 
 `npm run test:all` must pass before commit. It covers:
@@ -43,6 +53,7 @@ The Studio is a local-first production application. It turns already stitched pa
 - static/type/build checks;
 - server contracts, stale-write rejection, archive integrity and non-destructive build failure;
 - the complete employee wizard at mobile and desktop sizes;
+- a separate fast employee path with a 13-click budget, automatic ZIP download and local flow-metric assertion;
 - touch target, accessible-name, field-label, duplicate-ID, overflow and primary-action contracts;
 - walking-button persistence and Polish/final-view geometry;
 - optimized and optional portable builds;

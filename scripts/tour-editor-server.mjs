@@ -527,19 +527,26 @@ async function appendStudioLogs(entries) {
 }
 
 async function readStudioLogTail() {
-  try {
-    const contents = await readFile(studioLogPath, "utf8");
-    return contents.trim().split(/\r?\n/).filter(Boolean).slice(-2000).map((line) => {
+  const readLines = async (path) => {
+    try {
+      const contents = await readFile(path, "utf8");
+      return contents.trim().split(/\r?\n/).filter(Boolean);
+    } catch (error) {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    }
+  };
+  const lines = [
+    ...await readLines(`${studioLogPath}.1`),
+    ...await readLines(studioLogPath)
+  ].slice(-2000);
+  return lines.map((line) => {
       try {
         return JSON.parse(line);
       } catch {
         return { event: "invalid-log-line", raw: line.slice(0, 500) };
       }
     });
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
 }
 
 async function readWorkspaceProject() {

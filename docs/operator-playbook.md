@@ -26,6 +26,18 @@
 10. Download the web package. Prepare portable files only when the publisher or client asks for them.
 11. After the publisher confirms receipt, use **Archive and finish tour**. Confirm the tour appears under recent archives before starting the next one.
 
+## Fast path for a normal linear tour
+
+Use this when the imported photos are already arranged in the order a visitor should walk:
+
+1. In **Spaces**, drag rooms/photos into visitor order and press **Connect in order**. The Studio adds two-way routes only between neighbouring photos and keeps existing routes. Check the suggestion; **Undo automatic routes** restores the earlier route list.
+2. In **Look**, choose one preset and press **Use on all photos & continue**. This copies only the overall colour/brightness. Photo-specific local correction areas are not copied.
+3. Place every walking button manually. This is intentionally not automated: the Studio cannot safely infer the real doorway or walking point from an image.
+4. In **First views**, press **Keep current views & continue** when each photo already opens in a useful direction. Fine corrections remain available in **Polish**.
+5. In **Publish**, leave the automatically created web address collapsed unless the publisher requested a specific slug. Press **Build & download web package** once; the verified ZIP downloads automatically after the build passes.
+
+The regression budget for a three-photo linear fixture is **13 deliberate clicks plus four required marker drags** from new-tour creation through downloaded ZIP. Synthetic local fixtures complete in roughly 9–10 seconds; real import/build time depends on panorama resolution and machine speed.
+
 ## Recovery rules
 
 - **Save says retrying/offline:** leave the Studio open. Reconnect; it retries automatically.
@@ -34,6 +46,7 @@
 - **Browser warns before closing:** cancel, wait for **Saved**, then close.
 - **Need an older finished tour:** open it from **Recent archived tours**. Restoring never reads files outside a validated `.rdtour` archive.
 - **Studio behaves unexpectedly:** download the debug bundle and note the customer name, current step and exact action. Do not send camera originals.
+- **Need to know where time went:** the current browser session records local-only elapsed time, deliberate actions and time per stage in the diagnostic journal. It is not sent to analytics or a remote service.
 - **Launcher says it is preparing the runtime:** this is expected only on first use or after an engineer-requested upgrade. Do not repeatedly rebuild during ordinary work.
 
 ## Handoff checklist
