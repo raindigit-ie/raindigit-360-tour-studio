@@ -40,6 +40,9 @@ try {
   assert((launcher.mode & 0o111) !== 0, "The extracted macOS launcher is not executable.");
   const compose = await readFile(join(packageRoot, "docker-compose.yml"), "utf8");
   assert(compose.includes("127.0.0.1:8767:8767"), "The operator kit must keep the studio bound to localhost.");
+  const hubCompose = await readFile(join(packageRoot, "docker-compose.hub.yml"), "utf8");
+  assert(hubCompose.includes("stekolshchykov/raindigit-360-tour-studio:latest"), "The operator kit must include the public Docker Hub launch contract.");
+  assert(hubCompose.includes("studio-data:/data"), "The public Docker Hub launch contract must persist operator data.");
   await execFileAsync("docker", ["build", "--target", "studio", "-t", imageName, packageRoot], { maxBuffer: 8 * 1024 * 1024 });
   await execFileAsync("docker", ["run", "--rm", imageName, "ffmpeg", "-version"], { maxBuffer: 2 * 1024 * 1024 });
   await execFileAsync("docker", ["run", "-d", "--name", containerName, "-e", "TOUR_SERVER_HOST=0.0.0.0", "-p", `127.0.0.1:${port}:8767`, imageName]);

@@ -13,6 +13,7 @@ test-results
 .artifacts
 release-multires
 release-multires-package
+studio-archives
 *.zip
 web-tour/panoramas
 web-tour/thumbnails

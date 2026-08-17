@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import sharp from "sharp";
 
 test("desktop fullscreen keeps the complete tour control surface", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "Desktop fullscreen regression only.");
@@ -67,7 +68,17 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   expect(layout.cornerBackground).not.toBe("rgb(255, 255, 255)");
 
   const screenshot = await page.screenshot();
-  expect(screenshot.byteLength).toBeGreaterThan(50_000);
+  const screenshotImage = sharp(screenshot);
+  const [screenshotMetadata, screenshotStats] = await Promise.all([
+    screenshotImage.metadata(),
+    screenshotImage.stats()
+  ]);
+  expect(screenshotMetadata.width).toBeGreaterThanOrEqual(400);
+  expect(screenshotMetadata.height).toBeGreaterThanOrEqual(800);
+  expect(
+    screenshotStats.channels.slice(0, 3).every(({ min, max, stdev }) => max - min >= 24 && stdev >= 3),
+    JSON.stringify(screenshotStats.channels)
+  ).toBe(true);
 
   const navigatorToggle = page.locator("#navigatorToggle");
   await navigatorToggle.click();

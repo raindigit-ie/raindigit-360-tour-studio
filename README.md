@@ -137,6 +137,50 @@ and [client handoff](docs/client-handoff.md) for the exact operator, recovery an
 
 ## Docker
 
+### Public image: any computer
+
+The public image is multi-platform (`linux/amd64` and `linux/arm64`) and does not
+need this repository, Node.js, ImageMagick or FFmpeg on the host. It contains no
+customer media or editable project data. Start it with a persistent named volume:
+
+```bash
+docker volume create raindigit-360-tour-studio-data
+docker run -d \
+  --name raindigit-360-tour-studio \
+  --restart unless-stopped \
+  -p 127.0.0.1:8767:8767 \
+  -v raindigit-360-tour-studio-data:/data \
+  stekolshchykov/raindigit-360-tour-studio:latest
+```
+
+Open `http://127.0.0.1:8767/?edit=1`. The `/data` volume retains the
+active workspace, recent archives, generated packages and content-addressed build
+cache through container replacement and image upgrades. Export an editable `.rdtour`
+backup from the Studio before moving the project to another computer.
+
+The equivalent Compose launch is:
+
+```bash
+docker compose -f docker-compose.hub.yml up -d
+docker compose -f docker-compose.hub.yml down
+```
+
+`down` keeps the named volume. Removing `raindigit-360-tour-studio-data` deletes the
+local Studio state, so it must never be removed as part of an ordinary update.
+
+To update without changing the data volume:
+
+```bash
+docker pull stekolshchykov/raindigit-360-tour-studio:latest
+docker compose -f docker-compose.hub.yml up -d --force-recreate
+```
+
+The image runs as the non-root `node` user, declares its own healthcheck and supports
+a read-only root filesystem with a writable `/data` volume and `/tmp` tmpfs. The port
+is bound to loopback by default; do not expose the private Studio directly to the internet.
+
+### Repository development
+
 ```bash
 docker compose up -d --build studio
 ```
@@ -147,6 +191,20 @@ The launcher fingerprints `Dockerfile`, `package.json` and `package-lock.json`, 
 rebuilds the runtime automatically after a dependency change and otherwise reuses
 the existing image. Docker build context excludes local media, caches, test output
 and host `node_modules`; an isolated container volume supplies Linux dependencies.
+
+Build and verify the standalone runtime locally with:
+
+```bash
+npm run docker:build
+npm run test:docker-runtime -- raindigit-360-tour-studio:local
+```
+
+Publishing is deliberately explicit and requires an authenticated Docker CLI plus a
+clean reviewed Git revision:
+
+```bash
+npm run publish:docker
+```
 
 Run `npm run test:all` for the complete server, browser and mobile matrix. The
 studio journey covers create, upload, visual room-count/name setup, drag-and-drop photo assignment, multi-place selection, look, centre-target walking-button placement, first views, preview,

@@ -27,7 +27,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 mkdir -p studio-workspace dist release
-IMAGE_FINGERPRINT=$(cksum Dockerfile package.json package-lock.json | cksum | awk '{print $1 ":" $2}')
+IMAGE_FINGERPRINT=$(cksum Dockerfile docker-compose.yml docker/studio-entrypoint.sh package.json package-lock.json | cksum | awk '{print $1 ":" $2}')
 IMAGE_FINGERPRINT_PATH="dist/.studio-image-fingerprint"
 SAVED_IMAGE_FINGERPRINT=""
 if [ -f "$IMAGE_FINGERPRINT_PATH" ]; then

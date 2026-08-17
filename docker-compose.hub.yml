@@ -1,0 +1,23 @@
+name: raindigit-360-tour-studio
+
+services:
+  studio:
+    image: ${RAINDIGIT_STUDIO_IMAGE:-stekolshchykov/raindigit-360-tour-studio:latest}
+    pull_policy: missing
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${RAINDIGIT_STUDIO_PORT:-8767}:8767"
+    volumes:
+      - studio-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=1g
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+
+volumes:
+  studio-data:
+    name: ${RAINDIGIT_STUDIO_VOLUME:-raindigit-360-tour-studio-data}

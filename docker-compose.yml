@@ -4,15 +4,22 @@ services:
     build:
       context: .
       target: studio
-    working_dir: /workspace
+    working_dir: /app
     command: ["node", "scripts/tour-editor-server.mjs", "--port", "8767"]
     environment:
       TOUR_SERVER_HOST: 0.0.0.0
+      INSTA360_TOUR_DRAFT_PATH: /app/qa/manual-hotspot-overrides.json
+      INSTA360_TOUR_WORKSPACE: /app/studio-workspace
+      INSTA360_TOUR_ARTIFACTS: /app/dist
+      INSTA360_TOUR_RELEASE: /app/release
+      INSTA360_TOUR_MULTIRES_RELEASE: /app/release-multires
+      INSTA360_TOUR_BUILD_CACHE: /app/dist/build-cache
+      INSTA360_TOUR_ARCHIVES: /app/studio-archives
     ports:
       - "127.0.0.1:8767:8767"
     volumes:
-      - .:/workspace
-      - /workspace/node_modules
+      - .:/app
+      - /app/node_modules
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8767/__tour-editor/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
@@ -23,15 +30,22 @@ services:
     build:
       context: .
       target: studio
-    working_dir: /workspace
+    working_dir: /app
     command: ["node", "scripts/tour-editor-server.mjs", "--preview", "--port", "8768"]
     environment:
       TOUR_SERVER_HOST: 0.0.0.0
+      INSTA360_TOUR_DRAFT_PATH: /app/qa/manual-hotspot-overrides.json
+      INSTA360_TOUR_WORKSPACE: /app/studio-workspace
+      INSTA360_TOUR_ARTIFACTS: /app/dist
+      INSTA360_TOUR_RELEASE: /app/release
+      INSTA360_TOUR_MULTIRES_RELEASE: /app/release-multires
+      INSTA360_TOUR_BUILD_CACHE: /app/dist/build-cache
+      INSTA360_TOUR_ARCHIVES: /app/studio-archives
     ports:
       - "127.0.0.1:8768:8768"
     volumes:
-      - .:/workspace
-      - /workspace/node_modules
+      - .:/app
+      - /app/node_modules
 
   release:
     profiles: ["release"]

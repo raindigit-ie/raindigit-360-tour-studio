@@ -444,10 +444,14 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   const buildStartedAt = performance.now();
   const timings = {};
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "raindigit-multires-"));
+  const finalParent = dirname(options.output);
+  await mkdir(finalParent, { recursive: true });
+  // Keep the publish staging directory on the same filesystem as the final
+  // package. Docker mounts /data separately from /tmp, and an atomic rename
+  // across those filesystems fails with EXDEV.
+  const temporaryRoot = await mkdtemp(join(finalParent, ".raindigit-multires-"));
   const stagedRoot = join(temporaryRoot, "staged-release");
   const packageRoot = join(temporaryRoot, "package");
-  const finalParent = dirname(options.output);
   try {
     await reportProgress(options, "derivatives", 12, "Preparing source panoramas");
     let phaseStartedAt = performance.now();
@@ -603,7 +607,6 @@ async function main() {
       }
     }
     await rm(options.output, { recursive: true, force: true });
-    await mkdir(finalParent, { recursive: true });
     await rename(packageRoot, options.output);
     phaseStartedAt = performance.now();
     await reportProgress(options, "packaging", 96, "Packaging the verified tour");
