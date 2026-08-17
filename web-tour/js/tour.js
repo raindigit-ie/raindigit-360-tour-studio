@@ -201,7 +201,7 @@ configScenes[initialScene].hfov = numericViewParam("hfov", configScenes[initialS
 const viewer = pannellum.viewer("panorama", {
   default: {
     firstScene: initialScene,
-    sceneFadeDuration: 260,
+    sceneFadeDuration: 0,
     autoLoad: true,
     showFullscreenCtrl: false,
     showZoomCtrl: false,
@@ -411,6 +411,7 @@ function setAddedHotspots(sceneId, hotspots) {
 
 // Exposed for the shell, capture controls and QA checks.
 window.__tourViewer = viewer;
+window.__rainDigitTourTransition?.attach(viewer);
 
 function updateHotspotCoordinates(sceneId, hotspotIndex, coordinates) {
   const scene = sceneById[sceneId];

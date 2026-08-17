@@ -154,6 +154,12 @@ async function runBrowserQa(packageRoot, pointer) {
       const consoleErrors = [];
       const networkErrors = [];
       const tileRequests = [];
+      await page.addInitScript(() => {
+        window.__tourTransitionEvents = [];
+        document.addEventListener("raindigit:tour-transition", (event) => {
+          window.__tourTransitionEvents.push({ ...event.detail, at: performance.now() });
+        });
+      });
       page.on("console", (message) => { if (message.type() === "error" && message.text() !== "not granted") consoleErrors.push(message.text()); });
       page.on("requestfailed", (request) => networkErrors.push(`${request.url()}: ${request.failure()?.errorText || "failed"}`));
       page.on("response", (response) => {
@@ -162,6 +168,13 @@ async function runBrowserQa(packageRoot, pointer) {
       });
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await page.locator(".pnlm-render-container canvas").waitFor({ state: "visible", timeout: 30_000 });
+      await page.waitForFunction(() => window.__tourTransitionEvents.some((entry) => entry.phase === "complete" && entry.initial === true && entry.patchCount > 0), null, { timeout: 30_000 });
+      const initialTransition = await page.evaluate(() => ({
+        bootGuard: document.documentElement.classList.contains("is-tour-transition-boot"),
+        shellGuard: document.querySelector(".tour-shell")?.classList.contains("is-transition-guarded"),
+        events: window.__tourTransitionEvents
+      }));
+      assert(!initialTransition.bootGuard && !initialTransition.shellGuard, `${target.name} did not release the first-scene transition guard.`);
       const screenshot = await page.screenshot({ path: join(evidence, `${target.name}.png`), fullPage: true });
       assert(screenshot.byteLength > 30_000, `${target.name} screenshot is unexpectedly empty.`);
       assert(await page.locator(".scene-card").count() === 2, `${target.name} lost scene navigation.`);
@@ -175,18 +188,24 @@ async function runBrowserQa(packageRoot, pointer) {
       };
       await page.locator('.scene-card[data-scene="scene-002"]').evaluate((button) => button.click());
       await waitForScene("scene-002", "View 2 of 2");
+      await page.waitForFunction(() => window.__tourTransitionEvents.filter((entry) => entry.phase === "complete").length >= 2, null, { timeout: 30_000 });
+      const sceneTransition = await page.evaluate(() => window.__tourTransitionEvents.filter((entry) => entry.phase === "complete").at(-1));
+      assert(sceneTransition.initial === false && sceneTransition.patchCount > 0, `${target.name} did not use Gold Pulse for the next scene.`);
       await page.locator('.scene-card[data-scene="scene-001"]').evaluate((button) => button.click());
       await waitForScene("scene-001", "View 1 of 2");
+      await page.waitForFunction(() => window.__tourTransitionEvents.filter((entry) => entry.phase === "complete").length >= 3, null, { timeout: 30_000 });
       const firstHotspot = page.locator(".nav-hotspot-anchor").first();
       await firstHotspot.waitFor({ state: "attached" });
       assert((await firstHotspot.getAttribute("aria-label"))?.toLowerCase() === "go to second", `${target.name} first hotspot label is wrong: ${await firstHotspot.getAttribute("aria-label")}.`);
       await page.locator('.scene-card[data-scene="scene-002"]').evaluate((button) => button.click());
       await waitForScene("scene-002", "View 2 of 2");
+      await page.waitForFunction(() => window.__tourTransitionEvents.filter((entry) => entry.phase === "complete").length >= 4, null, { timeout: 30_000 });
       const secondHotspot = page.locator(".nav-hotspot-anchor").first();
       await secondHotspot.waitFor({ state: "attached" });
       assert((await secondHotspot.getAttribute("aria-label"))?.toLowerCase() === "go to entry", `${target.name} return hotspot label is wrong.`);
       await page.locator('.scene-card[data-scene="scene-001"]').evaluate((button) => button.click());
       await waitForScene("scene-001", "View 1 of 2");
+      await page.waitForFunction(() => window.__tourTransitionEvents.filter((entry) => entry.phase === "complete").length >= 5, null, { timeout: 30_000 });
       const layout = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
       assert(layout.scrollWidth <= layout.width, `${target.name} has horizontal overflow.`);
       assert(tileRequests.length > 0, `${target.name} did not request multires WebP tiles.`);
@@ -306,6 +325,8 @@ async function main() {
     assert(pannellumRuntime.includes("m.fallbackExtension||m.extension"), "JPEG fallback extension support is missing from the release runtime.");
     const tourRuntime = await readFile(join(releaseRoot, "js", "tour.js"), "utf8");
     assert(tourRuntime.includes("multiRes: scene.multiRes"), "The release runtime does not pass multires scene data to Pannellum.");
+    assert(tourRuntime.includes("sceneFadeDuration: 0"), "The native scene fade can replay on top of the RainDigit scene transition.");
+    assert(tourRuntime.includes("__rainDigitTourTransition?.attach(viewer)"), "The shared initial and scene transition is not attached to the release viewer.");
     assert(tourRuntime.includes("function revealRenderedTour"), "The release runtime does not reliably remove the inline first frame after WebGL renders.");
     assert(tourRuntime.includes("runtimeStylesReady"), "The first frame can disappear before deferred runtime styles are ready.");
     const releaseEntrypoint = await readFile(join(releaseRoot, "index.html"), "utf8");
@@ -313,6 +334,10 @@ async function main() {
     assert(releaseEntrypoint.includes("data-runtime-loader") && !releaseEntrypoint.includes('class="topbar"'), "Runtime controls still delay the first-frame shell.");
     assert((await readFile(join(releaseRoot, "js", "tour-chrome.js"), "utf8")).includes('class=\\"topbar\\"'), "Deferred runtime controls are missing.");
     assert(releaseEntrypoint.includes("data-runtime-critical"), "Inline first-frame critical styles are missing.");
+    assert(releaseEntrypoint.includes('class="is-tour-transition-boot"'), "The first scene is not guarded before runtime JavaScript starts.");
+    assert(releaseEntrypoint.includes("is-tour-transition-boot .tour-first-frame"), "Critical CSS can expose raw first-scene tiles before the selected transition starts.");
+    const transitionRuntime = await readFile(join(releaseRoot, "js", "tour-transition.js"), "utf8");
+    assert(transitionRuntime.includes('variant: "gold-pulse"') && transitionRuntime.includes("initial-loading"), "The selected Gold Pulse transition runtime is incomplete.");
     assert((await stat(join(releaseRoot, "css", "tour.css"))).size <= 20 * 1024, "The public tour stylesheet still contains studio-only UI.");
     const revisedRuntime = await readFile(join(projectRoot, "scripts", "revise-multires-runtime.mjs"), "utf8");
     assert(revisedRuntime.includes('canvas.style.filter = "url(#legacy-color-matrix)";'), "Legacy parity calibration is lost when the operator previews the original scene adjustment.");

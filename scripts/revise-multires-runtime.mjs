@@ -126,7 +126,7 @@ async function main() {
     const firstFrame = currentIndex.match(/\s*<img class="tour-first-frame"[^>]+\/>/)?.[0];
     assert(firstFrame, "The source multires release has no inline first frame.");
     const templateIndex = await readFile(join(options.runtimeTemplate, "index.html"), "utf8");
-    const inlineFirstFrameCss = "<style>.tour-first-frame{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;pointer-events:none;opacity:1}.is-tour-ready .tour-first-frame{opacity:0}html:not(.is-tour-ready) .tour-shell,html:not(.is-tour-ready) .tour-first-frame{visibility:visible!important}</style>";
+    const inlineFirstFrameCss = "<style>.tour-first-frame{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;pointer-events:none;opacity:1}.is-tour-ready .tour-first-frame{opacity:0}.is-tour-transition-boot .tour-first-frame,.tour-shell.is-transition-guarded>.tour-first-frame{z-index:33;visibility:visible;opacity:1;transition:none}html:not(.is-tour-ready) .tour-shell,html:not(.is-tour-ready) .tour-first-frame{visibility:visible!important}</style>";
     const indexWithCriticalCss = templateIndex.includes("</head>") ? templateIndex.replace("</head>", `${inlineFirstFrameCss}</head>`) : templateIndex;
     const revisedIndex = indexWithCriticalCss.replace(
       '<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>',
@@ -138,6 +138,7 @@ async function main() {
     const runtimeSource = await readFile(join(options.runtimeTemplate, "js", "tour.js"), "utf8");
     await writeFile(join(stagedRelease, "js", "tour.js"), reviseRuntime(runtimeSource, options.colorMatrix), "utf8");
     await cp(join(options.runtimeTemplate, "js", "tour-bootstrap.js"), join(stagedRelease, "js", "tour-bootstrap.js"));
+    await cp(join(options.runtimeTemplate, "js", "tour-transition.js"), join(stagedRelease, "js", "tour-transition.js"));
     await cp(join(options.runtimeTemplate, "assets", "raindigit-mark.svg"), join(stagedRelease, "assets", "raindigit-mark.svg"));
     const templateCss = await readFile(join(options.runtimeTemplate, "css", "tour.css"), "utf8");
     const firstFrameCss = templateCss.includes(".tour-first-frame") ? "" : "\n.tour-first-frame { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; pointer-events:none; opacity:1; transition:opacity 180ms ease; }\n.is-tour-ready .tour-first-frame { opacity:0; }\n@media (prefers-reduced-motion: reduce) { .tour-first-frame { transition:none; } }\n";

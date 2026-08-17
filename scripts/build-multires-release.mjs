@@ -161,7 +161,7 @@ function deferRuntimeStyles(entrypoint) {
     return `<noscript><link rel="stylesheet" href="${href}" /></noscript>`;
   });
   assert(stylesheets.length === 2, `Expected two runtime stylesheets, found ${stylesheets.length}.`);
-  const criticalStyles = `<style data-runtime-critical>html,body,.tour-shell,.viewer{width:100%;height:100%;margin:0}html,body{overflow:hidden;background:#11100d}.tour-shell{position:relative;min-height:100svh}.viewer{position:absolute;inset:0}.tour-first-frame{position:absolute;inset:0;z-index:2147483000;width:100%;height:100%;object-fit:cover;pointer-events:none;opacity:1}.is-tour-ready .tour-first-frame{z-index:1;opacity:0;transition:opacity 180ms ease}@media(prefers-reduced-motion:reduce){.is-tour-ready .tour-first-frame{transition:none}}</style>`;
+  const criticalStyles = `<style data-runtime-critical>html,body,.tour-shell,.viewer{width:100%;height:100%;margin:0}html,body{overflow:hidden;background:#11100d}.tour-shell{position:relative;min-height:100svh}.viewer{position:absolute;inset:0}.tour-first-frame{position:absolute;inset:0;z-index:2147483000;width:100%;height:100%;object-fit:cover;pointer-events:none;opacity:1}.is-tour-ready .tour-first-frame{z-index:1;opacity:0;transition:opacity 180ms ease}.is-tour-transition-boot .tour-first-frame,.tour-shell.is-transition-guarded>.tour-first-frame{z-index:2147483000;visibility:visible;opacity:1;transition:none}@media(prefers-reduced-motion:reduce){.is-tour-ready .tour-first-frame{transition:none}}</style>`;
   const styleLoader = `<script data-runtime-style-loader>(()=>{const d=document.documentElement,h=${JSON.stringify(stylesheets)};d.dataset.runtimeStyles="pending";const load=()=>Promise.all(h.map((u)=>new Promise((resolve,reject)=>{const l=document.createElement("link");l.rel="stylesheet";l.href=u;l.dataset.runtimeStyle="";l.onload=resolve;l.onerror=reject;document.head.appendChild(l)}))).then(()=>{d.dataset.runtimeStyles="ready"}).catch(()=>{d.dataset.runtimeStyles="error"});requestAnimationFrame(()=>requestAnimationFrame(load))})()</script>`;
   assert(deferred.includes("</head>"), "The runtime entrypoint has no closing head element.");
   return deferred.replace("</head>", `    ${criticalStyles}\n    ${styleLoader}\n  </head>`);
@@ -317,7 +317,7 @@ async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
     posterHeight: seoDraft.posterHeight,
     seoDraft: "seo/tour.json",
     fallbackFiles,
-    criticalFiles: ["index.html", "css/pannellum.css", "css/tour.css", "js/tour-chrome.js", "js/tour-bootstrap.js", "js/pannellum.js", "js/tour.js", "js/tour-config.js", ...firstLevelTiles]
+    criticalFiles: ["index.html", "css/pannellum.css", "css/tour.css", "js/tour-chrome.js", "js/tour-bootstrap.js", "js/pannellum.js", "js/tour-transition.js", "js/tour.js", "js/tour-config.js", ...firstLevelTiles]
   };
 }
 
@@ -384,6 +384,7 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
     cp(join(templateRoot, "css"), join(stagedRoot, "css"), { recursive: true, force: true }),
     cp(join(templateRoot, "assets", "raindigit-mark.svg"), join(stagedRoot, "assets", "raindigit-mark.svg")),
     cp(join(templateRoot, "js", "pannellum.js"), join(stagedRoot, "js", "pannellum.js")),
+    cp(join(templateRoot, "js", "tour-transition.js"), join(stagedRoot, "js", "tour-transition.js")),
     cp(join(templateRoot, "js", "tour.js"), join(stagedRoot, "js", "tour.js")),
     cp(join(templateRoot, "js", "tour-bootstrap.js"), join(stagedRoot, "js", "tour-bootstrap.js"))
   ]);

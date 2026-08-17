@@ -442,6 +442,7 @@ async function copyRuntime(output) {
   await mkdir(join(output, "js"), { recursive: true });
   await cp(join(source, "js", "pannellum.js"), join(output, "js", "pannellum.js"));
   await cp(join(source, "js", "tour-bootstrap-release.js"), join(output, "js", "tour-bootstrap.js"));
+  await cp(join(source, "js", "tour-transition.js"), join(output, "js", "tour-transition.js"));
   const studioRuntime = await readFile(join(source, "js", "tour.js"), "utf8");
   const stripStart = "/* RELEASE_STRIP_START: local editor bridge */";
   const stripEnd = "/* RELEASE_STRIP_END: local editor bridge */";

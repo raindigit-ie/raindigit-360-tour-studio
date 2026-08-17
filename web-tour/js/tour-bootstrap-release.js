@@ -14,6 +14,7 @@
   (async () => {
     await loadScript("js/pannellum.js");
     await loadScript("js/tour-config.js");
+    await loadScript("js/tour-transition.js");
     await loadScript("js/tour.js");
   })().catch((error) => {
     console.error(error);
