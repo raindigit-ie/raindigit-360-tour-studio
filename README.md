@@ -28,10 +28,26 @@
 
 ## Start The Studio
 
+### MacBook with M1, M2, M3 or M4
+
+Clone or download this repository to the Mac, install Docker Desktop for Apple
+Silicon, then double-click `Start RainDigit 360 Studio.command`. This is the
+canonical staff installation path: the first start builds the Studio locally as
+a native `arm64` container from the checked-out source code. It does not emulate
+an Intel image and does not require a local Node.js, ImageMagick or FFmpeg installation.
+
+The launcher checks the Mac architecture and Docker installation, starts Docker
+Desktop when needed, waits for the Studio health check and opens
+`http://127.0.0.1:8767/?edit=1`. Later starts reuse the existing local runtime and
+do not rebuild it unless the runtime dependencies changed.
+
+If macOS blocks the first double-click because the file came from the internet,
+right-click the launcher once and choose **Open**. This approves only the local
+repository launcher; the Studio remains bound to this Mac at `127.0.0.1`.
+
 On macOS, double-click `Start RainDigit 360 Studio.command`. The launcher starts
 Docker Desktop when needed, prepares the private local service on first use, waits for its health
-check and opens `http://127.0.0.1:8767/?edit=1`. No local Node.js or ImageMagick
-installation is required. Later starts reuse the existing runtime and do not rebuild it.
+check and opens `http://127.0.0.1:8767/?edit=1`.
 Double-click `Stop RainDigit 360 Studio.command` when
 finished; the editable workspace remains on disk.
 
@@ -40,6 +56,19 @@ The equivalent terminal commands are:
 ```bash
 npm run app:start
 npm run app:stop
+```
+
+The explicit macOS bootstrap command is:
+
+```bash
+npm run app:start:mac
+```
+
+Port `8767` is the default. For an isolated support or QA copy, use a different
+loopback port without editing the project:
+
+```bash
+RAINDIGIT_STUDIO_PORT=18767 npm run app:start:mac
 ```
 
 After **Build the tour**, assemble and test the candidate inside the complete

@@ -32,6 +32,7 @@ const included = [
   "scripts/lib",
   "scripts/prune-build-cache.mjs",
   "scripts/test-docker-runtime.mjs",
+  "scripts/bootstrap-macos.sh",
   "scripts/start-studio.sh",
   "scripts/stop-studio.sh",
   "scripts/tour-editor-server.mjs",

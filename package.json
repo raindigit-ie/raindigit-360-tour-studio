@@ -9,6 +9,7 @@
     "preview": "node scripts/tour-editor-server.mjs --preview --port 8768",
     "review:site": "node scripts/prepare-site-review.mjs",
     "app:start": "sh scripts/start-studio.sh",
+    "app:start:mac": "sh scripts/bootstrap-macos.sh",
     "app:stop": "sh scripts/stop-studio.sh",
     "setup:hooks": "sh scripts/install-local-git-hooks.sh",
     "build:editor-ui": "vite build",

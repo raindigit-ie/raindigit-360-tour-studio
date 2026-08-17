@@ -1,3 +1,2 @@
 #!/bin/sh
-exec "$(dirname "$0")/scripts/start-studio.sh"
-
+exec "$(dirname "$0")/scripts/bootstrap-macos.sh"

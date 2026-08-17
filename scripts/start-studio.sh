@@ -2,7 +2,8 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-URL="http://127.0.0.1:8767/?edit=1"
+PORT="${RAINDIGIT_STUDIO_PORT:-8767}"
+URL="http://127.0.0.1:${PORT}/?edit=1"
 cd "$ROOT"
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -44,7 +45,7 @@ else
 fi
 
 attempts=0
-while ! curl --fail --silent "http://127.0.0.1:8767/__tour-editor/status" >/dev/null 2>&1; do
+while ! curl --fail --silent "http://127.0.0.1:${PORT}/__tour-editor/status" >/dev/null 2>&1; do
   attempts=$((attempts + 1))
   if [ "$attempts" -ge 60 ]; then
     docker compose logs --tail=80 studio >&2

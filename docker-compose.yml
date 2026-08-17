@@ -16,7 +16,7 @@ services:
       INSTA360_TOUR_BUILD_CACHE: /app/dist/build-cache
       INSTA360_TOUR_ARCHIVES: /app/studio-archives
     ports:
-      - "127.0.0.1:8767:8767"
+      - "127.0.0.1:${RAINDIGIT_STUDIO_PORT:-8767}:8767"
     volumes:
       - .:/app
       - /app/node_modules
@@ -42,7 +42,7 @@ services:
       INSTA360_TOUR_BUILD_CACHE: /app/dist/build-cache
       INSTA360_TOUR_ARCHIVES: /app/studio-archives
     ports:
-      - "127.0.0.1:8768:8768"
+      - "127.0.0.1:${RAINDIGIT_PREVIEW_PORT:-8768}:8768"
     volumes:
       - .:/app
       - /app/node_modules

@@ -31,6 +31,7 @@ try {
   assert(!/(studio-workspace|originals|panoramas\/scene-|thumbnails\/scene-|manual-hotspot|\/release\/|\/dist\/|node_modules|\.git\/)/i.test(listing), "Private or generated project data leaked into the operator kit.");
   await execFileAsync("unzip", ["-q", archive, "-d", extracted]);
   const packageRoot = join(extracted, "raindigit-360-tour-studio");
+  await execFileAsync("sh", ["-n", join(packageRoot, "scripts", "bootstrap-macos.sh")]);
   await execFileAsync("sh", ["-n", join(packageRoot, "scripts", "start-studio.sh")]);
   await execFileAsync("sh", ["-n", join(packageRoot, "scripts", "stop-studio.sh")]);
   const startScript = await readFile(join(packageRoot, "scripts", "start-studio.sh"), "utf8");
@@ -38,8 +39,10 @@ try {
   assert(startScript.includes("docker compose images -q studio"), "The launcher must still build the runtime automatically on first start.");
   const launcher = await stat(join(packageRoot, "Start RainDigit 360 Studio.command"));
   assert((launcher.mode & 0o111) !== 0, "The extracted macOS launcher is not executable.");
+  const bootstrap = await stat(join(packageRoot, "scripts", "bootstrap-macos.sh"));
+  assert((bootstrap.mode & 0o111) !== 0, "The extracted macOS bootstrap is not executable.");
   const compose = await readFile(join(packageRoot, "docker-compose.yml"), "utf8");
-  assert(compose.includes("127.0.0.1:8767:8767"), "The operator kit must keep the studio bound to localhost.");
+  assert(compose.includes('127.0.0.1:${RAINDIGIT_STUDIO_PORT:-8767}:8767'), "The operator kit must keep the configurable studio port bound to localhost.");
   const hubCompose = await readFile(join(packageRoot, "docker-compose.hub.yml"), "utf8");
   assert(hubCompose.includes("stekolshchykov/raindigit-360-tour-studio:latest"), "The operator kit must include the public Docker Hub launch contract.");
   assert(hubCompose.includes("studio-data:/data"), "The public Docker Hub launch contract must persist operator data.");
