@@ -2,8 +2,13 @@
   "name": "raindigit-360-tour-studio",
   "private": true,
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local RainDigit studio for preparing self-hosted 360 property tours.",
+  "homepage": "https://raindigit.ie/services/immersive-tours",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raindigit-ie/raindigit-360-tour-studio.git"
+  },
   "scripts": {
     "studio": "node scripts/tour-editor-server.mjs --port 8767",
     "preview": "node scripts/tour-editor-server.mjs --preview --port 8768",

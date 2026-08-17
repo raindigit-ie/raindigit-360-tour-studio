@@ -30,7 +30,7 @@
 
 ### MacBook with M1, M2, M3 or M4
 
-Clone or download this repository to the Mac, install Docker Desktop for Apple
+Clone or [download this public repository](https://github.com/raindigit-ie/raindigit-360-tour-studio) to the Mac, install Docker Desktop for Apple
 Silicon, then double-click `Start RainDigit 360 Studio.command`. This is the
 canonical staff installation path: the first start builds the Studio locally as
 a native `arm64` container from the checked-out source code. It does not emulate
@@ -44,6 +44,14 @@ do not rebuild it unless the runtime dependencies changed.
 If macOS blocks the first double-click because the file came from the internet,
 right-click the launcher once and choose **Open**. This approves only the local
 repository launcher; the Studio remains bound to this Mac at `127.0.0.1`.
+
+The Git route is:
+
+```bash
+git clone https://github.com/raindigit-ie/raindigit-360-tour-studio.git
+cd raindigit-360-tour-studio
+open "Start RainDigit 360 Studio.command"
+```
 
 On macOS, double-click `Start RainDigit 360 Studio.command`. The launcher starts
 Docker Desktop when needed, prepares the private local service on first use, waits for its health

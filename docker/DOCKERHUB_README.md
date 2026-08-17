@@ -21,3 +21,5 @@ The named volume keeps the editable project, archives, optimized build cache and
 Supported image platforms: `linux/amd64` and `linux/arm64`.
 
 Website: <https://raindigit.ie>
+
+Source and native Apple Silicon build: <https://github.com/raindigit-ie/raindigit-360-tour-studio>
