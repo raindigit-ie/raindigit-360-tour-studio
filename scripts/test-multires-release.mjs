@@ -168,13 +168,15 @@ async function runBrowserQa(packageRoot, pointer) {
       });
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await page.locator(".pnlm-render-container canvas").waitFor({ state: "visible", timeout: 30_000 });
-      await page.waitForFunction(() => window.__tourTransitionEvents.some((entry) => entry.phase === "complete" && entry.initial === true && entry.patchCount > 0), null, { timeout: 30_000 });
+      await page.waitForFunction(() => window.__tourTransitionEvents.some((entry) => entry.phase === "complete" && entry.initial === true && entry.mode === "smooth-entry" && entry.patchCount === 0), null, { timeout: 30_000 });
       const initialTransition = await page.evaluate(() => ({
         bootGuard: document.documentElement.classList.contains("is-tour-transition-boot"),
         shellGuard: document.querySelector(".tour-shell")?.classList.contains("is-transition-guarded"),
         events: window.__tourTransitionEvents
       }));
       assert(!initialTransition.bootGuard && !initialTransition.shellGuard, `${target.name} did not release the first-scene transition guard.`);
+      assert(await page.locator(".tour-scene-transition__tile").count() === 0, `${target.name} exposed Gold Pulse cells during the initial entry.`);
+      assert(await page.evaluate(() => document.documentElement.dataset.tourEntryReady) === "true", `${target.name} did not publish the stable entry-ready signal.`);
       const screenshot = await page.screenshot({ path: join(evidence, `${target.name}.png`), fullPage: true });
       assert(screenshot.byteLength > 30_000, `${target.name} screenshot is unexpectedly empty.`);
       assert(await page.locator(".scene-card").count() === 2, `${target.name} lost scene navigation.`);
@@ -334,10 +336,10 @@ async function main() {
     assert(releaseEntrypoint.includes("data-runtime-loader") && !releaseEntrypoint.includes('class="topbar"'), "Runtime controls still delay the first-frame shell.");
     assert((await readFile(join(releaseRoot, "js", "tour-chrome.js"), "utf8")).includes('class=\\"topbar\\"'), "Deferred runtime controls are missing.");
     assert(releaseEntrypoint.includes("data-runtime-critical"), "Inline first-frame critical styles are missing.");
-    assert(releaseEntrypoint.includes('class="is-tour-transition-boot"'), "The first scene is not guarded before runtime JavaScript starts.");
+    assert(releaseEntrypoint.includes('class="is-tour-transition-boot"') && releaseEntrypoint.includes('data-tour-ready-protocol="transition-complete"'), "The first scene is not guarded by the transition-complete entry protocol.");
     assert(releaseEntrypoint.includes("is-tour-transition-boot .tour-first-frame"), "Critical CSS can expose raw first-scene tiles before the selected transition starts.");
     const transitionRuntime = await readFile(join(releaseRoot, "js", "tour-transition.js"), "utf8");
-    assert(transitionRuntime.includes('variant: "gold-pulse"') && transitionRuntime.includes("initial-loading"), "The selected Gold Pulse transition runtime is incomplete.");
+    assert(transitionRuntime.includes('variant: "gold-pulse"') && transitionRuntime.includes('mode: run.initial ? "smooth-entry" : "gold-pulse"'), "The split smooth-entry / Gold Pulse runtime is incomplete.");
     assert((await stat(join(releaseRoot, "css", "tour.css"))).size <= 20 * 1024, "The public tour stylesheet still contains studio-only UI.");
     const revisedRuntime = await readFile(join(projectRoot, "scripts", "revise-multires-runtime.mjs"), "utf8");
     assert(revisedRuntime.includes('canvas.style.filter = "url(#legacy-color-matrix)";'), "Legacy parity calibration is lost when the operator previews the original scene adjustment.");

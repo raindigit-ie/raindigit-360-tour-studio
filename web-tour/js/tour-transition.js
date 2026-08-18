@@ -11,6 +11,7 @@
   const sampleSize = 6;
   const cellDuration = reducedMotion ? 120 : 980;
   const settleDuration = reducedMotion ? 120 : 360;
+  const initialSettleDuration = reducedMotion ? 120 : 420;
   const sampleInterval = 50;
   let viewer = null;
   let sequence = 0;
@@ -32,6 +33,7 @@
   const tileLayer = overlay.querySelector(".tour-scene-transition__tiles");
   overlay.style.setProperty("--tour-cell-duration", `${cellDuration}ms`);
   overlay.style.setProperty("--tour-settle-duration", `${settleDuration}ms`);
+  overlay.style.setProperty("--tour-initial-settle-duration", `${initialSettleDuration}ms`);
 
   const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -76,6 +78,7 @@
       const blue = new Uint32Array(count);
       let visiblePixels = 0;
       let totalLuma = 0;
+      let frameHash = 2166136261;
 
       for (let offset = 0; offset < pixels.length; offset += 4) {
         const pixel = offset / 4;
@@ -95,10 +98,14 @@
         green[cell] += pixels[offset + 1];
         blue[cell] += pixels[offset + 2];
         totalLuma += value;
+        frameHash = Math.imul(frameHash ^ (pixels[offset] >> 3), 16777619);
+        frameHash = Math.imul(frameHash ^ (pixels[offset + 1] >> 3), 16777619);
+        frameHash = Math.imul(frameHash ^ (pixels[offset + 2] >> 3), 16777619);
       }
 
       return {
         dataUrl: image.toDataURL("image/jpeg", quality),
+        signature: (frameHash >>> 0).toString(16),
         visibleRatio: visiblePixels / (pixels.length / 4),
         averageLuma: totalLuma / (pixels.length / 4),
         cells: Array.from({ length: count }, (_, index) => {
@@ -180,7 +187,7 @@
     overlay.style.setProperty("--tour-origin-y", `${origin.y}%`);
     outgoing.src = baseline;
     incoming.src = baseline;
-    overlay.classList.remove("is-active", "is-waiting", "is-revealing", "is-settled");
+    overlay.classList.remove("is-active", "is-waiting", "is-revealing", "is-initial-revealing", "is-settled");
     void overlay.offsetWidth;
     overlay.classList.add("is-active", "is-waiting");
     overlay.dataset.phase = run.phase;
@@ -189,28 +196,46 @@
   }
 
   async function settle(run, frame) {
-    revealAvailableCells(frame, run, true);
+    if (!run.initial) revealAvailableCells(frame, run, true);
     incoming.src = frame.dataUrl;
     lastStableFrame = frame.dataUrl;
-    const cellElapsed = run.firstPatchAt ? performance.now() - run.firstPatchAt : 0;
-    const minimumCellTime = reducedMotion ? 100 : 520;
-    if (cellElapsed < minimumCellTime) await sleep(minimumCellTime - cellElapsed);
+    if (!run.initial) {
+      const cellElapsed = run.firstPatchAt ? performance.now() - run.firstPatchAt : 0;
+      const minimumCellTime = reducedMotion ? 100 : 520;
+      if (cellElapsed < minimumCellTime) await sleep(minimumCellTime - cellElapsed);
+    }
     if (active?.token !== run.token) return;
     overlay.classList.remove("is-waiting");
     void overlay.offsetWidth;
-    overlay.classList.add("is-revealing");
-    overlay.dataset.phase = "revealing";
-    await sleep(settleDuration);
+    overlay.classList.add(run.initial ? "is-initial-revealing" : "is-revealing");
+    overlay.dataset.phase = run.initial ? "initial-revealing" : "revealing";
+    await sleep(run.initial ? initialSettleDuration : settleDuration);
     if (active?.token !== run.token) return;
     overlay.classList.add("is-settled");
     await sleep(reducedMotion ? 20 : 100);
-    overlay.classList.remove("is-active", "is-waiting", "is-revealing", "is-settled", "has-tiles");
+    if (run.initial) {
+      document.documentElement.classList.remove("is-tour-transition-boot");
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+    overlay.classList.remove("is-active", "is-waiting", "is-revealing", "is-initial-revealing", "is-settled", "has-tiles");
     shell.classList.remove("is-transition-guarded");
     document.documentElement.classList.remove("is-tour-transition-boot");
     run.phase = "complete";
     active = null;
+    if (run.initial) {
+      document.documentElement.dataset.tourEntryReady = "true";
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "raindigit-tour-ready" }, location.origin);
+      }
+    }
     document.dispatchEvent(new CustomEvent("raindigit:tour-transition", {
-      detail: { phase: "complete", initial: run.initial, token: run.token, patchCount: run.patchCount }
+      detail: {
+        phase: "complete",
+        initial: run.initial,
+        mode: run.initial ? "smooth-entry" : "gold-pulse",
+        token: run.token,
+        patchCount: run.patchCount
+      }
     }));
   }
 
@@ -225,13 +250,19 @@
     while (active?.token === run.token && performance.now() < deadline) {
       const frame = captureFrame(640, 0.72);
       if (frame) {
-        if (!usable(frame)) revealAvailableCells(frame, run);
-        const signature = `${Math.round(frame.visibleRatio * 1000)}:${Math.round(frame.averageLuma)}`;
+        if (!run.initial && !usable(frame)) revealAvailableCells(frame, run);
+        const viewSignature = [
+          viewer?.getScene?.() || "",
+          Math.round((viewer?.getPitch?.() || 0) * 10),
+          Math.round((viewer?.getYaw?.() || 0) * 10),
+          Math.round((viewer?.getHfov?.() || 0) * 10)
+        ].join(":");
+        const signature = `${frame.signature}:${viewSignature}`;
         const rendererLoading = Boolean(viewer?.getRenderer?.()?.isLoading?.());
         const ready = usable(frame) && (!rendererLoading || signature === previous);
         stable = ready && signature === previous ? stable + 1 : 0;
         previous = signature;
-        if (stable >= 2) {
+        if (stable >= (run.initial ? 3 : 2)) {
           await settle(run, frame);
           return;
         }
@@ -242,12 +273,28 @@
     const fallback = captureFrame(640, 0.72);
     if (usable(fallback)) await settle(run, fallback);
     else {
-      overlay.classList.add("is-revealing");
-      await sleep(settleDuration);
-      overlay.classList.remove("is-active", "is-waiting", "is-revealing", "has-tiles");
+      overlay.classList.add(run.initial ? "is-initial-revealing" : "is-revealing");
+      await sleep(run.initial ? initialSettleDuration : settleDuration);
+      overlay.classList.remove("is-active", "is-waiting", "is-revealing", "is-initial-revealing", "has-tiles");
       shell.classList.remove("is-transition-guarded");
       document.documentElement.classList.remove("is-tour-transition-boot");
       active = null;
+      if (run.initial) {
+        document.documentElement.dataset.tourEntryReady = "true";
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: "raindigit-tour-ready" }, location.origin);
+        }
+      }
+      document.dispatchEvent(new CustomEvent("raindigit:tour-transition", {
+        detail: {
+          phase: "complete",
+          initial: run.initial,
+          mode: run.initial ? "smooth-entry" : "gold-pulse",
+          token: run.token,
+          patchCount: run.patchCount,
+          fallback: true
+        }
+      }));
     }
   }
 
@@ -286,7 +333,7 @@
     }, true);
   }
 
-  document.documentElement.dataset.tourSceneTransition = "gold-pulse-v1";
+  document.documentElement.dataset.tourSceneTransition = "gold-pulse-v2";
   window.__rainDigitTourTransition = {
     attach,
     state: () => ({

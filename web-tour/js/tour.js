@@ -544,7 +544,6 @@ const floorplanPins = [];
 const fullscreenButton = document.querySelector("#fullscreen");
 const captureViewButton = document.querySelector("#captureView");
 const tourShell = document.querySelector(".tour-shell");
-let initialViewApplied = false;
 
 function setActiveScene(sceneId) {
   const index = scenes.findIndex((scene) => scene.id === sceneId);
@@ -816,11 +815,6 @@ viewer.on("scenechange", (sceneId) => {
 });
 viewer.on("load", () => {
   document.documentElement.classList.add("is-tour-ready");
-  if (!initialViewApplied) {
-    const scene = configScenes[initialScene];
-    viewer.lookAt(scene.pitch, scene.yaw, scene.hfov, 0);
-    initialViewApplied = true;
-  }
   setActiveScene(viewer.getScene());
   applySceneAdjustment(viewer.getScene());
   window.requestAnimationFrame(removeOrphanHotspotElements);

@@ -90,6 +90,7 @@ button {
 .tour-shell > .tour-scene-transition {
   --tour-cell-duration: 980ms;
   --tour-settle-duration: 360ms;
+  --tour-initial-settle-duration: 420ms;
   --tour-origin-x: 50%;
   --tour-origin-y: 50%;
   position: absolute;
@@ -122,6 +123,13 @@ button {
 .tour-scene-transition.is-revealing .tour-scene-transition__tiles {
   animation: tour-tiles-settle var(--tour-settle-duration) ease-out both;
 }
+.tour-scene-transition.is-initial-revealing .tour-scene-transition__incoming {
+  animation: tour-initial-arrival var(--tour-initial-settle-duration) cubic-bezier(.22,.74,.24,1) both;
+}
+.tour-scene-transition.is-initial-revealing .tour-scene-transition__outgoing {
+  animation: tour-initial-depart var(--tour-initial-settle-duration) ease-out both;
+}
+.tour-scene-transition.is-initial-revealing .tour-scene-transition__tiles { display: none; }
 .tour-scene-transition__tile {
   position: absolute;
   display: block;
@@ -147,6 +155,8 @@ button {
 @keyframes tour-final-arrival { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tour-final-depart { from { opacity: 1; } to { opacity: 0; } }
 @keyframes tour-tiles-settle { from { opacity: 1; } to { opacity: .38; } }
+@keyframes tour-initial-arrival { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tour-initial-depart { from { opacity: 1; } to { opacity: 0; } }
 @keyframes tour-cell-gold-pulse {
   0% { opacity: 0; filter: brightness(.5) saturate(.65); transform: scale(.9); }
   34% { opacity: 1; filter: brightness(1.42) saturate(1.08); transform: scale(1.025); }
@@ -155,7 +165,7 @@ button {
 @keyframes tour-cell-after-glow { 0%, 100% { opacity: 0; } 32% { opacity: .86; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .tour-scene-transition { --tour-cell-duration: 120ms !important; --tour-settle-duration: 120ms !important; }
+  .tour-scene-transition { --tour-cell-duration: 120ms !important; --tour-settle-duration: 120ms !important; --tour-initial-settle-duration: 120ms !important; }
   .tour-scene-transition__tile { animation-name: tour-cell-dissolve; animation-delay: 0ms !important; filter: none !important; transform: none; }
   .tour-scene-transition__tile::after { display: none; }
 }
