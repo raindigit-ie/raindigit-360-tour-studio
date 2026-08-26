@@ -1,19 +1,19 @@
 {
   "schema": "raindigit-tour-release-attestation/v1",
-  "attestationId": "ATT-CHG-0005-DEV-9a178ad958ff",
+  "attestationId": "ATT-CHG-0005-DEV-fda880c86ee1",
   "changeId": "CHG-0005",
   "environment": "dev",
   "status": "complete-dev-candidate",
-  "createdAt": "2026-08-26T02:58:27.397Z",
+  "createdAt": "2026-08-26T19:14:51.305Z",
   "actor": {
     "id": "codex-root",
     "role": "release-verifier"
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "c0f3f181527a6d313b244a06e460b54db7d2995bd664c175003fcb5361572eb3"
+    "sha256": "fdf30b8eadfd4db980a42fb18825fdf82048b9c5cbddd97f441ab229142cbe6b"
   },
-  "migrationMatrixDigest": "5a290b2242a4924c618d1d1e24a3b7b31eb83493aa45f204c718e2402e09e860",
+  "migrationMatrixDigest": "754acf9591fc482d4d255c694431c4ca7dc46e4008850289406a8862d4fce421",
   "contract": {
     "studioVersion": "0.2.3",
     "tourVersion": "0.2.3",
@@ -21,13 +21,13 @@
     "runtimeVersion": "2.0.3",
     "verificationProfile": "raindigit-portable-tour-v2"
   },
-  "releaseSetDigest": "9a178ad958ff49c2299e42f61a985672f1f4f9c13b571db31a00c344090cb0df",
+  "releaseSetDigest": "fda880c86ee17222e16baeee34b664826d863e95d4ca467ded7163aaeac82354",
   "packages": [
     {
       "slug": "killarney-360-property-tour-demo",
-      "packageVersion": "multires-f960fbb68abf",
-      "contentDigest": "f960fbb68abfe9558daf103da2e3666421e0138878c83aae135086a9e4c6957b",
-      "manifestDigest": "6e07415b41fe86fbef31891ce3d9c6ed237d6794531fa530d568c1f67ea458a0",
+      "packageVersion": "multires-19af0e9897fd",
+      "contentDigest": "19af0e9897fd4e81cd640f72cc0cc9d01cae29e0152c69e11438a09f6c084fb9",
+      "manifestDigest": "a43cde5ebced31832aae2b600ceaeac8767eb3306c899be3744ae9e5dd6711e5",
       "humanChangelogDigest": "a87d2730c735a765d3d541c943c3bcac590b19b2b955d5f1e02fd942a8aa08b9",
       "machineChangelogDigest": "6bb25db046a8f90f0556b6bf85d1cba2c4675cce92a188d950af934d9416dc0a",
       "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
@@ -35,9 +35,9 @@
     },
     {
       "slug": "killarney-home-360-tour",
-      "packageVersion": "multires-a175ad3c8ed3",
-      "contentDigest": "a175ad3c8ed34372acf3e5f50d92ca7b204b87bf09689c3950238a7cf8ff4f36",
-      "manifestDigest": "e08091ac2cf429255c38ddeb627ade802aa62038c2c5b3a9360827c3a4d37a7d",
+      "packageVersion": "multires-489214bb8ceb",
+      "contentDigest": "489214bb8cebbae4a53d2960a28c969c367b48c8676b2e4c2bbc0692eb4e147c",
+      "manifestDigest": "9325d290ac7ae3743f6662c83c5b89cfb753591be6c8c3b8b204dc59cb0bfc09",
       "humanChangelogDigest": "89eefd90c6aa322bf495d6d0fd6aa77777baf9c1dad3a2d578b62d6d88d14795",
       "machineChangelogDigest": "cdcc9754abc4a92139ff6305ab7f588a2bb07426757007a24c05afc27976205b",
       "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
@@ -45,9 +45,9 @@
     },
     {
       "slug": "killarney-town-centre-360-tour",
-      "packageVersion": "multires-95fff968c875",
-      "contentDigest": "95fff968c8752ea5bc7d7f70287dda093370050f35740c69b0c9bf765be67b7a",
-      "manifestDigest": "24c41ecc81d3632fcacb4ac37f6e4a712f34db28886e48155d71df94a178830f",
+      "packageVersion": "multires-dacc7d07d379",
+      "contentDigest": "dacc7d07d3797c687d28ae3e66813d6bd9a56283c3fefdf5f23e4e64f610bc2c",
+      "manifestDigest": "c65b5465fdc3f6ccd364d8624d2f02cd3a85461ab4684ba09cf11028d327f655",
       "humanChangelogDigest": "d590414efeacc78c8354f6ee06c2bfd84ddd8ceacc22a56485575ab7cda07c42",
       "machineChangelogDigest": "0399d0509c1c7c4b42321a45b0eae9830eb2605cb112911933fa4c2de1c63de1",
       "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
@@ -127,7 +127,7 @@
     "physicalIphoneAcceptance": {
       "result": "pending",
       "requiredFor": "prod",
-      "releaseSetDigest": "9a178ad958ff49c2299e42f61a985672f1f4f9c13b571db31a00c344090cb0df"
+      "releaseSetDigest": "fda880c86ee17222e16baeee34b664826d863e95d4ca467ded7163aaeac82354"
     }
   },
   "promotion": {
@@ -138,5 +138,5 @@
       "separate-prod-credential-boundary-not-yet-proven"
     ]
   },
-  "attestationDigest": "096ff117bf55d5030f3364d66e0a614e5e4f6473b47b225c1ff199e55f42fc64"
+  "attestationDigest": "b3cd30dd5f9dc6025e8a81d872fef8ed9b67f0a79b12d9e91ca931eb8fc4fae1"
 }
