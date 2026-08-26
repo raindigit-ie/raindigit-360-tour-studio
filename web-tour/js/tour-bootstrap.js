@@ -9,18 +9,7 @@
   const framePicking = local && query.get("frame-picker") === "1";
   const endpoint = editing || framePicking ? "__tour-editor" : previewing ? "__tour-preview" : null;
   const workspace = endpoint && query.get("workspace") === "1";
-
-  function enableCanvasCaptureBuffer() {
-    if (HTMLCanvasElement.prototype.__rainDigitCaptureBuffer) return;
-    const nativeGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function getContextWithCaptureBuffer(type, attributes) {
-      if (type === "webgl" || type === "experimental-webgl") {
-        return nativeGetContext.call(this, type, { ...(attributes || {}), preserveDrawingBuffer: true });
-      }
-      return nativeGetContext.call(this, type, attributes);
-    };
-    Object.defineProperty(HTMLCanvasElement.prototype, "__rainDigitCaptureBuffer", { value: true });
-  }
+  document.documentElement.dataset.tourWebglBuffer = "default";
 
   function loadScript(source) {
     return new Promise((resolve, reject) => {
@@ -32,8 +21,32 @@
     });
   }
 
+  function showRuntimeRecovery(error) {
+    console.error(error);
+    document.documentElement.classList.remove("is-tour-transition-boot");
+    document.querySelector("[data-tour-static-loader]")?.remove();
+    document.body.dataset.tourError = "true";
+    if (document.querySelector("[data-tour-runtime-recovery]")) return;
+
+    const recovery = document.createElement("button");
+    recovery.type = "button";
+    recovery.className = "tour-runtime-recovery";
+    recovery.dataset.tourRuntimeRecovery = "true";
+    recovery.textContent = "Reload tour";
+    recovery.style.cssText = "position:fixed;z-index:90;left:50%;top:50%;min-height:46px;padding:12px 18px;transform:translate(-50%,-50%);border:1px solid rgba(229,185,96,.76);border-radius:999px;background:#0b0c09;color:#fff8e7;font:700 13px/1.1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 14px 42px rgba(0,0,0,.48);cursor:pointer";
+    recovery.addEventListener(
+      "click",
+      () => {
+        const retryUrl = new URL(window.location.href);
+        retryUrl.searchParams.set("runtime", Date.now().toString(36));
+        window.location.assign(retryUrl.href);
+      },
+      { once: true },
+    );
+    document.body.append(recovery);
+  }
+
   (async () => {
-    enableCanvasCaptureBuffer();
     await loadScript("js/pannellum.js?v=20260802-wizard-v1");
     if (framePicking) {
       await loadScript("js/frame-picker.js?v=20260811-frame-picker-v1");
@@ -42,15 +55,12 @@
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");
-    await loadScript("js/tour-transition.js?v=20260817-gold-pulse-v1");
+    await loadScript("js/tour-transition.js?v=20260825-opaque-frame-guard-v3");
     await loadScript("js/tour.js?v=20260815-capture-view-v2");
     if (editing) {
       await loadScript("js/generated/editor-walking-button-list.js?v=20260810-svelte-route-thumbs-v1");
       await loadScript("js/tour-editor.js?v=20260815-polish-stage-resize-v1");
     }
     if (previewing) await loadScript("js/tour-preview.js?v=20260802-wizard-v1");
-  })().catch((error) => {
-    console.error(error);
-    document.body.dataset.tourError = "true";
-  });
+  })().catch(showRuntimeRecovery);
 })();

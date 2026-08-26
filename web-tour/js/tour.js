@@ -544,7 +544,6 @@ const floorplanPins = [];
 const fullscreenButton = document.querySelector("#fullscreen");
 const captureViewButton = document.querySelector("#captureView");
 const tourShell = document.querySelector(".tour-shell");
-let initialViewApplied = false;
 
 function setActiveScene(sceneId) {
   const index = scenes.findIndex((scene) => scene.id === sceneId);
@@ -574,7 +573,7 @@ for (const scene of scenes) {
   button.type = "button";
   button.dataset.scene = scene.id;
   button.innerHTML = `
-    <img src="${scene.thumb}" alt="" loading="eager" />
+    <img data-src="${scene.thumb}" alt="" loading="lazy" decoding="async" fetchpriority="low" />
     <span>
       <span>${scene.title}</span>
       <small>${scene.subtitle}</small>
@@ -614,6 +613,12 @@ for (const [index, space] of [...spaces.values()].entries()) {
 }
 
 function setNavigatorOpen(isOpen) {
+  if (isOpen) {
+    sceneList.querySelectorAll("img[data-src]").forEach((image) => {
+      image.src = image.dataset.src;
+      delete image.dataset.src;
+    });
+  }
   document.body.classList.toggle("is-navigator-open", isOpen);
   navigatorToggle.setAttribute("aria-expanded", String(isOpen));
   navigatorToggle.setAttribute("aria-label", isOpen ? "Hide room navigator" : "Show room navigator");
@@ -671,28 +676,36 @@ document.querySelector("#resetView").addEventListener("click", () => {
 });
 
 function downloadCurrentCleanView() {
-  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas") ||
-    viewer.getContainer().querySelector("canvas");
-  if (!canvas) {
+  const renderer = viewer.getRenderer?.();
+  if (!renderer) return;
+
+  let image = "";
+  try {
+    // Ask Pannellum to render and read back in the same synchronous call.
+    // A later canvas.toBlob() can be black when WebGL correctly uses the
+    // mobile-safe default of preserveDrawingBuffer: false.
+    image = renderer.render(
+      viewer.getPitch() * Math.PI / 180,
+      viewer.getYaw() * Math.PI / 180,
+      viewer.getHfov() * Math.PI / 180,
+      { roll: 0, returnImage: true }
+    ) || "";
+  } catch {
     return;
   }
+  if (!image.startsWith("data:image/png")) return;
 
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    const scene = sceneById[viewer.getScene()];
-    const safeScene = (scene?.title || viewer.getScene() || "view")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "view";
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `raindigit-tour-${safeScene}-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, "image/png");
+  const scene = sceneById[viewer.getScene()];
+  const safeScene = (scene?.title || viewer.getScene() || "view")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "view";
+  const link = document.createElement("a");
+  link.href = image;
+  link.download = `raindigit-tour-${safeScene}-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 captureViewButton?.addEventListener("click", downloadCurrentCleanView);
@@ -814,17 +827,59 @@ viewer.on("scenechange", (sceneId) => {
   applySceneAdjustment(sceneId);
   emitTourDebug("runtime-scene-change", navigationHotspotInventory(sceneId));
 });
-viewer.on("load", () => {
-  document.documentElement.classList.add("is-tour-ready");
-  if (!initialViewApplied) {
-    const scene = configScenes[initialScene];
-    viewer.lookAt(scene.pitch, scene.yaw, scene.hfov, 0);
-    initialViewApplied = true;
+
+let tourReadyNotified = false;
+const tourReadySlug = window.location.pathname.match(/\/tours\/([^/]+)\//)?.[1] || null;
+const tourReadyTargetOrigin = (() => {
+  const queryOrigin = new URLSearchParams(window.location.search).get("parentOrigin");
+  if (queryOrigin) {
+    try { return new URL(queryOrigin).origin; } catch {}
   }
+  try { return document.referrer ? new URL(document.referrer).origin : "*"; } catch { return "*"; }
+})();
+function reportTourReady(target = window.parent, targetOrigin = tourReadyTargetOrigin) {
+  target.postMessage(
+    { type: "raindigit-tour-ready", version: 1, slug: tourReadySlug },
+    targetOrigin,
+  );
+}
+function revealRenderedTour() {
+  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");
+  const runtimeStylesState = document.documentElement.dataset.runtimeStyles;
+  const runtimeStylesReady = !runtimeStylesState || runtimeStylesState === "ready";
+  const transition = window.__rainDigitTourTransition?.state?.();
+  const transitionReady = !window.__rainDigitTourTransition || transition?.phase === "ready";
+  if (viewer.isLoaded() && canvas?.width > 0 && canvas?.height > 0 && runtimeStylesReady && transitionReady) {
+    document.documentElement.classList.add("is-tour-ready");
+    if (!tourReadyNotified) {
+      tourReadyNotified = true;
+      reportTourReady();
+    }
+    return;
+  }
+  // Keep booting while embedded below the fold; browsers may suspend rAF in
+  // an off-screen iframe indefinitely.
+  window.setTimeout(revealRenderedTour, 16);
+}
+
+window.addEventListener("message", (event) => {
+  if (
+    event.source !== window.parent ||
+    event.data?.type !== "raindigit-tour-ready-query" ||
+    event.data.version !== 1 ||
+    event.data.slug !== tourReadySlug ||
+    !tourReadyNotified
+  ) return;
+  reportTourReady(event.source, event.origin);
+});
+
+viewer.on("load", () => {
+  revealRenderedTour();
   setActiveScene(viewer.getScene());
   applySceneAdjustment(viewer.getScene());
   window.requestAnimationFrame(removeOrphanHotspotElements);
   window.requestAnimationFrame(() => emitTourDebug("runtime-scene-loaded", navigationHotspotInventory(viewer.getScene())));
 });
+revealRenderedTour();
 setActiveScene(initialScene);
   if (isLocalDraftPreview) setNavigatorOpen(true);

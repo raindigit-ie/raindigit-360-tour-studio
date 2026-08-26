@@ -1,0 +1,142 @@
+{
+  "schema": "raindigit-tour-release-attestation/v1",
+  "attestationId": "ATT-CHG-0005-DEV-9a178ad958ff",
+  "changeId": "CHG-0005",
+  "environment": "dev",
+  "status": "complete-dev-candidate",
+  "createdAt": "2026-08-26T02:58:27.397Z",
+  "actor": {
+    "id": "codex-root",
+    "role": "release-verifier"
+  },
+  "registry": {
+    "path": "config/active-tour-registry.json",
+    "sha256": "c0f3f181527a6d313b244a06e460b54db7d2995bd664c175003fcb5361572eb3"
+  },
+  "migrationMatrixDigest": "5a290b2242a4924c618d1d1e24a3b7b31eb83493aa45f204c718e2402e09e860",
+  "contract": {
+    "studioVersion": "0.2.3",
+    "tourVersion": "0.2.3",
+    "formatVersion": "2.0.0",
+    "runtimeVersion": "2.0.3",
+    "verificationProfile": "raindigit-portable-tour-v2"
+  },
+  "releaseSetDigest": "9a178ad958ff49c2299e42f61a985672f1f4f9c13b571db31a00c344090cb0df",
+  "packages": [
+    {
+      "slug": "killarney-360-property-tour-demo",
+      "packageVersion": "multires-f960fbb68abf",
+      "contentDigest": "f960fbb68abfe9558daf103da2e3666421e0138878c83aae135086a9e4c6957b",
+      "manifestDigest": "6e07415b41fe86fbef31891ce3d9c6ed237d6794531fa530d568c1f67ea458a0",
+      "humanChangelogDigest": "a87d2730c735a765d3d541c943c3bcac590b19b2b955d5f1e02fd942a8aa08b9",
+      "machineChangelogDigest": "6bb25db046a8f90f0556b6bf85d1cba2c4675cce92a188d950af934d9416dc0a",
+      "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
+      "savedArrivalViewsDigest": "619c5a99f9032839a1385110fa8ee616db9bc1238e1066be5572256f793e1a25"
+    },
+    {
+      "slug": "killarney-home-360-tour",
+      "packageVersion": "multires-a175ad3c8ed3",
+      "contentDigest": "a175ad3c8ed34372acf3e5f50d92ca7b204b87bf09689c3950238a7cf8ff4f36",
+      "manifestDigest": "e08091ac2cf429255c38ddeb627ade802aa62038c2c5b3a9360827c3a4d37a7d",
+      "humanChangelogDigest": "89eefd90c6aa322bf495d6d0fd6aa77777baf9c1dad3a2d578b62d6d88d14795",
+      "machineChangelogDigest": "cdcc9754abc4a92139ff6305ab7f588a2bb07426757007a24c05afc27976205b",
+      "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
+      "savedArrivalViewsDigest": "440190a361317483a148967c76b837d68dfbca2a6a926a90c8e48dc26ddc21a9"
+    },
+    {
+      "slug": "killarney-town-centre-360-tour",
+      "packageVersion": "multires-95fff968c875",
+      "contentDigest": "95fff968c8752ea5bc7d7f70287dda093370050f35740c69b0c9bf765be67b7a",
+      "manifestDigest": "24c41ecc81d3632fcacb4ac37f6e4a712f34db28886e48155d71df94a178830f",
+      "humanChangelogDigest": "d590414efeacc78c8354f6ee06c2bfd84ddd8ceacc22a56485575ab7cda07c42",
+      "machineChangelogDigest": "0399d0509c1c7c4b42321a45b0eae9830eb2605cb112911933fa4c2de1c63de1",
+      "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
+      "savedArrivalViewsDigest": "21159ad7ef0082d36615f8797db73835cb17bf1e025fe8395886e70f0bbc396a"
+    }
+  ],
+  "verification": {
+    "profile": "raindigit-portable-tour-v2",
+    "evidence": [
+      {
+        "id": "studio-release-status",
+        "result": "pass"
+      },
+      {
+        "id": "release-governance",
+        "result": "pass"
+      },
+      {
+        "id": "studio-strict-types",
+        "result": "pass"
+      },
+      {
+        "id": "multires-two-scene-fixture",
+        "result": "pass"
+      },
+      {
+        "id": "r2-environment-isolation",
+        "result": "pass"
+      },
+      {
+        "id": "remote-dev-selector",
+        "result": "pass"
+      },
+      {
+        "id": "dev-story-embed-selection",
+        "result": "pass",
+        "tours": 3
+      },
+      {
+        "id": "visible-sequence-chromium",
+        "result": "pass",
+        "cases": 6
+      },
+      {
+        "id": "visible-sequence-mobile-webkit",
+        "result": "pass",
+        "cases": 6
+      },
+      {
+        "id": "fault-recovery-chromium",
+        "result": "pass",
+        "tours": 3
+      },
+      {
+        "id": "fault-recovery-mobile-webkit",
+        "result": "pass",
+        "tours": 3
+      },
+      {
+        "id": "saved-arrival-graph-mobile-webkit",
+        "result": "pass",
+        "directedTransitions": 186
+      },
+      {
+        "id": "two-scene-portability-and-embed",
+        "result": "pass"
+      },
+      {
+        "id": "cold-load-performance",
+        "result": "pass",
+        "directCases": 6,
+        "storyEmbeds": 6,
+        "directBudgetMs": 12000,
+        "storyBudgetMs": 15000
+      }
+    ],
+    "physicalIphoneAcceptance": {
+      "result": "pending",
+      "requiredFor": "prod",
+      "releaseSetDigest": "9a178ad958ff49c2299e42f61a985672f1f4f9c13b571db31a00c344090cb0df"
+    }
+  },
+  "promotion": {
+    "blocked": true,
+    "reasons": [
+      "physical-iphone-safari-acceptance-pending",
+      "prod-selector-quarantined",
+      "separate-prod-credential-boundary-not-yet-proven"
+    ]
+  },
+  "attestationDigest": "096ff117bf55d5030f3364d66e0a614e5e4f6473b47b225c1ff199e55f42fc64"
+}

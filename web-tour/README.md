@@ -41,6 +41,8 @@ Upload the complete `web-tour` folder to the site and embed:
 - The route strip is intentionally a sequence, not a floor plan. Do not invent room geometry from panoramas; use a real floor plan if spatial mapping is required.
 - Add `?scene=scene-003&yaw=150&pitch=-18` to inspect an exact doorway during QA; these URL parameters do not change the standard tour UI.
 - Viewer: Pannellum 2.5.6, bundled locally in `css/pannellum.css` and `js/pannellum.js`.
+- `build:release` and multires exports content-version every mutable CSS/JavaScript reference. Keep the generated `?v=<digest>` values when uploading to Rain Digit or a customer website; never hand-edit or strip them. HTML/runtime files must revalidate, while hashed panorama media may be cached immutably. This prevents a long-lived iPhone Safari tab from combining an old bootstrap with a new viewer.
+- Viewer/runtime, delivery, embed, or exporter changes require automated mobile WebKit plus a physical iPhone Safari check of both the direct package and a customer-style iframe before promotion. A desktop-only pass is not release evidence.
 
 ## Local Studio Review
 
@@ -50,7 +52,7 @@ same-room suggestions need human confirmation. For a new property, start in
 the stage creates private normalized derivatives and rejects duplicate inputs.
 The original Killarney tour can continue to use its existing draft workflow.
 
-1. Run `bash "/Users/mk/MEMO/Kimi Base/sars-scripts/bin/insta360-tour-coordinate-editor.sh"`.
+1. Run `bash "/Users/mk/MEMO/FLOW Base/sars-scripts/bin/insta360-tour-coordinate-editor.sh"`.
 2. Open `http://127.0.0.1:8767/?edit=1`.
 3. In **Scenes**, set each location title and description and order the scene list. In **Links**, select
    a transition or add a local draft transition. Panorama rotation does not

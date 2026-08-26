@@ -137,7 +137,7 @@ The separate preview container remains available at `http://127.0.0.1:8768/?prev
 Create the optimized Rain Digit website package only after review approval:
 
 ```bash
-npm run build:multires -- --slug my-tour
+npm run build:multires -- --slug my-tour --tour-version 0.2.0 --change-summary "Initial complete portable tour release"
 ```
 
 The studio blocks publishing when a planned walking button has not been explicitly
@@ -146,8 +146,10 @@ valid but unfinished navigation graph from reaching a customer.
 
 The Publish screen builds the normal delivery form first. Its primary `raindigit-360-tour-web-package.zip`
 mirrors the R2 object layout: immutable `tours/<slug>/multires-<digest>/` assets plus
-`manifests/<slug>/current.json`. Every immutable release includes hashes, scene views,
-the transition graph and an optional rollback version. The portable one-file HTML, paste-in
+an independent `channels/dev/<slug>/current.json` selector. Every immutable release records
+the Studio, portable-format, runtime, named-tour and content-addressed package versions,
+its capability changelog, hashes, scene views and transition graph. A future PROD selector
+can only select the exact already-verified DEV digest; promotion never rebuilds. The portable one-file HTML, paste-in
 block and legacy folder ZIP are a separate optional build so ordinary publishing never
 re-encodes the panoramas twice. Generated output is not committed;
 it is generated from the private workspace.

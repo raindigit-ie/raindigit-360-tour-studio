@@ -27,6 +27,7 @@ try {
   assert(listing.includes("raindigit-360-tour-studio/Start RainDigit 360 Studio.command"), "The start launcher is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/web-tour/index.html"), "The studio runtime is missing from the operator kit.");
   assert(listing.includes("raindigit-360-tour-studio/docs/operator-playbook.md"), "The employee operator playbook is missing from the kit.");
+  assert(listing.includes("raindigit-360-tour-studio/CHANGELOG.md") && listing.includes("raindigit-360-tour-studio/config/release-contract.json"), "The Studio version and release contract are missing from the kit.");
   assert(!/x4-raw|raw-benefit|insta360-x4-calibration/i.test(listing), "RAW/DNG research files leaked into the operator kit.");
   assert(!/(studio-workspace|originals|panoramas\/scene-|thumbnails\/scene-|manual-hotspot|\/release\/|\/dist\/|node_modules|\.git\/)/i.test(listing), "Private or generated project data leaked into the operator kit.");
   await execFileAsync("unzip", ["-q", archive, "-d", extracted]);

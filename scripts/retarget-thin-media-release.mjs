@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
 function parseArguments(argv) {
+  throw new Error("Thin-media releases are retired. Hydrate all media into a self-contained portable package instead.");
   const options = { packageRoot: null, mediaPrefix: null, cdnOrigin: "https://cdn.raindigit.ie" };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];

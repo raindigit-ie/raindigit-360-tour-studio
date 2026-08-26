@@ -1073,7 +1073,11 @@ async function main() {
     assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The optimized website package was not built correctly.");
     const statusBeforePortableBuild = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();
     const reusedBuildResponse = await page.request.post(`${baseUrl}/__tour-editor/build-release?workspace=1`, {
-      data: { slug: statusBeforePortableBuild.multires.slug }
+      data: {
+        slug: statusBeforePortableBuild.multires.slug,
+        tourVersion: statusBeforePortableBuild.multires.tourVersion,
+        changeSummary: statusBeforePortableBuild.multires.changeSummary
+      }
     });
     const reusedBuild = await reusedBuildResponse.json();
     assert(reusedBuildResponse.ok() && reusedBuild.reused === true && reusedBuild.buildDurationMs === 0, `An unchanged release was rebuilt instead of reused: ${JSON.stringify(reusedBuild)}`);

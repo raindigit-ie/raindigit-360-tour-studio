@@ -7,6 +7,7 @@ import { createReadStream } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { releaseIdentity } from "./lib/release-contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -406,6 +407,7 @@ async function releaseInputFingerprint() {
 }
 
 async function releaseStatus() {
+  const identity = releaseIdentity({});
   try {
     await stat(workspaceProjectPath);
     const inputFingerprint = await releaseInputFingerprint();
@@ -437,12 +439,24 @@ async function releaseStatus() {
       ]);
       const pointer = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.pointer), "utf8"));
       const releaseManifest = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.releaseManifest), "utf8"));
-      const ready = metadata.inputFingerprint === inputFingerprint && pointer.version === metadata.version && releaseManifest.contentDigest === metadata.contentDigest;
+      const packageVersion = metadata.packageVersion || metadata.version;
+      const ready = metadata.inputFingerprint === inputFingerprint
+        && pointer.packageVersion === packageVersion
+        && pointer.studioVersion === identity.studioVersion
+        && pointer.tourVersion === identity.tourVersion
+        && releaseManifest.packageVersion === packageVersion
+        && releaseManifest.contentDigest === metadata.contentDigest;
       multires = {
         ready,
         bytes: multiresArchive.size,
         slug: metadata.slug,
-        version: metadata.version,
+        version: packageVersion,
+        packageVersion,
+        studioVersion: identity.studioVersion,
+        tourVersion: identity.tourVersion,
+        formatVersion: identity.formatVersion,
+        runtimeVersion: identity.runtimeVersion,
+        changeSummary: metadata.changeSummary || releaseManifest.changelog?.summary || null,
         entrypoint: metadata.entrypoint,
         pointer: metadata.pointer,
         contentDigest: metadata.contentDigest,
@@ -461,13 +475,14 @@ async function releaseStatus() {
       legacyReady: legacy.ready,
       multires,
       embedReady: legacy.embedReady,
+      releaseIdentity: identity,
       bytes: legacy.bytes || 0,
       singleBytes: legacy.singleBytes || 0,
       embedBytes: legacy.embedBytes || 0,
       updatedAt: multires.updatedAt || legacy.updatedAt || null
     };
   } catch (error) {
-    if (error.code === "ENOENT") return { ready: false, legacyReady: false, embedReady: false, multires: { ready: false } };
+    if (error.code === "ENOENT") return { ready: false, legacyReady: false, embedReady: false, multires: { ready: false }, releaseIdentity: identity };
     throw error;
   }
 }
@@ -1277,8 +1292,20 @@ const server = createServer(async (request, response) => {
         return;
       }
       const requestedSlug = body.slug === undefined ? slugifyTourTitle(project.title) : String(body.slug).trim();
+      const requestedTourVersion = String(body.tourVersion || "").trim();
+      const requestedChangeSummary = String(body.changeSummary || "").trim().replace(/\s+/g, " ");
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(requestedSlug) || requestedSlug.length > 72) {
         replyJson(response, 400, { error: "Use a short web name made from lowercase letters, numbers and hyphens." });
+        return;
+      }
+      try {
+        releaseIdentity({ tourVersion: requestedTourVersion });
+      } catch (error) {
+        replyJson(response, 400, { error: error.message });
+        return;
+      }
+      if (requestedChangeSummary.length < 8 || requestedChangeSummary.length > 240) {
+        replyJson(response, 400, { error: "Describe what changed in this tour version using 8..240 characters." });
         return;
       }
       if (activeReleaseBuild) {
@@ -1286,7 +1313,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const currentStatus = await releaseStatus();
-      if (currentStatus.ready && currentStatus.multires.slug === requestedSlug) {
+      if (currentStatus.ready && currentStatus.multires.slug === requestedSlug && currentStatus.multires.tourVersion === requestedTourVersion && currentStatus.multires.changeSummary === requestedChangeSummary) {
         updateReleaseBuildState("complete", 100, "Tour is already up to date", {
           startedAt: new Date().toISOString(),
           buildDurationMs: 0,
@@ -1311,6 +1338,8 @@ const server = createServer(async (request, response) => {
           "--cache-dir", releaseBuildCacheRoot,
           "--progress-file", releaseBuildProgressPath,
           "--slug", requestedSlug,
+          "--tour-version", requestedTourVersion,
+          "--change-summary", requestedChangeSummary,
           "--replace"
         ], {
           cwd: projectRoot,

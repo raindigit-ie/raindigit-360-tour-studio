@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +12,11 @@ const projectRoot = resolve(import.meta.dirname, "..");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function assertContentVersion(source, pathname, targetPath) {
+  const version = createHash("sha256").update(await readFile(targetPath)).digest("hex").slice(0, 12);
+  assert(source.includes(`${pathname}?v=${version}`), `${pathname} is not linked by its content version.`);
 }
 
 async function requestJson(url, options = {}, expected = 200) {
@@ -274,6 +280,15 @@ async function main() {
     const releaseCss = await readFile(join(output, "css", "tour.css"), "utf8");
     assert(releaseCss.includes(".pnlm-dragfix") && releaseCss.includes("pointer-events: auto"), "The release must retain panorama drag rotation.");
     assert(!releaseConfig.includes("positionConfirmed") && !releaseConfig.includes("arrivalConfirmed") && !releaseConfig.includes("plannedTargets"), "Editor planning or review metadata must not leak into the public release.");
+    const releaseEntrypoint = await readFile(join(output, "index.html"), "utf8");
+    const releaseBootstrap = await readFile(join(output, "js", "tour-bootstrap.js"), "utf8");
+    await assertContentVersion(releaseEntrypoint, "css/pannellum.css", join(output, "css", "pannellum.css"));
+    await assertContentVersion(releaseEntrypoint, "css/tour.css", join(output, "css", "tour.css"));
+    await assertContentVersion(releaseEntrypoint, "js/tour-bootstrap.js", join(output, "js", "tour-bootstrap.js"));
+    await assertContentVersion(releaseBootstrap, "js/pannellum.js", join(output, "js", "pannellum.js"));
+    await assertContentVersion(releaseBootstrap, "js/tour-config.js", join(output, "js", "tour-config.js"));
+    await assertContentVersion(releaseBootstrap, "js/tour-transition.js", join(output, "js", "tour-transition.js"));
+    await assertContentVersion(releaseBootstrap, "js/tour.js", join(output, "js", "tour.js"));
     const singleRelease = await readFile(singleHtml, "utf8");
     const singleRuntime = singleRelease.match(/data:text\/javascript;base64,([A-Za-z0-9+/=]+)/)?.[1];
     assert(singleRuntime, "The single HTML must embed its runtime.");
@@ -325,7 +340,11 @@ async function main() {
     draftWithOrphan.sceneAdjustments["scene-099"] = { brightness: 100, contrast: 100, saturation: 100, warmth: 0 };
     draftWithOrphan.localAdjustments["scene-099"] = [];
     await writeFile(workspaceDraftPath, `${JSON.stringify(draftWithOrphan, null, 2)}\n`);
-    const rejectedBuild = await requestJson(`${baseUrl}/__tour-editor/build-release?workspace=1`, { method: "POST" }, 400);
+    const rejectedBuild = await requestJson(`${baseUrl}/__tour-editor/build-release?workspace=1`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "unreachable-fixture", tourVersion: "0.2.3", changeSummary: "Unreachable scene validation fixture" })
+    }, 400);
     assert(rejectedBuild.error.includes("Unreachable: Unused view"), `Server did not explain the unreachable photo: ${JSON.stringify(rejectedBuild)}`);
     const preservedProject = JSON.parse(await readFile(workspaceProjectPath, "utf8"));
     const preservedDraft = JSON.parse(await readFile(workspaceDraftPath, "utf8"));

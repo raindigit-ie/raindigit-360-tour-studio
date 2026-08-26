@@ -1,0 +1,238 @@
+{
+  "schema": "raindigit-active-tour-registry/v1",
+  "registryVersion": 1,
+  "changeId": "CHG-0005",
+  "updatedAt": "2026-08-26T02:58:27.397Z",
+  "contract": {
+    "studioVersion": "0.2.3",
+    "formatVersion": "2.0.0",
+    "runtimeVersion": "2.0.3",
+    "verificationProfile": "raindigit-portable-tour-v2",
+    "compatibilityPolicy": "exact-contract"
+  },
+  "activeTours": [
+    {
+      "slug": "killarney-360-property-tour-demo",
+      "status": "active",
+      "firstScene": "scene-005",
+      "sceneCount": 5,
+      "hotspotCount": 10,
+      "savedArrivalViewCount": 10,
+      "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
+      "savedArrivalViewsDigest": "619c5a99f9032839a1385110fa8ee616db9bc1238e1066be5572256f793e1a25"
+    },
+    {
+      "slug": "killarney-home-360-tour",
+      "status": "active",
+      "firstScene": "scene-001",
+      "sceneCount": 21,
+      "hotspotCount": 39,
+      "savedArrivalViewCount": 39,
+      "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
+      "savedArrivalViewsDigest": "440190a361317483a148967c76b837d68dfbca2a6a926a90c8e48dc26ddc21a9"
+    },
+    {
+      "slug": "killarney-town-centre-360-tour",
+      "status": "active",
+      "firstScene": "scene-021",
+      "sceneCount": 20,
+      "hotspotCount": 44,
+      "savedArrivalViewCount": 44,
+      "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
+      "savedArrivalViewsDigest": "21159ad7ef0082d36615f8797db73835cb17bf1e025fe8395886e70f0bbc396a"
+    }
+  ],
+  "selectors": {
+    "dev": {
+      "environment": "dev",
+      "state": "dev-remote-verified",
+      "resource": {
+        "provider": "cloudflare-r2",
+        "bucket": "raindigit-tours-dev",
+        "jurisdiction": "eu",
+        "origin": "https://pub-65d6a630f1c643ffab71ca4d29bcbfe4.r2.dev",
+        "namespace": "dev"
+      },
+      "releaseSetDigest": "9a178ad958ff49c2299e42f61a985672f1f4f9c13b571db31a00c344090cb0df",
+      "physicalIphoneAcceptance": null,
+      "promotionBlocked": true,
+      "releases": [
+        {
+          "slug": "killarney-360-property-tour-demo",
+          "tourVersion": "0.2.3",
+          "packageVersion": "multires-f960fbb68abf",
+          "contentDigest": "f960fbb68abfe9558daf103da2e3666421e0138878c83aae135086a9e4c6957b",
+          "studioVersion": "0.2.3",
+          "formatVersion": "2.0.0",
+          "runtimeVersion": "2.0.3",
+          "manifestDigest": "6e07415b41fe86fbef31891ce3d9c6ed237d6794531fa530d568c1f67ea458a0",
+          "rollbackVersion": "multires-3eb1a8672fda",
+          "prefix": "tours/killarney-360-property-tour-demo/multires-f960fbb68abf/",
+          "selfContained": true,
+          "changelog": {
+            "human": "CHANGELOG.md",
+            "humanDigest": "a87d2730c735a765d3d541c943c3bcac590b19b2b955d5f1e02fd942a8aa08b9",
+            "machine": "CHANGELOG.json",
+            "machineDigest": "6bb25db046a8f90f0556b6bf85d1cba2c4675cce92a188d950af934d9416dc0a"
+          }
+        },
+        {
+          "slug": "killarney-home-360-tour",
+          "tourVersion": "0.2.3",
+          "packageVersion": "multires-a175ad3c8ed3",
+          "contentDigest": "a175ad3c8ed34372acf3e5f50d92ca7b204b87bf09689c3950238a7cf8ff4f36",
+          "studioVersion": "0.2.3",
+          "formatVersion": "2.0.0",
+          "runtimeVersion": "2.0.3",
+          "manifestDigest": "e08091ac2cf429255c38ddeb627ade802aa62038c2c5b3a9360827c3a4d37a7d",
+          "rollbackVersion": "multires-2e5e47523bf4",
+          "prefix": "tours/killarney-home-360-tour/multires-a175ad3c8ed3/",
+          "selfContained": true,
+          "changelog": {
+            "human": "CHANGELOG.md",
+            "humanDigest": "89eefd90c6aa322bf495d6d0fd6aa77777baf9c1dad3a2d578b62d6d88d14795",
+            "machine": "CHANGELOG.json",
+            "machineDigest": "cdcc9754abc4a92139ff6305ab7f588a2bb07426757007a24c05afc27976205b"
+          }
+        },
+        {
+          "slug": "killarney-town-centre-360-tour",
+          "tourVersion": "0.2.3",
+          "packageVersion": "multires-95fff968c875",
+          "contentDigest": "95fff968c8752ea5bc7d7f70287dda093370050f35740c69b0c9bf765be67b7a",
+          "studioVersion": "0.2.3",
+          "formatVersion": "2.0.0",
+          "runtimeVersion": "2.0.3",
+          "manifestDigest": "24c41ecc81d3632fcacb4ac37f6e4a712f34db28886e48155d71df94a178830f",
+          "rollbackVersion": "multires-a490191b81ba",
+          "prefix": "tours/killarney-town-centre-360-tour/multires-95fff968c875/",
+          "selfContained": true,
+          "changelog": {
+            "human": "CHANGELOG.md",
+            "humanDigest": "d590414efeacc78c8354f6ee06c2bfd84ddd8ceacc22a56485575ab7cda07c42",
+            "machine": "CHANGELOG.json",
+            "machineDigest": "0399d0509c1c7c4b42321a45b0eae9830eb2605cb112911933fa4c2de1c63de1"
+          }
+        }
+      ]
+    },
+    "prod": {
+      "environment": "prod",
+      "state": "quarantined-legacy-selector",
+      "resource": {
+        "provider": "cloudflare-r2",
+        "bucket": "raindigit-tours",
+        "jurisdiction": "eu",
+        "origin": "https://cdn.raindigit.ie",
+        "namespace": "prod"
+      },
+      "releaseSetDigest": "7cbe1626efd790db5ac591ffe711616c3643900b2751db2d42adf9f3c6eecffa",
+      "physicalIphoneAcceptance": null,
+      "promotionBlocked": true,
+      "releases": [
+        {
+          "slug": "killarney-360-property-tour-demo",
+          "packageVersion": "multires-735f3bdddad7",
+          "contentDigest": "735f3bdddad75bb54a4bd856e3926074436c66fecbe185e008421923156e32af",
+          "contractStatus": "legacy-blocked"
+        },
+        {
+          "slug": "killarney-home-360-tour",
+          "packageVersion": "multires-bd678e801484",
+          "contentDigest": "bd678e801484df462413ea9c861f52311e4a1d5ac3c66552512389eef9e44bf9",
+          "contractStatus": "legacy-blocked"
+        },
+        {
+          "slug": "killarney-town-centre-360-tour",
+          "packageVersion": "multires-b5cb4dc535d7",
+          "contentDigest": "b5cb4dc535d723cef7c2df6728625fae6927566938a60de2e8fc2e9b7b329d1b",
+          "contractStatus": "legacy-blocked"
+        }
+      ]
+    }
+  },
+  "migration": {
+    "fromContract": {
+      "studioVersion": "0.2.2",
+      "formatVersion": "2.0.0",
+      "runtimeVersion": "2.0.2"
+    },
+    "toContract": {
+      "studioVersion": "0.2.3",
+      "formatVersion": "2.0.0",
+      "runtimeVersion": "2.0.3"
+    },
+    "policy": "evaluate-every-active-tour",
+    "entries": [
+      {
+        "slug": "killarney-360-property-tour-demo",
+        "decision": "migrated",
+        "from": {
+          "tourVersion": "0.2.2",
+          "packageVersion": "multires-3eb1a8672fda",
+          "contentDigest": "3eb1a8672fda9d957f8c9a89f00877710448fb13991a69eb6a780153cdb9ea84"
+        },
+        "to": {
+          "tourVersion": "0.2.3",
+          "packageVersion": "multires-f960fbb68abf",
+          "contentDigest": "f960fbb68abfe9558daf103da2e3666421e0138878c83aae135086a9e4c6957b"
+        },
+        "preservation": {
+          "firstScene": "scene-005",
+          "sceneCount": 5,
+          "hotspotCount": 10,
+          "savedArrivalViewCount": 10,
+          "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
+          "savedArrivalViewsDigest": "619c5a99f9032839a1385110fa8ee616db9bc1238e1066be5572256f793e1a25"
+        },
+        "status": "automated-pass-physical-iphone-pending"
+      },
+      {
+        "slug": "killarney-home-360-tour",
+        "decision": "migrated",
+        "from": {
+          "tourVersion": "0.2.2",
+          "packageVersion": "multires-2e5e47523bf4",
+          "contentDigest": "2e5e47523bf4e0195a12f8388703c875df21273603dea57b822d90700f6732d9"
+        },
+        "to": {
+          "tourVersion": "0.2.3",
+          "packageVersion": "multires-a175ad3c8ed3",
+          "contentDigest": "a175ad3c8ed34372acf3e5f50d92ca7b204b87bf09689c3950238a7cf8ff4f36"
+        },
+        "preservation": {
+          "firstScene": "scene-001",
+          "sceneCount": 21,
+          "hotspotCount": 39,
+          "savedArrivalViewCount": 39,
+          "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
+          "savedArrivalViewsDigest": "440190a361317483a148967c76b837d68dfbca2a6a926a90c8e48dc26ddc21a9"
+        },
+        "status": "automated-pass-physical-iphone-pending"
+      },
+      {
+        "slug": "killarney-town-centre-360-tour",
+        "decision": "migrated",
+        "from": {
+          "tourVersion": "0.2.2",
+          "packageVersion": "multires-a490191b81ba",
+          "contentDigest": "a490191b81ba9631c1d5d443ca909bf7b297e76ef1985056805df0cc1939a5a2"
+        },
+        "to": {
+          "tourVersion": "0.2.3",
+          "packageVersion": "multires-95fff968c875",
+          "contentDigest": "95fff968c8752ea5bc7d7f70287dda093370050f35740c69b0c9bf765be67b7a"
+        },
+        "preservation": {
+          "firstScene": "scene-021",
+          "sceneCount": 20,
+          "hotspotCount": 44,
+          "savedArrivalViewCount": 44,
+          "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
+          "savedArrivalViewsDigest": "21159ad7ef0082d36615f8797db73835cb17bf1e025fe8395886e70f0bbc396a"
+        },
+        "status": "automated-pass-physical-iphone-pending"
+      }
+    ]
+  }
+}

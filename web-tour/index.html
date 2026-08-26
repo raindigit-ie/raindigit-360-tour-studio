@@ -87,6 +87,48 @@
       </section>
     </main>
 
+    <script data-runtime-recovery-boundary="bootstrap-failure-v2">
+      (() => {
+        "use strict";
+        const recover = (error) => {
+          console.error(error);
+          document.documentElement.classList.remove("is-tour-transition-boot");
+          document.querySelector("[data-tour-static-loader]")?.remove();
+          document.body.dataset.tourError = "true";
+          if (document.querySelector("[data-tour-runtime-recovery]")) return;
+          const recovery = document.createElement("button");
+          recovery.type = "button";
+          recovery.className = "tour-runtime-recovery";
+          recovery.dataset.tourRuntimeRecovery = "true";
+          recovery.textContent = "Reload tour";
+          recovery.style.cssText =
+            "position:fixed;z-index:90;left:50%;top:50%;min-height:46px;padding:12px 18px;transform:translate(-50%,-50%);border:1px solid rgba(229,185,96,.76);border-radius:999px;background:#0b0c09;color:#fff8e7;font:700 13px/1.1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 14px 42px rgba(0,0,0,.48);cursor:pointer";
+          recovery.addEventListener(
+            "click",
+            () => {
+              const retryUrl = new URL(window.location.href);
+              retryUrl.searchParams.set("runtime", Date.now().toString(36));
+              window.location.assign(retryUrl.href);
+            },
+            { once: true },
+          );
+          document.body.append(recovery);
+        };
+        window.__rainDigitShowRuntimeRecovery = recover;
+        addEventListener(
+          "error",
+          (event) => {
+            const source = event.target;
+            if (
+              source instanceof HTMLScriptElement &&
+              /\/js\/tour-bootstrap\.js(?:\?|$)/.test(source.src)
+            )
+              recover(new Error(`Could not load ${source.src}`));
+          },
+          true,
+        );
+      })();
+    </script>
     <script defer src="js/tour-bootstrap.js?v=20260817-scene-transition-v1"></script>
   </body>
 </html>

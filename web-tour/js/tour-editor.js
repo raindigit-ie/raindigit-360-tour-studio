@@ -327,11 +327,21 @@
           <button class="editor-button editor-button--wide" id="editorOpenPolish" type="button">Polish inside studio</button>
         </details>
         <details class="editor-disclosure editor-disclosure--compact editor-web-name">
-          <summary>Web address (created automatically)</summary>
+          <summary>Release identity</summary>
           <label class="editor-field editor-field--stacked">
             <span>Tour web name</span>
             <input id="editorReleaseSlug" type="text" inputmode="url" autocomplete="off" maxlength="72" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" aria-describedby="editorReleaseSlugHelp" />
             <small id="editorReleaseSlugHelp">Used in the permanent address: raindigit.ie/tours/<b>tour-name</b>/</small>
+          </label>
+          <label class="editor-field editor-field--stacked">
+            <span>Tour version</span>
+            <input id="editorReleaseVersion" type="text" inputmode="decimal" autocomplete="off" value="" readonly maxlength="32" pattern="(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)" aria-describedby="editorReleaseVersionHelp" />
+            <small id="editorReleaseVersionHelp">Locked to the Studio capability version returned by the server.</small>
+          </label>
+          <label class="editor-field editor-field--stacked">
+            <span>What changed in this version</span>
+            <textarea id="editorReleaseSummary" rows="3" minlength="8" maxlength="240">Initial complete portable tour release.</textarea>
+            <small>This text travels with the package so its capabilities and test scope stay understandable.</small>
           </label>
         </details>
           <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build & download web package</button>
@@ -422,8 +432,9 @@
   document.body.appendChild(previewDialog);
 
   const elements = Object.fromEntries([
-    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ArchiveList", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "QuickRouteCard", "ConnectInOrder", "UndoQuickRoutes", "QuickRouteStatus", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "OpeningViewsFastPath", "KeepOpeningViews", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "ApplyLookAll", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "Build", "BuildPortable", "PortableStatus", "BuildProgress", "BuildProgressLabel", "BuildProgressPercent", "BuildProgressBar", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ArchiveWorkspace", "ReleaseStatus", "Back", "Status", "SaveStatus", "Continue"
+    "SceneName", "RoomName", "Home", "ProgressLabel", "ProgressCount", "ProgressFill", "ProjectTitle", "NewProjectHeading", "NewProjectHelp", "CreateWorkspace", "ContinueWorkspace", "CurrentProject", "ProjectBackup", "ProjectBackupName", "RestoreProject", "ArchiveList", "ImportFiles", "RoomImportFiles", "ProjectEmpty", "UploadList", "RoomCount", "ApplyRoomCount", "FloorCount", "ApplyFloorCount", "RoomList", "FloorList", "AssignmentStatus", "ProjectOrder", "RoomTaskProgress", "RoomChoices", "PlannedPlaces", "PlaceChoices", "QuickRouteCard", "ConnectInOrder", "UndoQuickRoutes", "QuickRouteStatus", "HotspotList", "AddRoutePanel", "AddRouteToggle", "AddRouteMenu", "AddRouteOptions", "ArrivalList", "LinkTaskProgress", "LinkGuidance", "MovementHeading", "PlaceAtCentre", "ConfirmCentre", "RemoveMovement", "CancelCentre", "InspectSource", "UseRoomHeight", "GuideSnap", "GuideReadout", "EditArrival", "SaveArrival", "ArrivalHelp", "OpeningViewsFastPath", "KeepOpeningViews", "DefaultView", "SaveSceneView", "PolishHelp", "PolishOpeningTitle", "PolishOpeningHelp", "PolishEditToggle", "PolishSaveView", "PolishFocusToggle", "PolishHotspotList", "OpenPolish", "ImagePresets", "ImageControls", "ImageWarning", "ToggleOriginal", "ApplyLookRoom", "ApplyLookAll", "AdjustmentList", "AdjustmentControls", "AddAdjustment", "ExportSummary", "Readiness", "FloorplanOptions", "MapFile", "MapFileName", "MapEnabled", "MapStatus", "Floorplan", "PreviewOptions", "PreviewOptionsLabel", "PreviewLink", "ReleaseSlug", "ReleaseVersion", "ReleaseSummary", "Build", "BuildPortable", "PortableStatus", "BuildProgress", "BuildProgressLabel", "BuildProgressPercent", "BuildProgressBar", "ReleaseActions", "MultiresSummary", "DownloadMultires", "PreviewMultires", "EmbedTestLink", "DownloadSingle", "DownloadEmbed", "CopyEmbedBlock", "DownloadProject", "DownloadDebug", "InstallUrl", "EmbedCode", "CopyEmbed", "DownloadZip", "ArchiveWorkspace", "ReleaseStatus", "Back", "Status", "SaveStatus", "Continue"
   ].map((name) => [name, panel.querySelector(`#editor${name}`)]));
+  elements.ReleaseVersionHelp = panel.querySelector("#editorReleaseVersionHelp");
   const panelContent = panel.querySelector(".editor-panel__content");
   const previewElements = {
     close: previewDialog.querySelector("#editorPreviewClose"),
@@ -3254,14 +3265,27 @@
     if (!elements.ReleaseSlug.value) elements.ReleaseSlug.value = state.release.multires?.slug || slugifyTourTitle(state.workspaceProject?.title || api.title);
     const releaseSlug = elements.ReleaseSlug.value.trim();
     const releaseSlugValid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(releaseSlug) && releaseSlug.length <= 72;
+    const releaseIdentity = state.release.releaseIdentity || {};
+    const releaseVersion = elements.ReleaseVersion.value.trim();
+    const releaseVersionValid = releaseVersion === releaseIdentity.tourVersion
+      && releaseIdentity.tourVersion === releaseIdentity.studioVersion;
+    const releaseSummaryValid = elements.ReleaseSummary.value.trim().length >= 8;
     elements.ReleaseSlug.setAttribute("aria-invalid", String(!releaseSlugValid));
+    elements.ReleaseVersion.setAttribute("aria-invalid", String(!releaseVersionValid));
+    elements.ReleaseSummary.setAttribute("aria-invalid", String(!releaseSummaryValid));
     elements.ReleaseSlug.disabled = state.building || state.release.ready;
+    elements.ReleaseVersion.readOnly = true;
+    elements.ReleaseVersion.disabled = state.building || state.release.ready;
+    elements.ReleaseVersionHelp.textContent = releaseIdentity.tourVersion
+      ? `Locked to Studio capability version ${releaseIdentity.tourVersion}.`
+      : "Waiting for the server Studio capability version.";
+    elements.ReleaseSummary.disabled = state.building || state.release.ready;
     const previewUrl = `${window.location.origin}${window.location.pathname}?preview=1${workspaceMode ? "&workspace=1" : ""}`;
     elements.PreviewLink.href = state.release.multires?.ready ? `${endpoint}/release-multires/${state.release.multires.entrypoint}` : state.release.ready ? `${endpoint}/release/index.html` : previewUrl;
     elements.OpenPolish.hidden = !workspaceMode || !state.workspaceProject?.scenes?.length;
     elements.PreviewOptionsLabel.textContent = state.release.ready ? "View or test the tour" : "Check the tour first";
     elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
-    elements.Build.disabled = !workspaceMode || state.building || !readiness.ready || !releaseSlugValid;
+    elements.Build.disabled = !workspaceMode || state.building || !readiness.ready || !releaseSlugValid || !releaseVersionValid || !releaseSummaryValid;
     elements.Build.hidden = state.release.ready;
     elements.Build.textContent = state.building ? state.buildProgress.message || "Building tour..." : "Build & download web package";
     elements.BuildProgress.hidden = !state.building;
@@ -3277,7 +3301,7 @@
     const cacheSummary = reusedViews > 0 ? ` · reused ${reusedViews}/${state.release.multires.scenes} view${reusedViews === 1 ? "" : "s"}` : "";
     const buildSummary = lastBuildMs === 0 ? " · already current" : Number.isFinite(lastBuildMs) ? ` · built in ${Math.max(1, Math.round(lastBuildMs / 1000))}s` : "";
     elements.MultiresSummary.textContent = state.release.multires?.ready
-      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · immutable ${state.release.multires.version}`
+      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · tour ${state.release.multires.tourVersion} · Studio ${state.release.multires.studioVersion} · immutable ${state.release.multires.packageVersion}`
       : "Versioned tiles, manifest and rollback pointer are included.";
     elements.BuildPortable.hidden = Boolean(state.release.legacyReady);
     elements.BuildPortable.disabled = !workspaceMode || state.building || !state.release.ready;
@@ -3302,7 +3326,10 @@
       ? "Create a tour before publishing."
       : state.release.ready
         ? `Optimized web package ready${state.release.multires?.bytes ? ` · ${(state.release.multires.bytes / 1024 / 1024).toFixed(1)} MB` : ""}. Test it before promotion.`
-        : releaseSlugValid ? "The tour has not been built yet." : "Use lowercase letters, numbers and hyphens for the tour web name.";
+        : !releaseSlugValid ? "Use lowercase letters, numbers and hyphens for the tour web name."
+          : !releaseVersionValid ? "The Studio and tour capability versions must match."
+            : !releaseSummaryValid ? "Describe what changed in this version."
+              : "The tour has not been built yet.";
   }
 
   function invalidateRelease(reason = "draft-changed") {
@@ -4182,7 +4209,11 @@
     if (!workspaceMode) return;
     try {
       const response = await fetch(studioUrl("release-status"), { cache: "no-store" });
-      if (response.ok) state.release = await response.json();
+      if (response.ok) {
+        state.release = await response.json();
+        const studioVersion = state.release.releaseIdentity?.tourVersion;
+        if (studioVersion) elements.ReleaseVersion.value = studioVersion;
+      }
     } catch {
       state.release = { ready: false };
     }
@@ -4234,7 +4265,11 @@
       const response = await fetch(studioUrl(portable ? "build-portable-release" : "build-release"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(portable ? {} : { slug: elements.ReleaseSlug.value.trim() })
+        body: JSON.stringify(portable ? {} : {
+          slug: elements.ReleaseSlug.value.trim(),
+          tourVersion: state.release.releaseIdentity?.tourVersion || "",
+          changeSummary: elements.ReleaseSummary.value.trim()
+        })
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || `Build failed (${response.status})`);
@@ -4444,6 +4479,8 @@
     else window.open(previewUrl, "_blank", "noopener");
   });
   elements.ReleaseSlug.addEventListener("input", renderExportPanel);
+  elements.ReleaseVersion.addEventListener("input", renderExportPanel);
+  elements.ReleaseSummary.addEventListener("input", renderExportPanel);
   elements.ReleaseSlug.addEventListener("blur", () => {
     elements.ReleaseSlug.value = slugifyTourTitle(elements.ReleaseSlug.value);
     renderExportPanel();

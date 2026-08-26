@@ -18,7 +18,7 @@ FROM node:22.12-alpine AS studio
 
 ARG BUILD_DATE="unknown"
 ARG VCS_REF="unknown"
-ARG VERSION="0.1.0"
+ARG VERSION="0.2.0"
 
 LABEL org.opencontainers.image.title="RainDigit 360 Tour Studio" \
       org.opencontainers.image.description="Portable local studio for building self-hosted RainDigit 360 tours" \
@@ -52,6 +52,8 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
+COPY CHANGELOG.md ./CHANGELOG.md
+COPY config/release-contract.json ./config/release-contract.json
 COPY scripts/tour-editor-server.mjs scripts/build-tour-release.mjs scripts/build-multires-release.mjs scripts/prune-build-cache.mjs ./scripts/
 COPY scripts/lib ./scripts/lib
 COPY web-tour ./web-tour

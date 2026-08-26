@@ -38,6 +38,23 @@ test("desktop fullscreen keeps the complete tour control surface", async ({ page
   });
   expect(hitTargets.every((target) => target.hit), JSON.stringify(hitTargets)).toBe(true);
 
+  const downloadPromise = page.waitForEvent("download");
+  await controls.capture.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^raindigit-tour-.+\.png$/);
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const capture = sharp(Buffer.concat(chunks)).removeAlpha();
+  const [captureMetadata, captureStats] = await Promise.all([capture.metadata(), capture.stats()]);
+  expect(captureMetadata.format).toBe("png");
+  expect(captureMetadata.width).toBeGreaterThan(320);
+  expect(captureMetadata.height).toBeGreaterThan(180);
+  expect(
+    captureStats.channels.slice(0, 3).every(({ min, max, stdev }) => max - min >= 24 && stdev >= 3),
+    JSON.stringify(captureStats.channels)
+  ).toBe(true);
+
   await page.locator("#navigatorClose").click();
   await controls.fullscreen.click();
   await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
@@ -52,6 +69,13 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
 
   await page.goto(`/?mobile-qa=${browserName}`);
   await expect(page.locator(".pnlm-render-container canvas")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-tour-webgl-buffer", "default");
+  await expect(page.locator("html")).toHaveAttribute("data-tour-webgl-readback", "disabled");
+  const contextAttributes = await page.locator(".pnlm-render-container canvas").last().evaluate((canvas) => {
+    const context = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    return context?.getContextAttributes();
+  });
+  expect(contextAttributes?.preserveDrawingBuffer).toBe(false);
 
   const layout = await page.evaluate(() => {
     const topbar = document.querySelector(".topbar").getBoundingClientRect();
@@ -116,6 +140,25 @@ test("mobile release renders and keeps controls recoverable", async ({ page, bro
   }));
   expect(globals).toEqual({ editor: false, preview: false });
   expect(consoleErrors).toEqual([]);
+});
+
+test("iPhone readiness does not depend on cross-origin Resource Timing", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "webkit-mobile", "iPhone WebKit regression only.");
+  await page.addInitScript(() => {
+    const nativeGetEntriesByType = performance.getEntriesByType.bind(performance);
+    Object.defineProperty(performance, "getEntriesByType", {
+      configurable: true,
+      value: (entryType) => entryType === "resource" ? [] : nativeGetEntriesByType(entryType)
+    });
+  });
+  await page.goto("/?iphone-resource-timing=hidden");
+  await expect(page.locator("html")).toHaveClass(/is-tour-ready/, { timeout: 60_000 });
+  await expect(page.locator(".tour-shell")).not.toHaveClass(/is-transition-guarded/, { timeout: 60_000 });
+  const canvas = page.locator(".pnlm-render-container canvas").last();
+  await expect(canvas).toBeVisible();
+  const screenshot = sharp(await canvas.screenshot()).removeAlpha();
+  const stats = await screenshot.stats();
+  expect(stats.channels.slice(0, 3).some(({ stdev }) => stdev > 3), JSON.stringify(stats.channels)).toBe(true);
 });
 
 test("mobile release exposes an optional floorplan without blocking the tour", async ({ page }, testInfo) => {

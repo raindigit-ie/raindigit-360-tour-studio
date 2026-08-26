@@ -29,17 +29,17 @@ function run(label, command, commandArgs, cwd) {
 }
 
 function discoverTour(packageRoot, requestedSlug) {
-  const manifestsRoot = join(packageRoot, 'manifests');
-  if (!existsSync(manifestsRoot)) throw new Error(`No candidate manifests found in ${packageRoot}. Build the web package first.`);
-  const slugs = readdirSync(manifestsRoot, { withFileTypes: true })
+  const channelsRoot = join(packageRoot, 'channels', 'dev');
+  if (!existsSync(channelsRoot)) throw new Error(`No DEV channel found in ${packageRoot}. Build the web package first.`);
+  const slugs = readdirSync(channelsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .filter((slug) => !requestedSlug || slug === requestedSlug);
   if (slugs.length !== 1) throw new Error(`Expected one candidate tour, found ${slugs.length}. Pass --tour <slug>.`);
   const slug = slugs[0];
-  const pointer = JSON.parse(readFileSync(join(manifestsRoot, slug, 'current.json'), 'utf8'));
-  if (pointer.schema !== 'raindigit-tour-current/v1' || pointer.slug !== slug) {
-    throw new Error(`${slug}: invalid candidate pointer.`);
+  const pointer = JSON.parse(readFileSync(join(channelsRoot, slug, 'current.json'), 'utf8'));
+  if (pointer.schema !== 'raindigit-tour-channel/v1' || pointer.environment !== 'dev' || pointer.slug !== slug) {
+    throw new Error(`${slug}: invalid isolated DEV candidate pointer.`);
   }
   return slug;
 }

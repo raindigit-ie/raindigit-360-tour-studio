@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -579,6 +580,7 @@ async function main() {
     }
     totalBytes += await buildFloorplan(project, workspace, options.output, temporaryRoot);
     await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
+    await versionTourRuntime(options.output);
     await rm(temporaryRoot, { recursive: true, force: true });
     if (options.zip) await createZip(options.output, options.zip);
     let singleHtml = null;

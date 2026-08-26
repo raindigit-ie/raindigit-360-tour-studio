@@ -69,5 +69,5 @@ The Studio is a local-first production application. It turns already stitched pa
 1. Reproduce a reported issue in an isolated workspace; never mutate the employee's active `studio-workspace` during diagnosis.
 2. Add or strengthen a regression assertion before considering the fix complete.
 3. Verify the full wizard, not only the changed screen.
-4. Update this contract, the operator playbook and Kimi Base when product behavior changes.
+4. Update this contract, the operator playbook and FLOW Base when product behavior changes.
 5. Commit with both repositories clean. Generated workspaces, media, releases and credentials never enter Git.

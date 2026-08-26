@@ -81,11 +81,111 @@ button {
 
 .is-tour-transition-boot .tour-shell > .tour-first-frame,
 .tour-shell.is-transition-guarded > .tour-first-frame {
-  z-index: 33;
-  visibility: visible;
-  opacity: 1;
+  z-index: 1;
+  visibility: hidden !important;
+  opacity: 0 !important;
   transition: none;
 }
+
+.tour-scene-transition--static {
+  visibility: visible;
+  opacity: 1;
+  background: #070807;
+}
+
+.tour-scene-transition--static .tour-scene-transition__stage {
+  background: radial-gradient(circle at 50% 50%, rgb(226 187 105 / .14), transparent 34%),
+    linear-gradient(145deg, #070807, #17130d 58%, #070807);
+}
+
+.tour-scene-transition--static .tour-scene-transition__tiles,
+.tour-scene-transition--mobile-entry .tour-scene-transition__tiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: 18px;
+  background: linear-gradient(145deg, rgb(7 8 7 / .9), rgb(18 16 12 / .56));
+}
+
+.tour-scene-transition--static .tour-scene-transition__tile,
+.tour-scene-transition--mobile-entry .tour-scene-transition__tile {
+  position: relative;
+  inset: auto;
+  width: auto;
+  height: auto;
+  border: 1px solid rgb(226 187 105 / .28);
+  background: linear-gradient(145deg, rgb(226 187 105 / .17), rgb(255 249 236 / .025));
+  opacity: .16;
+  transform: scale(.84);
+  animation: tour-mobile-loader-cell var(--tour-cell-duration, 1180ms) cubic-bezier(.18, .78, .18, 1) var(--tour-cell-delay, 0ms) infinite alternate;
+}
+
+.tour-scene-transition--static .tour-scene-transition__tile::after,
+.tour-scene-transition--mobile-entry .tour-scene-transition__tile::after {
+  background: linear-gradient(135deg, transparent 18%, rgb(226 187 105 / .58), transparent 78%);
+  opacity: .38;
+  animation: tour-mobile-loader-glint var(--tour-cell-duration, 1180ms) ease-in-out var(--tour-cell-delay, 0ms) infinite alternate;
+}
+
+.tour-scene-transition--mobile-entry .tour-scene-transition__outgoing {
+  opacity: .42;
+  filter: blur(2px) saturate(.78) brightness(.7);
+  transform: scale(1.018);
+}
+
+.tour-scene-transition__mobile-status {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: max-content;
+  padding: 10px 14px;
+  border: 1px solid rgb(226 187 105 / .52);
+  border-radius: 999px;
+  color: #fff9ec;
+  background: rgb(7 8 7 / .84);
+  font: 700 10px/1.1 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+}
+
+.tour-scene-transition__mobile-mark {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgb(226 187 105 / .86);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgb(226 187 105 / .1), 0 0 16px rgb(226 187 105 / .35);
+  animation: tour-mobile-loader-mark 1.4s ease-in-out infinite;
+}
+
+.tour-scene-transition--mobile-entry.is-revealing .tour-scene-transition__outgoing {
+  animation: tour-mobile-loader-arrival var(--tour-settle-duration, 420ms) ease-out both;
+}
+
+.tour-scene-transition--mobile-entry.is-revealing .tour-scene-transition__tiles {
+  animation: tour-mobile-loader-exit var(--tour-settle-duration, 420ms) ease-out both;
+}
+
+.tour-scene-transition--mobile-entry.is-revealing .tour-scene-transition__mobile-status {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.94);
+}
+
+@keyframes tour-mobile-loader-cell {
+  0% { opacity: .12; transform: scale(.82) rotate(-2deg); filter: brightness(.66); }
+  52% { opacity: .9; transform: scale(1) rotate(0deg); filter: brightness(1.18); }
+  100% { opacity: .22; transform: scale(.94) rotate(1deg); filter: brightness(.84); }
+}
+
+@keyframes tour-mobile-loader-glint { 0%, 100% { opacity: .08; } 50% { opacity: .9; } }
+@keyframes tour-mobile-loader-mark { 0%, 100% { transform: scale(.86); opacity: .55; } 50% { transform: scale(1.12); opacity: 1; } }
+@keyframes tour-mobile-loader-arrival { from { opacity: .42; filter: blur(2px) saturate(.78) brightness(.7); transform: scale(1.018); } to { opacity: 1; filter: none; transform: scale(1); } }
+@keyframes tour-mobile-loader-exit { from { opacity: 1; } to { opacity: 0; } }
 
 .tour-shell > .tour-scene-transition {
   --tour-cell-duration: 980ms;

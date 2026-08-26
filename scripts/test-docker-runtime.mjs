@@ -149,7 +149,11 @@ try {
   const built = await requestJson("/__tour-editor/build-release?workspace=1", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ slug: "docker-runtime-verification" })
+    body: JSON.stringify({
+      slug: "docker-runtime-verification",
+      tourVersion: "0.2.3",
+      changeSummary: "Initial container verification release"
+    })
   });
   assert(built.ready === true && built.multires?.ready === true, "The container could not build an optimized tour package.");
   const packageResponse = await fetch(`${baseUrl}/__tour-editor/release-multires-download?workspace=1`);

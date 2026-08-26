@@ -106,7 +106,7 @@ The studio is local-first. It keeps source material and the editable workspace o
 
 Use **Build the tour** on the Publish screen after approval. The build validates the scene graph and image dimensions, rasterises approved look changes, generates multires WebP tiles plus JPEG fallbacks, and writes:
 
-- `release-multires/` - R2-shaped package with immutable `tours/<slug>/<version>/` content and a small `manifests/<slug>/current.json` pointer;
+- `release-multires/` - R2-shaped package with immutable, self-contained `tours/<slug>/<package-version>/` content and an independent `channels/dev/<slug>/current.json` selector;
 - `dist/raindigit-360-tour-web-package.zip` - primary optimized website candidate;
 - `release/` - static deployable folder;
 - `dist/raindigit-360-tour.html` - self-contained tour with no adjacent runtime or media files;
@@ -114,7 +114,7 @@ Use **Build the tour** on the Publish screen after approval. The build validates
 - `dist/raindigit-360-tour.zip` - advanced folder-based deployment;
 - the studio download endpoint creates `raindigit-tour-project.rdtour`, containing project JSON, draft JSON and normalized editable media.
 
-For Rain Digit, upload the immutable version directory first, visually verify it, and only then replace the small `current.json` pointer. Never overwrite an accepted version. Rolling back means restoring the previous pointer version. The portable HTML is for an external customer host that cannot use the Rain Digit R2 pipeline.
+For Rain Digit, upload the immutable version directory first and verify it through the isolated DEV selector. PROD has a separate selector and may reference only that exact verified digest after physical iPhone acceptance; promotion never rebuilds and a DEV action never mutates PROD. Never overwrite an accepted version. Rolling back means selecting an existing immutable package. Every optimized package includes all viewer code, CSS, configuration, thumbnails and panorama media, so the same directory can be hosted and embedded on a customer site without a RainDigit CDN dependency.
 
 The single HTML must also open directly from disk and render when embedded in a
 fullscreen-enabled iframe. Both paths are part of the automated product test.
