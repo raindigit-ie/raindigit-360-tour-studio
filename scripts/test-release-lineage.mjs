@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
-import { assertReleaseLineage } from "./lib/release-lineage.mjs";
+import {
+  assertPackageRollbackLineage,
+  assertReleaseLineage
+} from "./lib/release-lineage.mjs";
 
 function expectFailure(input, message) {
   let failed = false;
@@ -54,6 +57,36 @@ expectFailure(
     migrationToVersion: "0.2.3"
   },
   "Capability upgrade accepted a mismatched prior version."
+);
+
+const previous = {
+  packageVersion: "multires-aaaaaaaaaaaa",
+  contentDigest: "a".repeat(64),
+  rollbackVersion: "multires-999999999999"
+};
+assertPackageRollbackLineage({
+  selected: { ...previous },
+  previous,
+  manifest: { rollbackVersion: previous.rollbackVersion },
+  label: "same-package"
+});
+assertPackageRollbackLineage({
+  selected: {
+    packageVersion: "multires-bbbbbbbbbbbb",
+    contentDigest: "b".repeat(64)
+  },
+  previous,
+  manifest: { rollbackVersion: previous.packageVersion },
+  label: "new-package"
+});
+expectFailure(
+  {
+    selected: { ...previous },
+    previous,
+    manifest: { rollbackVersion: previous.packageVersion },
+    label: "same-package"
+  },
+  "Idempotent attestation accepted a self-rollback target."
 );
 
 console.log("Release lineage contract passed for upgrades and same-capability revisions.");

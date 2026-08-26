@@ -2,7 +2,7 @@
   "schema": "raindigit-active-tour-registry/v1",
   "registryVersion": 1,
   "changeId": "CHG-0005",
-  "updatedAt": "2026-08-26T19:14:51.305Z",
+  "updatedAt": "2026-08-26T20:23:18.019Z",
   "contract": {
     "studioVersion": "0.2.3",
     "formatVersion": "2.0.0",
@@ -169,8 +169,8 @@
         "decision": "migrated",
         "from": {
           "tourVersion": "0.2.3",
-          "packageVersion": "multires-f960fbb68abf",
-          "contentDigest": "f960fbb68abfe9558daf103da2e3666421e0138878c83aae135086a9e4c6957b"
+          "packageVersion": "multires-19af0e9897fd",
+          "contentDigest": "19af0e9897fd4e81cd640f72cc0cc9d01cae29e0152c69e11438a09f6c084fb9"
         },
         "to": {
           "tourVersion": "0.2.3",
@@ -192,8 +192,8 @@
         "decision": "migrated",
         "from": {
           "tourVersion": "0.2.3",
-          "packageVersion": "multires-a175ad3c8ed3",
-          "contentDigest": "a175ad3c8ed34372acf3e5f50d92ca7b204b87bf09689c3950238a7cf8ff4f36"
+          "packageVersion": "multires-489214bb8ceb",
+          "contentDigest": "489214bb8cebbae4a53d2960a28c969c367b48c8676b2e4c2bbc0692eb4e147c"
         },
         "to": {
           "tourVersion": "0.2.3",
@@ -215,8 +215,8 @@
         "decision": "migrated",
         "from": {
           "tourVersion": "0.2.3",
-          "packageVersion": "multires-95fff968c875",
-          "contentDigest": "95fff968c8752ea5bc7d7f70287dda093370050f35740c69b0c9bf765be67b7a"
+          "packageVersion": "multires-dacc7d07d379",
+          "contentDigest": "dacc7d07d3797c687d28ae3e66813d6bd9a56283c3fefdf5f23e4e64f610bc2c"
         },
         "to": {
           "tourVersion": "0.2.3",

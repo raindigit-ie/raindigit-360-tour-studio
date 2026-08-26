@@ -4,16 +4,16 @@
   "changeId": "CHG-0005",
   "environment": "dev",
   "status": "complete-dev-candidate",
-  "createdAt": "2026-08-26T19:14:51.305Z",
+  "createdAt": "2026-08-26T20:23:18.019Z",
   "actor": {
     "id": "codex-root",
     "role": "release-verifier"
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "fdf30b8eadfd4db980a42fb18825fdf82048b9c5cbddd97f441ab229142cbe6b"
+    "sha256": "2dc6d3cb143156c42f1ce8d6f65d6ec884febc8a223c66d4842cb5bd6d7e026b"
   },
-  "migrationMatrixDigest": "754acf9591fc482d4d255c694431c4ca7dc46e4008850289406a8862d4fce421",
+  "migrationMatrixDigest": "30d699401476c5e5472b159367c90a9918fd62e4e1bc11f1874b0a65249dff84",
   "contract": {
     "studioVersion": "0.2.3",
     "tourVersion": "0.2.3",
@@ -138,5 +138,5 @@
       "separate-prod-credential-boundary-not-yet-proven"
     ]
   },
-  "attestationDigest": "b3cd30dd5f9dc6025e8a81d872fef8ed9b67f0a79b12d9e91ca931eb8fc4fae1"
+  "attestationDigest": "9aaa7ccfb9a97608410c20b80c2f982609e17c16fa38733ce4f74354fc77cec2"
 }

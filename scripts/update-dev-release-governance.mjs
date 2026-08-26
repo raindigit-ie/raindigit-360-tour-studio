@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { assertPackageRollbackLineage } from "./lib/release-lineage.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -51,9 +52,12 @@ const releases = ledger.dev.releases.map((selected) => {
   const manifest = readJson(join(root, "release-manifest.json"));
   const previous = previousReleases.find((entry) => entry.slug === selected.slug);
   if (!previous) throw new Error(`${selected.slug}: previous accepted DEV release is absent.`);
-  if (manifest.rollbackVersion !== previous.packageVersion) {
-    throw new Error(`${selected.slug}: manifest rollback does not target accepted DEV.`);
-  }
+  assertPackageRollbackLineage({
+    selected,
+    previous,
+    manifest,
+    label: selected.slug
+  });
   return {
     ...selected,
     manifestDigest: sha256File(join(root, "release-manifest.json")),

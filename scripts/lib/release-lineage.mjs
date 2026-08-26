@@ -39,3 +39,18 @@ export function assertReleaseLineage({
     );
   }
 }
+
+export function assertPackageRollbackLineage({ selected, previous, manifest, label }) {
+  const samePackage =
+    selected.packageVersion === previous.packageVersion &&
+    selected.contentDigest === previous.contentDigest;
+  const expectedRollback = samePackage
+    ? previous.rollbackVersion
+    : previous.packageVersion;
+  assert(
+    manifest.rollbackVersion === expectedRollback,
+    samePackage
+      ? `${label}: unchanged package did not preserve its accepted rollback target.`
+      : `${label}: new package rollback does not target the previously accepted package.`
+  );
+}
