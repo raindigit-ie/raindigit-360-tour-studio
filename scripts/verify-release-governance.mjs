@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseTourConfig, tourGraphIdentity } from "./lib/tour-graph-identity.mjs";
+import { assertReleaseLineage } from "./lib/release-lineage.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -251,7 +252,13 @@ if (packageRoot) {
     assert(sha256(manifestPath) === release.manifestDigest, `${release.slug}: manifest digest differs from registry.`);
     for (const field of ["slug", "packageVersion", "contentDigest", "studioVersion", "tourVersion", "formatVersion", "runtimeVersion"])
       assert(manifest[field] === release[field], `${release.slug}: manifest ${field} differs from registry.`);
-    assert(manifest.previousTourVersion === migration.fromContract.studioVersion, `${release.slug}: package previousTourVersion is not the actual prior capability.`);
+    assertReleaseLineage({
+      manifest,
+      changelog: readJson(join(root, "CHANGELOG.json")),
+      migrationFromVersion: migration.fromContract.studioVersion,
+      migrationToVersion: migration.toContract.studioVersion,
+      label: release.slug
+    });
     const graph = tourGraphIdentity(parseTourConfig(readFileSync(configPath, "utf8"), configPath));
     const tour = active.find((candidate) => candidate.slug === release.slug);
     for (const field of [
