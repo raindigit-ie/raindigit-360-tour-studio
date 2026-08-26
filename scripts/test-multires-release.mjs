@@ -678,6 +678,87 @@ async function runBrowserQa(packageRoot, pointer) {
             recovered.state?.phase === "ready",
           `webkit-mobile did not recover from a transient base-tile failure: ${JSON.stringify(recovered)}.`,
         );
+
+        const contextRecoveryView = await page.evaluate(() => ({
+          scene: window.__tourViewer?.getScene?.(),
+          pitch: window.__tourViewer?.getPitch?.(),
+          yaw: window.__tourViewer?.getYaw?.(),
+          hfov: window.__tourViewer?.getHfov?.(),
+        }));
+        const contextRecoveryNavigation = page.waitForNavigation({
+          waitUntil: "commit",
+          timeout: 10_000,
+        });
+        const contextLossSupported = await page.evaluate(() => {
+          const canvas = Array.from(
+            document.querySelectorAll(".pnlm-render-container canvas"),
+          ).at(-1);
+          const gl =
+            canvas?.getContext("webgl") ||
+            canvas?.getContext("experimental-webgl");
+          const extension = gl?.getExtension("WEBGL_lose_context");
+          if (!extension) return false;
+          extension.loseContext();
+          return true;
+        });
+        assert(
+          contextLossSupported,
+          "webkit-mobile cannot exercise the real WEBGL_lose_context recovery contract.",
+        );
+        await page.waitForFunction(
+          () => {
+            const loader = document.querySelector("[data-tour-static-loader]");
+            const style = loader ? getComputedStyle(loader) : null;
+            const bounds = loader?.getBoundingClientRect();
+            return Boolean(
+              loader?.classList.contains("is-active") &&
+                style?.visibility !== "hidden" &&
+                Number(style?.opacity) > 0.98 &&
+                bounds &&
+                bounds.width >= innerWidth * 0.98 &&
+                bounds.height >= innerHeight * 0.98,
+            );
+          },
+          null,
+          { timeout: 2_000 },
+        );
+        await contextRecoveryNavigation;
+        await page.waitForFunction(
+          () =>
+            document.documentElement.classList.contains("is-tour-ready") &&
+            window.__rainDigitTourTransition?.state?.().phase === "ready",
+          null,
+          { timeout: 30_000 },
+        );
+        const contextRecovered = await page.evaluate(() => ({
+          scene: window.__tourViewer?.getScene?.(),
+          pitch: window.__tourViewer?.getPitch?.(),
+          yaw: window.__tourViewer?.getYaw?.(),
+          hfov: window.__tourViewer?.getHfov?.(),
+          markerPresent: new URLSearchParams(location.search).has(
+            "webgl-recovery",
+          ),
+          navigatorControls: document.querySelectorAll("#navigatorToggle")
+            .length,
+          resetControls: document.querySelectorAll("#resetView").length,
+          captureControls: document.querySelectorAll("#captureView").length,
+          fullscreenControls: document.querySelectorAll("#fullscreen").length,
+        }));
+        assert(
+          contextRecovered.scene === contextRecoveryView.scene &&
+            Math.abs(contextRecovered.pitch - contextRecoveryView.pitch) <= 0.6 &&
+            yawDistance(contextRecovered.yaw, contextRecoveryView.yaw) <= 0.6 &&
+            Math.abs(contextRecovered.hfov - contextRecoveryView.hfov) <= 0.6,
+          `webkit-mobile lost the scene/view during document-level WebGL recovery: ${JSON.stringify({ before: contextRecoveryView, after: contextRecovered })}.`,
+        );
+        assert(
+          !contextRecovered.markerPresent &&
+            contextRecovered.navigatorControls === 1 &&
+            contextRecovered.resetControls === 1 &&
+            contextRecovered.captureControls === 1 &&
+            contextRecovered.fullscreenControls === 1,
+          `webkit-mobile left a recovery marker or duplicated controls: ${JSON.stringify(contextRecovered)}.`,
+        );
       }
       const layout = await page.evaluate(() => ({
         width: innerWidth,
@@ -887,7 +968,7 @@ async function main() {
     const builder = join(projectRoot, "scripts", "build-multires-release.mjs");
     const releaseArguments = [
       "--tour-version",
-      "0.2.3",
+      studioVersion,
       "--change-summary",
       "Automated portable release contract fixture",
     ];
@@ -1020,9 +1101,9 @@ async function main() {
     );
     assert(
       manifest.schema === "raindigit-tour-multires-release/v2" &&
-        manifest.studioVersion === "0.2.3" &&
+        manifest.studioVersion === studioVersion &&
         manifest.formatVersion === "2.0.0" &&
-        manifest.runtimeVersion === "2.0.3" &&
+        manifest.runtimeVersion === "2.0.4" &&
         manifest.tourVersion === manifest.studioVersion,
       "Capability release identity is invalid.",
     );
@@ -1482,6 +1563,12 @@ async function main() {
         transitionRuntime.includes("waitForPresentedCanvas") &&
         transitionRuntime.includes("presentationSettleDelay"),
       "The release runtime can construct WebGL before the initial opaque guard or release before the physical canvas has settled.",
+    );
+    assert(
+      transitionRuntime.includes("scheduleDocumentContextRecovery") &&
+        transitionRuntime.includes('searchParams.set("webgl-recovery"') &&
+        transitionRuntime.includes("window.location.replace(recoveryUrl.href)"),
+      "The release runtime can deadlock after a real mobile WebGL context loss.",
     );
     assert(
       transitionRuntime.includes("data-tour-static-loader") &&

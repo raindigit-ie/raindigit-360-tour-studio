@@ -34,6 +34,7 @@
   let sequence = 0;
   let active = null;
   let contextLost = false;
+  let contextRecoveryScheduled = false;
   let lastStableSceneId = null;
   let prearmed = false;
 
@@ -308,6 +309,18 @@
     document.documentElement.classList.remove("is-tour-transition-boot");
     active = null;
     dispatch("complete", run);
+    // A successful, stable compositor frame resets the bounded document-level
+    // WebGL recovery allowance. Keeping the marker would make a later,
+    // unrelated context loss look like a reload loop.
+    try {
+      const stableUrl = new URL(window.location.href);
+      if (stableUrl.searchParams.has("webgl-recovery")) {
+        stableUrl.searchParams.delete("webgl-recovery");
+        history.replaceState(history.state, "", stableUrl.href);
+      }
+    } catch {
+      // Static file previews can deny History API writes; readiness remains valid.
+    }
   }
 
   function reload(run) {
@@ -329,6 +342,35 @@
     } catch {
       return false;
     }
+  }
+
+  function scheduleDocumentContextRecovery(run) {
+    if (contextRecoveryScheduled) return;
+    contextRecoveryScheduled = true;
+    const recoveryUrl = new URL(window.location.href);
+    const previousAttempts = Number(recoveryUrl.searchParams.get("webgl-recovery") || "0");
+    if (!Number.isFinite(previousAttempts) || previousAttempts >= 2) {
+      phase = "fallback";
+      dispatch("fallback", run);
+      window.__rainDigitShowRuntimeRecovery?.(
+        new Error("The 360 renderer could not recover its WebGL context."),
+      );
+      return;
+    }
+    const view = {
+      pitch: viewer?.getPitch?.(),
+      yaw: viewer?.getYaw?.(),
+      hfov: viewer?.getHfov?.(),
+    };
+    recoveryUrl.searchParams.set("scene", run.sceneId);
+    for (const [name, value] of Object.entries(view)) {
+      if (Number.isFinite(value)) recoveryUrl.searchParams.set(name, String(value));
+    }
+    recoveryUrl.searchParams.set("webgl-recovery", String(previousAttempts + 1));
+    // Pannellum cannot reliably rebuild an already-lost WebGL renderer on
+    // physical Safari. Keep the neutral compositor guard visible, then replace
+    // the document so a fresh renderer starts directly on the same scene/view.
+    setTimeout(() => window.location.replace(recoveryUrl.href), 160);
   }
 
   function canvasMatchesRun(run) {
@@ -438,11 +480,12 @@
       const run = active || guard(sceneId, sequence === 0);
       phase = "recovering";
       dispatch("context-lost", run);
+      scheduleDocumentContextRecovery(run);
     });
     canvas?.addEventListener("webglcontextrestored", () => {
       contextLost = false;
       const run = active;
-      if (run) reload(run);
+      if (run) dispatch("context-restored", run);
     });
     // `primeInitial()` has owned first paint since tour-transition loaded.
     // Reusing that run prevents the visible canvas → loader → canvas race.

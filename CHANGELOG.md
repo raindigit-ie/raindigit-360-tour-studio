@@ -2,6 +2,19 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.2.4] — 2026-08-27
+
+### Fixed
+
+- Treats a real WebGL context loss as a document-level renderer failure instead of repeatedly asking the already-lost Pannellum renderer to reload the same scene.
+- Keeps the neutral opaque guard visible while a bounded automatic reload restores the exact scene, pitch, yaw and field of view.
+- Clears the recovery marker only after stable compositor readiness and falls back to an explicit reload control rather than entering an infinite reload loop.
+
+### Verification
+
+- Exercises `WEBGL_lose_context` in mobile WebKit and requires recovery to the same requested scene/view without an uncovered intermediate frame or duplicate controls.
+- Requires all active tours to be rebuilt because this changes the public runtime capability from `2.0.3` to `2.0.4` and Studio/tour capability from `0.2.3` to `0.2.4`.
+
 ## [0.2.3] — 2026-08-26
 
 ### Improved
