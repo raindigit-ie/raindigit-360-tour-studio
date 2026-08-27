@@ -2,11 +2,11 @@
   "schema": "raindigit-active-tour-registry/v1",
   "registryVersion": 1,
   "changeId": "CHG-0005",
-  "updatedAt": "2026-08-27T00:12:23.249Z",
+  "updatedAt": "2026-08-27T09:28:49.389Z",
   "contract": {
-    "studioVersion": "0.2.4",
+    "studioVersion": "0.2.5",
     "formatVersion": "2.0.0",
-    "runtimeVersion": "2.0.4",
+    "runtimeVersion": "2.0.5",
     "verificationProfile": "raindigit-portable-tour-v2",
     "compatibilityPolicy": "exact-contract"
   },
@@ -53,65 +53,65 @@
         "origin": "https://pub-65d6a630f1c643ffab71ca4d29bcbfe4.r2.dev",
         "namespace": "dev"
       },
-      "releaseSetDigest": "91518ab4bf461c2d4fcdb1529d2dc71aced24b70c58e80b7e8b1a080cf5ba256",
+      "releaseSetDigest": "9eece3e50b14d884396bbd205dd41c1c01db8f2080c1b4edf23eac952bcb512e",
       "physicalIphoneAcceptance": null,
       "promotionBlocked": true,
       "releases": [
         {
           "slug": "killarney-360-property-tour-demo",
-          "tourVersion": "0.2.4",
-          "packageVersion": "multires-d48197020901",
-          "contentDigest": "d481970209012b23cd77df629d0a373d35dfe72399d1445f23382f64827f0648",
-          "studioVersion": "0.2.4",
+          "tourVersion": "0.2.5",
+          "packageVersion": "multires-55d8deea1753",
+          "contentDigest": "55d8deea17530cac22ffdff8dd32fb1a97ad5209ae08ff81183e593cd88a897b",
+          "studioVersion": "0.2.5",
           "formatVersion": "2.0.0",
-          "runtimeVersion": "2.0.4",
-          "manifestDigest": "94556393034680fb34067d6828bd41a3754cab8d0423fb3c703965057ceb97a4",
-          "rollbackVersion": "multires-d25a612ea2d8",
-          "prefix": "tours/killarney-360-property-tour-demo/multires-d48197020901/",
+          "runtimeVersion": "2.0.5",
+          "manifestDigest": "906d42e6fd8ce3bf4f402a9ec0741da0d78371e3b1285ec8f260513fb194119c",
+          "rollbackVersion": "multires-d48197020901",
+          "prefix": "tours/killarney-360-property-tour-demo/multires-55d8deea1753/",
           "selfContained": true,
           "changelog": {
             "human": "CHANGELOG.md",
-            "humanDigest": "31ff7391908351a3ecf392c44e9e7cd866f099f19f0a04d7f15533a922f2ddd9",
+            "humanDigest": "ac54ebde8d2615bffce01859a9d43b558ee6f6184fe99d512f61136134ded57c",
             "machine": "CHANGELOG.json",
-            "machineDigest": "ab4f997f5cd6f3f0f81614d61e005fb902fce7b473dce70ba15dbfd73c0bc25c"
+            "machineDigest": "f699846a3efdf7ca306191980ca607ae441d7c87dcdf4e70a293eef40fa8404b"
           }
         },
         {
           "slug": "killarney-home-360-tour",
-          "tourVersion": "0.2.4",
-          "packageVersion": "multires-48b476ea91e3",
-          "contentDigest": "48b476ea91e3d78b7ed2d2b10c7f02f84db95801d246352eaacefbee5b1600c5",
-          "studioVersion": "0.2.4",
+          "tourVersion": "0.2.5",
+          "packageVersion": "multires-9b638b10b120",
+          "contentDigest": "9b638b10b120efff074bd481b4f5f29782c9fca51dc951e2a824494b62cccfae",
+          "studioVersion": "0.2.5",
           "formatVersion": "2.0.0",
-          "runtimeVersion": "2.0.4",
-          "manifestDigest": "c1fee34ed26369d165cde305b09f67ee5d6236cb875582febfb1c8e458202843",
-          "rollbackVersion": "multires-70f62137b82a",
-          "prefix": "tours/killarney-home-360-tour/multires-48b476ea91e3/",
+          "runtimeVersion": "2.0.5",
+          "manifestDigest": "30ac1e7ebc7df470a0fc120f4f58b709aea3ec80daa4e0ca3003568c5d63cb7c",
+          "rollbackVersion": "multires-48b476ea91e3",
+          "prefix": "tours/killarney-home-360-tour/multires-9b638b10b120/",
           "selfContained": true,
           "changelog": {
             "human": "CHANGELOG.md",
-            "humanDigest": "dd9ad5d208263aa6a78b2ff02f0c148253f902da8a819d304ff6057ebc0cf174",
+            "humanDigest": "c79994a7907b4413b10fe97ce5a7c283689ecbf27b10b67d7272116efecf480d",
             "machine": "CHANGELOG.json",
-            "machineDigest": "f76b7cd051e18a15ff94448b9fe33c6e9b3470f8053e21ac946d27a486ab86bf"
+            "machineDigest": "1e0448664f26e3ec473b3225c65c23b88be751ad8718ae9daf852558719f5110"
           }
         },
         {
           "slug": "killarney-town-centre-360-tour",
-          "tourVersion": "0.2.4",
-          "packageVersion": "multires-e788fcbd4990",
-          "contentDigest": "e788fcbd4990a7bc7f8d8f3420ea613b5d40281be3db8f677ed825e3dbf47549",
-          "studioVersion": "0.2.4",
+          "tourVersion": "0.2.5",
+          "packageVersion": "multires-59199ff1da96",
+          "contentDigest": "59199ff1da964697b75d469a149dc91ded50b2336fd2e7f493d0bc3c6edbc423",
+          "studioVersion": "0.2.5",
           "formatVersion": "2.0.0",
-          "runtimeVersion": "2.0.4",
-          "manifestDigest": "1df60383048a6c212f8a509444ebd8b3c928477fd6094388b7ab186e951d8a43",
-          "rollbackVersion": "multires-7d7e5edd1cae",
-          "prefix": "tours/killarney-town-centre-360-tour/multires-e788fcbd4990/",
+          "runtimeVersion": "2.0.5",
+          "manifestDigest": "1c3dfe1dc2f322a548375ba9c23542422d1d88b705a6a9e0f6ad718e9d874cd3",
+          "rollbackVersion": "multires-e788fcbd4990",
+          "prefix": "tours/killarney-town-centre-360-tour/multires-59199ff1da96/",
           "selfContained": true,
           "changelog": {
             "human": "CHANGELOG.md",
-            "humanDigest": "8789471ce20c9b6f9ccbbe9c7d78501bdf8ff5aee25392261d7cc0ac8dec37a7",
+            "humanDigest": "f1604201257780f7b530351dc6d4a874d4aa48a4fcf12a5b8860875a30a0ce3b",
             "machine": "CHANGELOG.json",
-            "machineDigest": "4c30be03cef910bb93917ce987898d39ae484e0ba521d3a74fd081856466e58f"
+            "machineDigest": "166dd0ce12c8e83620d9c49541f86903a6166b003848914794662056a28ddbc4"
           }
         }
       ]
@@ -153,14 +153,14 @@
   },
   "migration": {
     "fromContract": {
-      "studioVersion": "0.2.3",
-      "formatVersion": "2.0.0",
-      "runtimeVersion": "2.0.3"
-    },
-    "toContract": {
       "studioVersion": "0.2.4",
       "formatVersion": "2.0.0",
       "runtimeVersion": "2.0.4"
+    },
+    "toContract": {
+      "studioVersion": "0.2.5",
+      "formatVersion": "2.0.0",
+      "runtimeVersion": "2.0.5"
     },
     "policy": "evaluate-every-active-tour",
     "entries": [
@@ -168,14 +168,14 @@
         "slug": "killarney-360-property-tour-demo",
         "decision": "migrated",
         "from": {
-          "tourVersion": "0.2.3",
-          "packageVersion": "multires-d25a612ea2d8",
-          "contentDigest": "d25a612ea2d880ec0e7d79a1b0bd9972f3ad4eb6d1ea0e2351c2105a658c0218"
-        },
-        "to": {
           "tourVersion": "0.2.4",
           "packageVersion": "multires-d48197020901",
           "contentDigest": "d481970209012b23cd77df629d0a373d35dfe72399d1445f23382f64827f0648"
+        },
+        "to": {
+          "tourVersion": "0.2.5",
+          "packageVersion": "multires-55d8deea1753",
+          "contentDigest": "55d8deea17530cac22ffdff8dd32fb1a97ad5209ae08ff81183e593cd88a897b"
         },
         "preservation": {
           "firstScene": "scene-005",
@@ -191,14 +191,14 @@
         "slug": "killarney-home-360-tour",
         "decision": "migrated",
         "from": {
-          "tourVersion": "0.2.3",
-          "packageVersion": "multires-70f62137b82a",
-          "contentDigest": "70f62137b82aa6dce3755a7acfc7c6019cecfe6a9eb3936fbd7fb54bb7e42cfd"
-        },
-        "to": {
           "tourVersion": "0.2.4",
           "packageVersion": "multires-48b476ea91e3",
           "contentDigest": "48b476ea91e3d78b7ed2d2b10c7f02f84db95801d246352eaacefbee5b1600c5"
+        },
+        "to": {
+          "tourVersion": "0.2.5",
+          "packageVersion": "multires-9b638b10b120",
+          "contentDigest": "9b638b10b120efff074bd481b4f5f29782c9fca51dc951e2a824494b62cccfae"
         },
         "preservation": {
           "firstScene": "scene-001",
@@ -214,14 +214,14 @@
         "slug": "killarney-town-centre-360-tour",
         "decision": "migrated",
         "from": {
-          "tourVersion": "0.2.3",
-          "packageVersion": "multires-7d7e5edd1cae",
-          "contentDigest": "7d7e5edd1caea89929dfe952265d5d4d512817c51a4eaabda76108180e0c6e79"
-        },
-        "to": {
           "tourVersion": "0.2.4",
           "packageVersion": "multires-e788fcbd4990",
           "contentDigest": "e788fcbd4990a7bc7f8d8f3420ea613b5d40281be3db8f677ed825e3dbf47549"
+        },
+        "to": {
+          "tourVersion": "0.2.5",
+          "packageVersion": "multires-59199ff1da96",
+          "contentDigest": "59199ff1da964697b75d469a149dc91ded50b2336fd2e7f493d0bc3c6edbc423"
         },
         "preservation": {
           "firstScene": "scene-021",
