@@ -200,6 +200,15 @@
     updateBaseProgress(run);
   }
 
+  function enterFallback(run, message) {
+    if (active?.token !== run.token) return;
+    phase = "fallback";
+    run.readiness = "recovery-required";
+    run.baseImages = [];
+    dispatch("fallback", run);
+    window.__rainDigitShowRuntimeRecovery?.(new Error(message));
+  }
+
   function observeTileRequest(image, source) {
     const run = active;
     if (!run || !tileMatchesRun(run, source)) return;
@@ -227,10 +236,16 @@
       if (outcome === "loaded") {
         current.tileLoaded += 1;
         if (baseFace) {
-          const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve();
-          void decoded.then(
-            () => settleBaseFace(current, baseFace, "loaded"),
-            () => settleBaseFace(current, baseFace, "failed"),
+          // `load` plus non-zero intrinsic dimensions is the browser's image
+          // resource success signal. Calling decode() again here duplicated
+          // work and Safari may reject that second promise under memory
+          // pressure even though Pannellum has already uploaded and rendered
+          // the same tile. A redundant decode rejection must never turn a
+          // successfully loaded base face into an infinite transition guard.
+          settleBaseFace(
+            current,
+            baseFace,
+            image.complete && image.naturalWidth > 0 ? "loaded" : "failed",
           );
         }
       } else {
@@ -388,6 +403,7 @@
     shell.classList.remove("is-transition-guarded");
     document.documentElement.classList.remove("is-tour-transition-boot");
     active = null;
+    run.baseImages = [];
     dispatch("complete", run);
     // A successful, stable compositor frame resets the bounded document-level
     // WebGL recovery allowance. Keeping the marker would make a later,
@@ -535,8 +551,7 @@
         performance.now() - run.tileLastFailureAt >= tileRetryDelay
       ) {
         if (!reload(run)) {
-          phase = "fallback";
-          dispatch("fallback", run);
+          enterFallback(run, "The requested panorama tiles could not be loaded after several attempts.");
           return;
         }
         void waitUntilRenderable(run);
@@ -544,8 +559,7 @@
       }
       if (viewer && run.attemptStartedAt && performance.now() - run.attemptStartedAt >= retryDelay) {
         if (!reload(run)) {
-          phase = "fallback";
-          dispatch("fallback", run);
+          enterFallback(run, "The requested panorama did not become ready after several attempts.");
           return;
         }
         void waitUntilRenderable(run);
@@ -616,7 +630,7 @@
     });
   }
 
-  document.documentElement.dataset.tourSceneTransition = "target-base-progressive-v4";
+  document.documentElement.dataset.tourSceneTransition = "target-base-progressive-v5";
   document.documentElement.dataset.tourWebglReadback = "disabled";
   const primeInitial = () => active || guard(requestedScene(), true);
   window.__rainDigitTourTransition = {

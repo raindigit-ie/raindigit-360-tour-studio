@@ -36,4 +36,20 @@ assert(
   "Transition scope must be declared before the static cold-start class is removed."
 );
 
-console.log("Transition stacking contract passed: cold start 34, controls 10, scene guard 8.");
+assert.doesNotMatch(
+  runtime,
+  /image\.decode\s*\(/,
+  "A second image.decode() must not gate an already successful base-face load in Safari."
+);
+assert.match(
+  runtime,
+  /image\.complete\s*&&\s*image\.naturalWidth\s*>\s*0/,
+  "Base-face success must use the browser load event and non-zero intrinsic dimensions."
+);
+assert.match(
+  runtime,
+  /function enterFallback[\s\S]*?__rainDigitShowRuntimeRecovery/,
+  "Exhausted tile retries must replace the spinner with the explicit runtime recovery action."
+);
+
+console.log("Transition contract passed: stacking, Safari load semantics and bounded recovery.");

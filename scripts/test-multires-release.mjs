@@ -424,7 +424,7 @@ async function runBrowserQa(packageRoot, pointer) {
         `${target.name} did not release the first-scene transition guard.`,
       );
       assert(
-        initialTransition.variant === "target-base-progressive-v4",
+        initialTransition.variant === "target-base-progressive-v5",
         `${target.name} selected ${initialTransition.variant || "no transition"}.`,
       );
       const initialComplete = initialTransition.events.find(
@@ -1126,7 +1126,7 @@ async function main() {
       manifest.schema === "raindigit-tour-multires-release/v2" &&
         manifest.studioVersion === studioVersion &&
         manifest.formatVersion === "2.0.0" &&
-        manifest.runtimeVersion === "2.0.6" &&
+        manifest.runtimeVersion === "2.0.7" &&
         manifest.tourVersion === manifest.studioVersion,
       "Capability release identity is invalid.",
     );
@@ -1585,7 +1585,7 @@ async function main() {
       "The selected target-base progressive guard runtime is incomplete.",
     );
     assert(
-      transitionRuntime.includes("target-base-progressive-v4") &&
+      transitionRuntime.includes("target-base-progressive-v5") &&
         transitionRuntime.includes('tourWebglReadback = "disabled"'),
       "The release runtime lacks the zero-readback cross-device transition guard.",
     );

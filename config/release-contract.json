@@ -1,7 +1,7 @@
 {
   "schema": "raindigit-tour-release-contract/v1",
   "formatVersion": "2.0.0",
-  "runtimeVersion": "2.0.6",
+  "runtimeVersion": "2.0.7",
   "verificationProfile": "raindigit-portable-tour-v2",
   "capabilities": [
     "standalone",
@@ -14,6 +14,9 @@
     "target-base-progressive-reveal",
     "target-base-face-telemetry",
     "bounded-scene-retry",
+    "terminal-recovery-action",
+    "safari-loaded-image-decode-tolerance",
+    "continuous-directed-hotspot-verification",
     "touch-navigation",
     "orientation-recovery",
     "tile-failure-recovery",
