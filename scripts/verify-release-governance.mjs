@@ -80,7 +80,9 @@ assert(new Set(active.map((tour) => tour.slug)).size === active.length, "Active-
 
 const dev = registry.selectors.dev;
 const prod = registry.selectors.prod;
-const productionStaged = prod.state === "staged-exact-dev-selection";
+const productionStaged =
+  prod.state === "staged-exact-dev-selection" && prod.releaseSetDigest === dev.releaseSetDigest;
+const previousProductionAccepted = prod.state === "accepted-production-selection";
 assert(dev.environment === "dev" && prod.environment === "prod", "DEV and PROD selectors must declare their environment.");
 assert(dev.resource.bucket !== prod.resource.bucket, "DEV and PROD buckets must be independent.");
 assert(dev.resource.origin !== prod.resource.origin, "DEV and PROD origins must be independent.");
@@ -106,7 +108,16 @@ if (productionStaged) {
   );
 } else {
   assert(dev.promotionBlocked === true && dev.physicalIphoneAcceptance === null, "DEV must remain promotion-blocked until physical iPhone acceptance.");
-  assert(prod.promotionBlocked === true && prod.state.startsWith("quarantined"), "The current legacy PROD selector must remain quarantined.");
+  if (previousProductionAccepted) {
+    assert(prod.promotionBlocked === false, "The accepted current PROD selection must remain available.");
+    assert(
+      prod.physicalIphoneAcceptance?.result === "pass" &&
+        prod.physicalIphoneAcceptance?.releaseSetDigest === prod.releaseSetDigest,
+      "The accepted current PROD selection is missing exact-digest physical iPhone evidence."
+    );
+  } else {
+    assert(prod.promotionBlocked === true && prod.state.startsWith("quarantined"), "The current legacy PROD selector must remain quarantined.");
+  }
 }
 assert(attestation.releaseSetDigest === dev.releaseSetDigest, "DEV attestation release-set digest is stale.");
 assert(exactSlugs(attestation.packages) === exactSlugs(dev.releases), "DEV attestation package set is incomplete.");
@@ -191,7 +202,7 @@ for (const release of prod.releases) {
     );
     for (const field of ["studioVersion", "tourVersion", "formatVersion", "runtimeVersion"])
       assert(release[field] === accepted[field], `${release.slug}: staged PROD ${field} differs from DEV.`);
-  } else {
+  } else if (!previousProductionAccepted) {
     assert(release.contractStatus === "legacy-blocked", `${release.slug}: current PROD release must stay blocked until migration acceptance.`);
   }
 }

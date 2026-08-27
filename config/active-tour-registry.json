@@ -2,7 +2,7 @@
   "schema": "raindigit-active-tour-registry/v1",
   "registryVersion": 1,
   "changeId": "CHG-0005",
-  "updatedAt": "2026-08-27T14:09:05.085Z",
+  "updatedAt": "2026-08-27T14:11:56.023Z",
   "contract": {
     "studioVersion": "0.2.6",
     "formatVersion": "2.0.0",
@@ -118,7 +118,7 @@
     },
     "prod": {
       "environment": "prod",
-      "state": "staged-exact-dev-selection",
+      "state": "accepted-production-selection",
       "resource": {
         "provider": "cloudflare-r2",
         "bucket": "raindigit-tours",
@@ -212,9 +212,9 @@
   },
   "migration": {
     "fromContract": {
-      "studioVersion": "0.2.5",
+      "studioVersion": "0.2.6",
       "formatVersion": "2.0.0",
-      "runtimeVersion": "2.0.5"
+      "runtimeVersion": "2.0.6"
     },
     "toContract": {
       "studioVersion": "0.2.6",
@@ -227,9 +227,9 @@
         "slug": "killarney-360-property-tour-demo",
         "decision": "migrated",
         "from": {
-          "tourVersion": "0.2.5",
-          "packageVersion": "multires-55d8deea1753",
-          "contentDigest": "55d8deea17530cac22ffdff8dd32fb1a97ad5209ae08ff81183e593cd88a897b"
+          "tourVersion": "0.2.6",
+          "packageVersion": "multires-f6037ee0ff5c",
+          "contentDigest": "f6037ee0ff5c76e8caacb37924f2a7d8793a5e1847e89b92a399e101d729d849"
         },
         "to": {
           "tourVersion": "0.2.6",
@@ -250,9 +250,9 @@
         "slug": "killarney-home-360-tour",
         "decision": "migrated",
         "from": {
-          "tourVersion": "0.2.5",
-          "packageVersion": "multires-9b638b10b120",
-          "contentDigest": "9b638b10b120efff074bd481b4f5f29782c9fca51dc951e2a824494b62cccfae"
+          "tourVersion": "0.2.6",
+          "packageVersion": "multires-e3e9de4fa0d3",
+          "contentDigest": "e3e9de4fa0d3b852d37bfce65218e71f78c332ae32b4da544efd9a89fcbd714a"
         },
         "to": {
           "tourVersion": "0.2.6",
@@ -273,9 +273,9 @@
         "slug": "killarney-town-centre-360-tour",
         "decision": "migrated",
         "from": {
-          "tourVersion": "0.2.5",
-          "packageVersion": "multires-59199ff1da96",
-          "contentDigest": "59199ff1da964697b75d469a149dc91ded50b2336fd2e7f493d0bc3c6edbc423"
+          "tourVersion": "0.2.6",
+          "packageVersion": "multires-7e4c90b736e6",
+          "contentDigest": "7e4c90b736e612bfafce69e36e02fad2cc9a29d95e071d42e89bef9b45e9139d"
         },
         "to": {
           "tourVersion": "0.2.6",

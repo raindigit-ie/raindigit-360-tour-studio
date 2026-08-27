@@ -89,6 +89,17 @@ registry.selectors.dev = {
   promotionBlocked: true,
   releases
 };
+const previousProd = registry.selectors.prod;
+const previousProdAcceptanceIsValid =
+  previousProd.physicalIphoneAcceptance?.result === "pass" &&
+  previousProd.physicalIphoneAcceptance?.releaseSetDigest === previousProd.releaseSetDigest;
+if (
+  previousProd.state === "staged-exact-dev-selection" &&
+  previousProd.releaseSetDigest !== ledger.dev.releaseSetDigest &&
+  previousProdAcceptanceIsValid
+) {
+  previousProd.state = "accepted-production-selection";
+}
 registry.migration = {
   fromContract: {
     studioVersion: previousContract.studioVersion,
