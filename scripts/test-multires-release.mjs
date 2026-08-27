@@ -1126,7 +1126,7 @@ async function main() {
       manifest.schema === "raindigit-tour-multires-release/v2" &&
         manifest.studioVersion === studioVersion &&
         manifest.formatVersion === "2.0.0" &&
-        manifest.runtimeVersion === "2.0.7" &&
+        manifest.runtimeVersion === "2.0.8" &&
         manifest.tourVersion === manifest.studioVersion,
       "Capability release identity is invalid.",
     );
@@ -1518,6 +1518,22 @@ async function main() {
       join(releaseRoot, "index.html"),
       "utf8",
     );
+    const monitoringRuntime = await readFile(
+      join(releaseRoot, "js", "tour-monitoring.js"),
+      "utf8",
+    );
+    assert(
+      releaseEntrypoint.includes("data-tour-monitoring-config") &&
+        releaseEntrypoint.includes('"enabled":true') &&
+        releaseEntrypoint.includes('"productionOrigins":["https://cdn.raindigit.ie"]') &&
+        releaseEntrypoint.includes("ingest.de.sentry.io/4511985294901328"),
+      "A production package can be built without canonical exact-origin monitoring.",
+    );
+    assert(
+      monitoringRuntime.includes("__rainDigitTourMonitoring") &&
+        monitoringRuntime.includes("captureTerminal"),
+      "The portable release is missing its semantic terminal-error boundary.",
+    );
     assert(
       releaseEntrypoint.includes("data-runtime-style-loader"),
       "Runtime stylesheets are not loaded after the inline first frame.",
@@ -1686,6 +1702,11 @@ async function main() {
       releaseEntrypoint,
       "js/tour-chrome.js",
       join(releaseRoot, "js", "tour-chrome.js"),
+    );
+    await assertContentVersion(
+      releaseEntrypoint,
+      "js/tour-monitoring.js",
+      join(releaseRoot, "js", "tour-monitoring.js"),
     );
     await assertContentVersion(
       releaseEntrypoint,

@@ -94,12 +94,12 @@ export async function assertPortableRelease(root, config) {
   if (config.scenes.some((scene) => /^https?:\/\//i.test(scene.thumb || "") || /^https?:\/\//i.test(scene.panorama || "") || /^https?:\/\//i.test(scene.multiRes?.basePath || ""))) {
     throw new Error("Portable release contains an external scene-media dependency.");
   }
-  const required = ["index.html", "css/pannellum.css", "css/tour.css", "js/pannellum.js", "js/tour-bootstrap.js", "js/tour-config.js", "js/tour-transition.js", "js/tour.js", "CHANGELOG.json", "CHANGELOG.md", "INSTALL.txt"];
+  const required = ["index.html", "css/pannellum.css", "css/tour.css", "js/pannellum.js", "js/tour-bootstrap.js", "js/tour-config.js", "js/tour-monitoring.js", "js/generated/sentry-browser-10.71.0.min.js", "js/tour-transition.js", "js/tour.js", "CHANGELOG.json", "CHANGELOG.md", "INSTALL.txt"];
   await Promise.all(required.map(async (path) => {
     const body = await readFile(join(root, path));
     if (body.byteLength === 0) throw new Error(`Portable release file is empty: ${path}`);
   }));
-  const sources = await Promise.all(["index.html", "js/tour-bootstrap.js", "js/tour-config.js"].map(async (path) => [path, await readFile(join(root, path), "utf8")]));
+  const sources = await Promise.all(["index.html", "js/tour-bootstrap.js", "js/tour-config.js", "js/tour-monitoring.js"].map(async (path) => [path, await readFile(join(root, path), "utf8")]));
   for (const [path, source] of sources) {
     for (const match of source.matchAll(/(?:src|href|basePath|thumb|panorama)["']?\s*[:=]\s*["']([^"']+)/g)) {
       const reference = match[1];

@@ -2,6 +2,36 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.2.8] — 2026-08-27
+
+### Added
+
+- Adds a dedicated production error boundary for immutable tour packages.
+- Loads the pinned Sentry browser adapter only after an eligible terminal
+  runtime failure; healthy loads and individual tile retries make no Sentry
+  request.
+- Separates the tour runtime project from site monitoring while tagging the
+  exact tour, runtime, Studio, package and sanitized embed hostname.
+
+### Safety and quota controls
+
+- Requires an exact HTTPS production-origin allowlist embedded at build time;
+  localhost, Pages previews, R2 DEV URLs and unknown customer hosts remain
+  inert even when a public DSN is present.
+- Disables default integrations, sessions, traces, logs, breadcrumbs and PII,
+  removes URL queries/fragments and bounds both the queue and deduplication
+  state.
+- Treats only exhausted bootstrap, scene-transition and WebGL recovery plus
+  uncaught errors and unhandled rejections as reportable. Tile-level failures
+  remain local recovery signals.
+
+### Migration
+
+- This is a runtime capability change from `2.0.7` to `2.0.8`; every active
+  tour must be rebuilt or runtime-revised, verified on DEV and a physical
+  iPhone, then promoted by immutable digest. Existing 0.2.7 attestations are
+  intentionally invalid until that fleet migration is complete.
+
 ## [0.2.5] — 2026-08-27
 
 ### Fixed

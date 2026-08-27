@@ -30,6 +30,11 @@
 
   function showRuntimeRecovery(error) {
     console.error(error);
+    window.__rainDigitTourMonitoring?.captureTerminal(
+      "bootstrap-failure",
+      error,
+      { phase: "bootstrap" },
+    );
     document.documentElement.classList.remove("is-tour-transition-boot");
     document.querySelector("[data-tour-static-loader]")?.remove();
     document.body.dataset.tourError = "true";

@@ -7,6 +7,14 @@ import { basename, dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
+import { releaseIdentity } from "./lib/release-contract.mjs";
+import {
+  configureTourMonitoringEntrypoint,
+  productionTourMonitoringEnvironment,
+  sentryBrowserBundle,
+  tourMonitoringRuntimeBundle,
+  tourMonitoringConfig,
+} from "./lib/tour-monitoring-contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -443,6 +451,9 @@ async function copyRuntime(output) {
   await mkdir(join(output, "js"), { recursive: true });
   await cp(join(source, "js", "pannellum.js"), join(output, "js", "pannellum.js"));
   await cp(join(source, "js", "tour-bootstrap-release.js"), join(output, "js", "tour-bootstrap.js"));
+  await cp(join(source, tourMonitoringRuntimeBundle), join(output, "js", "tour-monitoring.js"));
+  await mkdir(join(output, "js", "generated"), { recursive: true });
+  await cp(join(source, sentryBrowserBundle), join(output, sentryBrowserBundle));
   await cp(join(source, "js", "tour-transition.js"), join(output, "js", "tour-transition.js"));
   const studioRuntime = await readFile(join(source, "js", "tour.js"), "utf8");
   const stripStart = "/* RELEASE_STRIP_START: local editor bridge */";
@@ -511,20 +522,30 @@ async function createSingleHtml(output, project, singlePath) {
   if (singleProject.map?.enabled === true && singleProject.map.asset) {
     singleProject.map.asset = await dataUrl(join(output, singleProject.map.asset), "image/jpeg");
   }
-  const [template, pannellumCss, tourCss, pannellumJs, tourJs, logo] = await Promise.all([
+  const [templateSource, pannellumCss, tourCss, pannellumJs, tourJs, monitoringJs, logo] = await Promise.all([
     readFile(join(output, "index.html"), "utf8"),
     readFile(join(output, "css", "pannellum.css"), "utf8"),
     readFile(join(output, "css", "tour.css"), "utf8"),
     readFile(join(output, "js", "pannellum.js"), "utf8"),
     readFile(join(output, "js", "tour.js"), "utf8"),
+    readFile(join(output, "js", "tour-monitoring.js"), "utf8"),
     dataUrl(join(output, "assets", "raindigit-mark.svg"), "image/svg+xml")
   ]);
+  let template = templateSource;
+  if (template.includes('"enabled":true')) {
+    const sdkDataUrl = await dataUrl(join(output, sentryBrowserBundle), "text/javascript");
+    template = template.replace(
+      /"sdkUrl":"[^"]+"/,
+      `"sdkUrl":${JSON.stringify(sdkDataUrl)}`,
+    );
+  }
   const configJs = `window.TOUR_CONFIG = ${JSON.stringify(singleProject)};`;
   const runtimeDataUrl = `data:text/javascript;base64,${Buffer.from(`${configJs}\n${pannellumJs}\n${tourJs}`, "utf8").toString("base64")}`;
   const html = compactHtml(template
     .replace(/<link rel="stylesheet" href="css\/pannellum\.css[^"]*" \/>/, `<style>${minifyCss(pannellumCss)}</style>`)
     .replace(/<link rel="stylesheet" href="css\/tour\.css[^"]*" \/>/, `<style>${minifyCss(tourCss)}</style>`)
     .replace('src="assets/raindigit-mark.svg"', `src="${logo}"`)
+    .replace(/<script defer src="js\/tour-monitoring\.js[^"]*"><\/script>/, `<script>${inlineScript(monitoringJs)}</script>`)
     .replace(/<script(?: defer)? src="js\/tour-bootstrap\.js[^"]*"><\/script>/, `<script src="${runtimeDataUrl}"></script>`));
   assert(!/\n/.test(html), "Single-file release must stay on one line.");
   assert(!/<(?:link|script)[^>]+(?:href|src)="(?!data:|https?:|#)/i.test(html), "Single-file release still has a local runtime dependency.");
@@ -580,6 +601,20 @@ async function main() {
     }
     totalBytes += await buildFloorplan(project, workspace, options.output, temporaryRoot);
     await writeFile(join(options.output, "js", "tour-config.js"), `window.TOUR_CONFIG = ${JSON.stringify(project)};\n`, "utf8");
+    const identity = releaseIdentity({});
+    const slug = String(project.slug || project.title)
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "portable-tour";
+    await configureTourMonitoringEntrypoint(
+      join(options.output, "index.html"),
+      tourMonitoringConfig({
+        identity,
+        slug,
+        environment: productionTourMonitoringEnvironment(),
+      }),
+    );
     await versionTourRuntime(options.output);
     await rm(temporaryRoot, { recursive: true, force: true });
     if (options.zip) await createZip(options.output, options.zip);

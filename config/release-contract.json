@@ -1,7 +1,7 @@
 {
   "schema": "raindigit-tour-release-contract/v1",
   "formatVersion": "2.0.0",
-  "runtimeVersion": "2.0.7",
+  "runtimeVersion": "2.0.8",
   "verificationProfile": "raindigit-portable-tour-v2",
   "capabilities": [
     "standalone",
@@ -21,6 +21,7 @@
     "orientation-recovery",
     "tile-failure-recovery",
     "webgl-document-recovery",
+    "production-error-monitoring-v1",
     "persistent-controls-during-transition",
     "content-versioned-runtime",
     "parallel-runtime-preload",

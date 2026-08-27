@@ -23,6 +23,13 @@ import {
   writeReleaseChangelog,
 } from "./lib/release-contract.mjs";
 import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
+import {
+  configureTourMonitoringEntrypoint,
+  productionTourMonitoringEnvironment,
+  sentryBrowserBundle,
+  tourMonitoringRuntimeBundle,
+  tourMonitoringConfig,
+} from "./lib/tour-monitoring-contract.mjs";
 
 function parseArguments(argv) {
   const options = {
@@ -228,6 +235,10 @@ async function main() {
     ].includes(sourceManifest.schema),
     "Source package is not a supported multires release.",
   );
+  const identity = releaseIdentity({
+    tourVersion: options.tourVersion,
+    previousTourVersion: options.previousTourVersion,
+  });
   const sourceRelease = dirname(manifests[0]);
   const temporary = await mkdtemp(
     join(tmpdir(), "raindigit-runtime-revision-"),
@@ -288,6 +299,14 @@ async function main() {
       "The production-shell first frame could not be installed.",
     );
     await writeFile(join(stagedRelease, "index.html"), revisedIndex, "utf8");
+    await configureTourMonitoringEntrypoint(
+      join(stagedRelease, "index.html"),
+      tourMonitoringConfig({
+        identity,
+        slug: sourceManifest.slug,
+        environment: productionTourMonitoringEnvironment(),
+      }),
+    );
     await rm(join(stagedRelease, "js", "tour-chrome.js"), { force: true });
 
     const runtimeSource = await readFile(
@@ -306,6 +325,15 @@ async function main() {
     await cp(
       join(options.runtimeTemplate, "js", "tour-transition.js"),
       join(stagedRelease, "js", "tour-transition.js"),
+    );
+    await cp(
+      join(options.runtimeTemplate, tourMonitoringRuntimeBundle),
+      join(stagedRelease, "js", "tour-monitoring.js"),
+    );
+    await mkdir(join(stagedRelease, "js", "generated"), { recursive: true });
+    await cp(
+      join(options.runtimeTemplate, sentryBrowserBundle),
+      join(stagedRelease, sentryBrowserBundle),
     );
     await cp(
       join(options.runtimeTemplate, "assets", "raindigit-mark.svg"),
@@ -381,10 +409,6 @@ async function main() {
       return sum + (file?.bytes || 0);
     }, 0);
     const generatedAt = new Date().toISOString();
-    const identity = releaseIdentity({
-      tourVersion: options.tourVersion,
-      previousTourVersion: options.previousTourVersion,
-    });
     const manifest = {
       ...sourceManifest,
       schema: "raindigit-tour-multires-release/v2",

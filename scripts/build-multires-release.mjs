@@ -30,6 +30,13 @@ import {
   releaseIdentity,
   writeReleaseChangelog,
 } from "./lib/release-contract.mjs";
+import {
+  injectTourMonitoringConfig,
+  productionTourMonitoringEnvironment,
+  sentryBrowserBundle,
+  tourMonitoringRuntimeBundle,
+  tourMonitoringConfig,
+} from "./lib/tour-monitoring-contract.mjs";
 import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -530,6 +537,7 @@ async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
       "css/tour.css",
       "js/tour-chrome.js",
       "js/tour-bootstrap.js",
+      "js/tour-monitoring.js",
       "js/pannellum.js",
       "js/tour-transition.js",
       "js/tour.js",
@@ -635,6 +643,14 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
     cp(
       join(templateRoot, "js", "tour-bootstrap.js"),
       join(stagedRoot, "js", "tour-bootstrap.js"),
+    ),
+    cp(
+      join(templateRoot, tourMonitoringRuntimeBundle),
+      join(stagedRoot, "js", "tour-monitoring.js"),
+    ),
+    cp(
+      join(templateRoot, sentryBrowserBundle),
+      join(stagedRoot, sentryBrowserBundle),
     ),
   ]);
 
@@ -780,6 +796,10 @@ async function main() {
     );
     await writeFile(pannellumPath, patchedPannellum, "utf8");
     const project = readTourConfig(await readFile(configPath, "utf8"));
+    const identity = releaseIdentity({
+      tourVersion: options.tourVersion,
+      previousTourVersion: options.previousTourVersion,
+    });
     const firstSceneSource = join(
       stagedRoot,
       project.scenes.find((scene) => scene.id === project.firstScene)
@@ -871,7 +891,15 @@ async function main() {
       entrypointWithPreview !== entrypointSource,
       "The first-frame preview could not be inserted into the tour entrypoint.",
     );
-    await writeFile(entrypointPath, entrypointWithPreview, "utf8");
+    const monitoredEntrypoint = injectTourMonitoringConfig(
+      entrypointWithPreview,
+      tourMonitoringConfig({
+        identity,
+        slug: options.slug,
+        environment: productionTourMonitoringEnvironment(),
+      }),
+    );
+    await writeFile(entrypointPath, monitoredEntrypoint, "utf8");
     const changelog = await writeReleaseChangelog(stagedRoot, {
       slug: options.slug,
       title: project.title,
@@ -925,10 +953,6 @@ async function main() {
         targetHfov: hotspot.targetHfov,
       })),
     );
-    const identity = releaseIdentity({
-      tourVersion: options.tourVersion,
-      previousTourVersion: options.previousTourVersion,
-    });
     const manifest = {
       schema: "raindigit-tour-multires-release/v2",
       title: project.title,

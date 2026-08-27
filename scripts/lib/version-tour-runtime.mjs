@@ -55,6 +55,7 @@ export async function versionTourRuntime(root) {
   const entrypointFiles = new Map([
     ["css/pannellum.css", join(root, "css", "pannellum.css")],
     ["css/tour.css", join(root, "css", "tour.css")],
+    ["js/tour-monitoring.js", join(root, "js", "tour-monitoring.js")],
     ["js/tour-bootstrap.js", bootstrapPath]
   ]);
   const chromePath = join(root, "js", "tour-chrome.js");

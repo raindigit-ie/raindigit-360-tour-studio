@@ -87,11 +87,18 @@
       </section>
     </main>
 
+    <script data-tour-monitoring-config>window.TOUR_MONITORING_CONFIG=Object.freeze({"schema":"raindigit-tour-monitoring/v1","enabled":false,"dsn":"","environment":"production","productionOrigins":[],"sdkUrl":"js/generated/sentry-browser-10.71.0.min.js","release":"raindigit-tour-runtime@development","studioVersion":"development","runtimeVersion":"development","tourVersion":"development","slug":"local-preview"})</script>
+    <script defer src="js/tour-monitoring.js?v=20260827-production-errors-v1"></script>
     <script data-runtime-recovery-boundary="bootstrap-failure-v2">
       (() => {
         "use strict";
         const recover = (error) => {
           console.error(error);
+          window.__rainDigitTourMonitoring?.captureTerminal(
+            "bootstrap-failure",
+            error,
+            { phase: "bootstrap" },
+          );
           document.documentElement.classList.remove("is-tour-transition-boot");
           document.querySelector("[data-tour-static-loader]")?.remove();
           document.body.dataset.tourError = "true";

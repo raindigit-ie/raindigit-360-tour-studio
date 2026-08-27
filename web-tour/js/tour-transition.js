@@ -206,6 +206,19 @@
     run.readiness = "recovery-required";
     run.baseImages = [];
     dispatch("fallback", run);
+    window.__rainDigitTourMonitoring?.captureTerminal(
+      "scene-transition-failure",
+      new Error(message),
+      {
+        phase,
+        sceneId: run.sceneId,
+        sourceSceneId: run.sourceSceneId,
+        retryCount: run.retryCount,
+        baseRequired: baseFaces.length,
+        baseLoaded: run.baseLoaded.size,
+        baseFailed: run.baseFailed.size,
+      },
+    );
     window.__rainDigitShowRuntimeRecovery?.(new Error(message));
   }
 
@@ -455,6 +468,15 @@
     if (!Number.isFinite(previousAttempts) || previousAttempts >= 2) {
       phase = "fallback";
       dispatch("fallback", run);
+      window.__rainDigitTourMonitoring?.captureTerminal(
+        "webgl-recovery-exhausted",
+        new Error("The 360 renderer could not recover its WebGL context."),
+        {
+          phase,
+          sceneId: run.sceneId,
+          recoveryAttempts: Number.isFinite(previousAttempts) ? previousAttempts : "invalid",
+        },
+      );
       window.__rainDigitShowRuntimeRecovery?.(
         new Error("The 360 renderer could not recover its WebGL context."),
       );
@@ -592,6 +614,7 @@
     if (active?.initial) active.attemptStartedAt ||= Math.max(0, performance.now() - 500);
     else guard(viewer.getScene?.() || requestedScene(), true);
     viewer.on("scenechange", (sceneId) => {
+      window.__rainDigitTourMonitoring?.setScene(sceneId);
       if (active?.sceneId === sceneId || (!active && lastStableSceneId === sceneId)) return;
       guard(sceneId, false);
     });

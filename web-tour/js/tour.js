@@ -823,6 +823,7 @@ window.addEventListener("message", (event) => {
 });
 
 viewer.on("scenechange", (sceneId) => {
+  window.__rainDigitTourMonitoring?.setScene(sceneId);
   setActiveScene(sceneId);
   applySceneAdjustment(sceneId);
   emitTourDebug("runtime-scene-change", navigationHotspotInventory(sceneId));
