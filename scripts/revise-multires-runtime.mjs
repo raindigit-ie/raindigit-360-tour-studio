@@ -367,24 +367,19 @@ async function main() {
         `Runtime revision changed media: ${path}`,
       );
 
-    const sourceFiles = new Map(
-      sourceManifest.files.map((file) => [file.path, file]),
-    );
-    const sourceShellCriticalBytes =
-      sourceManifest.performance.criticalFiles.reduce(
-        (sum, path) => sum + (sourceFiles.get(path)?.bytes || 0),
-        0,
-      );
-    const dependencyCriticalBytes = 0;
-    const criticalBytes = sourceManifest.performance.criticalFiles.reduce(
-      (sum, path) => {
-        const file =
-          files.find((candidate) => candidate.path === path) ||
-          sourceFiles.get(path);
-        return sum + (file?.bytes || 0);
-      },
-      dependencyCriticalBytes,
-    );
+    const sourceFiles = new Map(sourceManifest.files.map((file) => [file.path, file]));
+    const revisedFiles = new Map(files.map((file) => [file.path, file]));
+    const criticalFiles = [
+      ...new Set([
+        ...sourceManifest.performance.criticalFiles,
+        "js/tour-chrome.js",
+        "js/tour-transition.js",
+      ]),
+    ].filter((path) => revisedFiles.has(path) || sourceFiles.has(path));
+    const criticalBytes = criticalFiles.reduce((sum, path) => {
+      const file = revisedFiles.get(path) || sourceFiles.get(path);
+      return sum + (file?.bytes || 0);
+    }, 0);
     const generatedAt = new Date().toISOString();
     const identity = releaseIdentity({
       tourVersion: options.tourVersion,
@@ -425,7 +420,7 @@ async function main() {
             },
           }
         : {}),
-      performance: { ...sourceManifest.performance, criticalBytes },
+      performance: { ...sourceManifest.performance, criticalFiles, criticalBytes },
     };
     delete manifest.mediaDependency;
     assert(
