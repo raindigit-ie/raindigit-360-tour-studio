@@ -11,9 +11,9 @@
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "e396b0a73d81cdbb102ccdf226cabc510fe09ca8302e72776653181adf1652df"
+    "sha256": "917ff3134bc99e892cd515908704636d75a26471ad38739dab2a1e3e671af108"
   },
-  "migrationMatrixDigest": "1a5a563dce1df45182d108495369140b1b49b2cf411405c4a9e5a2b9b38fa371",
+  "migrationMatrixDigest": "8e599a8eb61a951d346fc521d8fbb37cddf75369d0c726b981336fdf6181c8cf",
   "contract": {
     "studioVersion": "0.2.5",
     "tourVersion": "0.2.5",
@@ -125,18 +125,30 @@
       }
     ],
     "physicalIphoneAcceptance": {
-      "result": "pending",
-      "requiredFor": "prod",
-      "releaseSetDigest": "9eece3e50b14d884396bbd205dd41c1c01db8f2080c1b4edf23eac952bcb512e"
+      "schema": "raindigit-tour-physical-acceptance/v1",
+      "id": "IPHONE-9eece3e50b14",
+      "releaseSetDigest": "9eece3e50b14d884396bbd205dd41c1c01db8f2080c1b4edf23eac952bcb512e",
+      "result": "pass",
+      "device": "Vee · physical iPhone 16 Pro Max · iOS 26.6 (23G71)",
+      "browser": "Safari 26.6",
+      "checkedAt": "2026-08-27T09:49:50.172Z",
+      "acceptedBy": "Максим · owner",
+      "siteCommit": "b134a5baebd53a1b04128ff90effb0e3a1ff4b51",
+      "studioCommit": "133dccf6a9a161eac9db81a665d19f9e211c5f1e",
+      "studioAttestationDigest": "e4bf72f118585c98c2f06c57cb80b516162aeeee5a5710b85864d292e693ecdd",
+      "deploymentOrigin": "https://424a8f78.rain-digit-dev.pages.dev",
+      "checks": [
+        "first-frame",
+        "touch",
+        "scene-transition",
+        "rotation",
+        "recovery"
+      ]
     }
   },
   "promotion": {
-    "blocked": true,
-    "reasons": [
-      "physical-iphone-safari-acceptance-pending",
-      "prod-selector-quarantined",
-      "separate-prod-credential-boundary-not-yet-proven"
-    ]
+    "blocked": false,
+    "reasons": []
   },
-  "attestationDigest": "e4bf72f118585c98c2f06c57cb80b516162aeeee5a5710b85864d292e693ecdd"
+  "attestationDigest": "864dff57804c3914da57bf3b9441f953af9344455ff669dbc79fc815a41280c3"
 }
