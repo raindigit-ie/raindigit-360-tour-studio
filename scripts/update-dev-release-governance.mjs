@@ -45,6 +45,8 @@ const studioPackage = readJson(join(projectRoot, "package.json"));
 const contract = readJson(join(projectRoot, "config/release-contract.json"));
 const previousContract = structuredClone(registry.contract);
 const previousReleases = structuredClone(registry.selectors.dev.releases);
+const previousMigration = structuredClone(registry.migration);
+const previousDevDigest = registry.selectors.dev.releaseSetDigest;
 const createdAt = new Date().toISOString();
 
 const releases = ledger.dev.releases.map((selected) => {
@@ -100,7 +102,17 @@ if (
 ) {
   previousProd.state = "accepted-production-selection";
 }
-registry.migration = {
+const sameDevSelection =
+  previousDevDigest === ledger.dev.releaseSetDigest &&
+  releases.every((selected) => {
+    const previous = previousReleases.find((entry) => entry.slug === selected.slug);
+    return (
+      previous?.packageVersion === selected.packageVersion &&
+      previous?.contentDigest === selected.contentDigest &&
+      previous?.manifestDigest === selected.manifestDigest
+    );
+  });
+registry.migration = sameDevSelection ? previousMigration : {
   fromContract: {
     studioVersion: previousContract.studioVersion,
     formatVersion: previousContract.formatVersion,
