@@ -180,7 +180,17 @@ const evidence = [
   ["visible-sequence-mobile-webkit", { cases: 6 }],
   ["fault-recovery-chromium", { tours: 3 }],
   ["fault-recovery-mobile-webkit", { tours: 3 }],
-  ["saved-arrival-graph-mobile-webkit", { directedTransitions: 186 }],
+  ["safari-loaded-image-decode-tolerance-mobile-webkit", { tours: 3 }],
+  ["terminal-recovery-action-mobile-webkit", { sharedRuntimePackages: 3 }],
+  ["remote-immutable-object-integrity", { objects: 23836 }],
+  ["saved-arrival-graph-mobile-webkit", {
+    directedTransitions: 186,
+    actualPointerTransitions: 244,
+    passes: 2,
+    navigatorJumps: 1,
+    apiSceneResets: 0,
+    documentReloads: 0
+  }],
   ["two-scene-portability-and-embed"],
   ["cold-load-performance", { directCases: 6, storyEmbeds: 6, directBudgetMs: 12000, storyBudgetMs: 15000 }]
 ].map(([id, details = {}]) => ({ id, result: "pass", ...details }));

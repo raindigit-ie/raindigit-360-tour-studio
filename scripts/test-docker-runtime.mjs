@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
 import sharp from "sharp";
+import { studioVersion } from "./lib/release-contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const image = process.argv[2] || process.env.RAINDIGIT_STUDIO_IMAGE || "raindigit-360-tour-studio:local";
@@ -151,7 +152,7 @@ try {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       slug: "docker-runtime-verification",
-      tourVersion: "0.2.5",
+      tourVersion: studioVersion,
       changeSummary: "Initial container verification release"
     })
   });

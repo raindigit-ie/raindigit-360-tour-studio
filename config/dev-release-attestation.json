@@ -1,55 +1,55 @@
 {
   "schema": "raindigit-tour-release-attestation/v1",
-  "attestationId": "ATT-CHG-0005-DEV-1c9b5e2fc104",
+  "attestationId": "ATT-CHG-0005-DEV-48a5fdca3436",
   "changeId": "CHG-0005",
   "environment": "dev",
   "status": "complete-dev-candidate",
-  "createdAt": "2026-08-27T14:30:18.294Z",
+  "createdAt": "2026-08-27T18:01:39.428Z",
   "actor": {
     "id": "codex-root",
     "role": "release-verifier"
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "3efce7eda241200d57386b6bb608e0e3690e7c6a0b0c0119a6631ee91574f996"
+    "sha256": "07f0ffc5cc7336e9e2c48b080602b0a48516338ce10102e312ef468ef25778ee"
   },
-  "migrationMatrixDigest": "28ba48e026f08c086a568d0230f78b9489ed42ec59d620db82ca2e55215ab3aa",
+  "migrationMatrixDigest": "8b0754b34ab09aa3c712400b13594d3bcd75ad2ab89ff770be61c94cb2b56b35",
   "contract": {
-    "studioVersion": "0.2.6",
-    "tourVersion": "0.2.6",
+    "studioVersion": "0.2.7",
+    "tourVersion": "0.2.7",
     "formatVersion": "2.0.0",
-    "runtimeVersion": "2.0.6",
+    "runtimeVersion": "2.0.7",
     "verificationProfile": "raindigit-portable-tour-v2"
   },
-  "releaseSetDigest": "1c9b5e2fc104b0af87cbcfde92e019f5e5b4c04973db9760e4fac5f84db3ff8f",
+  "releaseSetDigest": "48a5fdca34366b52321ba68a4236daac55535d5802499084ce220ac2741749c1",
   "packages": [
     {
       "slug": "killarney-360-property-tour-demo",
-      "packageVersion": "multires-f6037ee0ff5c",
-      "contentDigest": "f6037ee0ff5c76e8caacb37924f2a7d8793a5e1847e89b92a399e101d729d849",
-      "manifestDigest": "f6e993756fa6aa020e400f2876f0ac8573bd4b620f062f2204b9d4fee0e2a421",
-      "humanChangelogDigest": "2d0bf55eb8bd738214abca53f6bc5d6c8161c10ee5d7ffa6f2356b289e97a0a6",
-      "machineChangelogDigest": "e225a751d297e8bf7314095808ecd41a1e02ac2e64e7dec6f045ead760efab4c",
+      "packageVersion": "multires-5a05aff0d4b5",
+      "contentDigest": "5a05aff0d4b56ea9ca845fc4099cb0f35e06ca6d1aef4fb76e97493254850621",
+      "manifestDigest": "c0a1a1115042997b53bdfc0ef737d76ee727050e2710361400c68f9f9029fd1a",
+      "humanChangelogDigest": "5f5010dd4c81df506a885605fde7744f846db7d25a4d35425bc3b7b82d6e56a6",
+      "machineChangelogDigest": "eebe50ff3bd5f552675d9e5e96abbf56ef51286f3cb18a1fcb98f874870a89f5",
       "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
       "savedArrivalViewsDigest": "619c5a99f9032839a1385110fa8ee616db9bc1238e1066be5572256f793e1a25"
     },
     {
       "slug": "killarney-home-360-tour",
-      "packageVersion": "multires-e3e9de4fa0d3",
-      "contentDigest": "e3e9de4fa0d3b852d37bfce65218e71f78c332ae32b4da544efd9a89fcbd714a",
-      "manifestDigest": "53a5c18b85bf75fb02b342826bfe69182acb0ebfb54d0c01981d3f4e08fce027",
-      "humanChangelogDigest": "62f6183e25acebe24c350acf6618b23c00be21b411ce8ea89ef951c6d7fe7234",
-      "machineChangelogDigest": "30f8977258cdc3efb8c28bcd63138beb3c4b0fbadace0d9c6f11cd4eb14c5867",
+      "packageVersion": "multires-0d4fb753457d",
+      "contentDigest": "0d4fb753457d5aa25b29786e4a1412b27707730f320aaccdb081dc2a6c21048d",
+      "manifestDigest": "8f1946c44551b528df494dda0d2890d0fe690bd66d7a610873d388220aa2c946",
+      "humanChangelogDigest": "ab1e0725e93378368f575c57208ec7579b15022eb7cdeaf80317727b8c105a19",
+      "machineChangelogDigest": "8f05346b95a4d94ad307de6a5216c2afb4efd476ed3538ed123e1eb437260ff6",
       "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
       "savedArrivalViewsDigest": "440190a361317483a148967c76b837d68dfbca2a6a926a90c8e48dc26ddc21a9"
     },
     {
       "slug": "killarney-town-centre-360-tour",
-      "packageVersion": "multires-7e4c90b736e6",
-      "contentDigest": "7e4c90b736e612bfafce69e36e02fad2cc9a29d95e071d42e89bef9b45e9139d",
-      "manifestDigest": "2b0079d463c727fa941c14118a1166a36fd33bc2a4577563eb065801b7c01416",
-      "humanChangelogDigest": "76af308a9edc7b71e678725c079a420a740c0813c8a35a81aa9fc14d51665e58",
-      "machineChangelogDigest": "caf6eca80b84d18ffc3298ef260ae92078652315e943bc690019bc6649ffdfc4",
+      "packageVersion": "multires-489543d6e7f8",
+      "contentDigest": "489543d6e7f86a9ee8243a1a0b562e7dce6e233ab4ff0db705bc8a60099cb2b1",
+      "manifestDigest": "0330041340e6f135a0b37e7f703fbc61d4e80be31c52ffb0a739a27cb460932a",
+      "humanChangelogDigest": "719fa5d4ab8bee4b54885ad727b4cc0af1368dd08bfb4d820bbf74a42c141c72",
+      "machineChangelogDigest": "bd0ce8d81b979377646134938e9addfd3d930c2af31e766e9ef8bc52ba935d09",
       "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
       "savedArrivalViewsDigest": "21159ad7ef0082d36615f8797db73835cb17bf1e025fe8395886e70f0bbc396a"
     }
@@ -107,9 +107,29 @@
         "tours": 3
       },
       {
+        "id": "safari-loaded-image-decode-tolerance-mobile-webkit",
+        "result": "pass",
+        "tours": 3
+      },
+      {
+        "id": "terminal-recovery-action-mobile-webkit",
+        "result": "pass",
+        "sharedRuntimePackages": 3
+      },
+      {
+        "id": "remote-immutable-object-integrity",
+        "result": "pass",
+        "objects": 23836
+      },
+      {
         "id": "saved-arrival-graph-mobile-webkit",
         "result": "pass",
-        "directedTransitions": 186
+        "directedTransitions": 186,
+        "actualPointerTransitions": 244,
+        "passes": 2,
+        "navigatorJumps": 1,
+        "apiSceneResets": 0,
+        "documentReloads": 0
       },
       {
         "id": "two-scene-portability-and-embed",
@@ -127,7 +147,7 @@
     "physicalIphoneAcceptance": {
       "result": "pending",
       "requiredFor": "prod",
-      "releaseSetDigest": "1c9b5e2fc104b0af87cbcfde92e019f5e5b4c04973db9760e4fac5f84db3ff8f"
+      "releaseSetDigest": "48a5fdca34366b52321ba68a4236daac55535d5802499084ce220ac2741749c1"
     }
   },
   "promotion": {
@@ -138,5 +158,5 @@
       "separate-prod-credential-boundary-not-yet-proven"
     ]
   },
-  "attestationDigest": "8c145d8247a167df51f6d85e7ea26403928faf76f69d034814e7d5a5df43ca76"
+  "attestationDigest": "8cda53fc402c325460abcb31eb1f73a7fba24c6acd8b88a23f179f4cf8107a25"
 }

@@ -148,6 +148,9 @@ for (const id of [
   "visible-sequence-mobile-webkit",
   "fault-recovery-chromium",
   "fault-recovery-mobile-webkit",
+  "safari-loaded-image-decode-tolerance-mobile-webkit",
+  "terminal-recovery-action-mobile-webkit",
+  "remote-immutable-object-integrity",
   "saved-arrival-graph-mobile-webkit",
   "two-scene-portability-and-embed",
   "cold-load-performance"
@@ -160,8 +163,16 @@ assert(
 );
 assert(
   evidence.get("saved-arrival-graph-mobile-webkit")?.directedTransitions ===
-    2 * active.reduce((total, tour) => total + tour.hotspotCount, 0),
+    2 * active.reduce((total, tour) => total + tour.hotspotCount, 0) &&
+    evidence.get("saved-arrival-graph-mobile-webkit")?.passes === 2 &&
+    evidence.get("saved-arrival-graph-mobile-webkit")?.apiSceneResets === 0 &&
+    evidence.get("saved-arrival-graph-mobile-webkit")?.documentReloads === 0,
   "DEV attestation does not cover every directed route twice."
+);
+assert(
+  evidence.get("safari-loaded-image-decode-tolerance-mobile-webkit")?.tours === active.length &&
+    evidence.get("terminal-recovery-action-mobile-webkit")?.sharedRuntimePackages === active.length,
+  "DEV attestation does not cover Safari decode pressure and bounded terminal recovery."
 );
 assert(
   attestation.verification.physicalIphoneAcceptance?.releaseSetDigest === dev.releaseSetDigest &&

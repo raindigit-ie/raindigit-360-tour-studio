@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { studioVersion } from "./lib/release-contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -343,7 +344,7 @@ async function main() {
     const rejectedBuild = await requestJson(`${baseUrl}/__tour-editor/build-release?workspace=1`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ slug: "unreachable-fixture", tourVersion: "0.2.5", changeSummary: "Unreachable scene validation fixture" })
+      body: JSON.stringify({ slug: "unreachable-fixture", tourVersion: studioVersion, changeSummary: "Unreachable scene validation fixture" })
     }, 400);
     assert(rejectedBuild.error.includes("Unreachable: Unused view"), `Server did not explain the unreachable photo: ${JSON.stringify(rejectedBuild)}`);
     const preservedProject = JSON.parse(await readFile(workspaceProjectPath, "utf8"));
