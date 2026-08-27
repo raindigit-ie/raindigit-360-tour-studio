@@ -1,7 +1,7 @@
 {
   "schema": "raindigit-tour-release-contract/v1",
   "formatVersion": "2.0.0",
-  "runtimeVersion": "2.0.5",
+  "runtimeVersion": "2.0.6",
   "verificationProfile": "raindigit-portable-tour-v2",
   "capabilities": [
     "standalone",
@@ -11,7 +11,8 @@
     "saved-arrival-views",
     "opaque-first-frame-guard",
     "requested-scene-presentation-gate",
-    "target-tile-health-gate",
+    "target-base-progressive-reveal",
+    "target-base-face-telemetry",
     "bounded-scene-retry",
     "touch-navigation",
     "orientation-recovery",

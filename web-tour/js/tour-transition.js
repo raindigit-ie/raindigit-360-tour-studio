@@ -16,16 +16,16 @@
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const guardColumns = 6;
   const guardRows = 4;
-  const pollInterval = 100;
-  const renderSettleDelay = 900;
-  // `isLoaded()` / renderer idle means Pannellum has accepted the scene;
-  // on physical Safari it does not prove that the GPU compositor has
-  // presented every multires tile yet. Keep the opaque cover in control
-  // until both a time floor and several presentation turns have passed.
-  const presentationSettleDelay = reducedMotion ? 120 : 1_500;
-  const presentationFrameCount = reducedMotion ? 2 : 6;
+  const baseFaces = ["f", "b", "u", "d", "l", "r"];
+  const pollInterval = 50;
+  const renderSettleDelay = reducedMotion ? 20 : 80;
+  // The six target level-1 faces are the correctness gate. Detail levels are
+  // deliberately allowed to continue through Pannellum's native progressive
+  // renderer after the first stable target frame is presented.
+  const presentationSettleDelay = reducedMotion ? 20 : 80;
+  const presentationFrameCount = 2;
   const guardCellDuration = reducedMotion ? 160 : 1_180;
-  const guardSettleDuration = reducedMotion ? 120 : 420;
+  const guardSettleDuration = reducedMotion ? 80 : 180;
   const retryDelay = 20_000;
   const tileFailureRetryDelays = [1_500, 3_000, 6_000];
   const maximumRetries = tileFailureRetryDelays.length;
@@ -60,6 +60,7 @@
   }
   const outgoing = overlay.querySelector(".tour-scene-transition__outgoing");
   const tileLayer = overlay.querySelector(".tour-scene-transition__tiles");
+  const statusLabel = overlay.querySelector(".tour-scene-transition__mobile-status span:last-child");
   if (!outgoing || !tileLayer) return;
   overlay.style.setProperty("--tour-cell-duration", `${guardCellDuration}ms`);
   overlay.style.setProperty("--tour-settle-duration", `${guardSettleDuration}ms`);
@@ -164,11 +165,52 @@
     }
   }
 
+  function baseFaceForRun(run, source) {
+    const prefix = tilePrefix(run.sceneId);
+    if (!prefix || typeof source !== "string") return null;
+    try {
+      const absolute = new URL(source, document.baseURI).href;
+      if (!absolute.startsWith(prefix)) return null;
+      const relative = absolute.slice(prefix.length);
+      const match = relative.match(/^1\/([fbudlr])0_0(?:\.[^/?]+)?(?:[?#]|$)/);
+      return match?.[1] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function updateBaseProgress(run) {
+    if (active?.token !== run.token) return;
+    const loaded = run.baseLoaded.size;
+    tileLayer.dataset.baseLoaded = String(loaded);
+    tileLayer.dataset.baseRequired = String(baseFaces.length);
+    if (statusLabel) statusLabel.textContent = `Preparing view ${loaded}/${baseFaces.length}`;
+  }
+
+  function settleBaseFace(run, face, outcome) {
+    if (active?.token !== run.token || !face) return;
+    run.basePending.delete(face);
+    if (outcome === "loaded") {
+      run.baseLoaded.add(face);
+      run.baseFailed.delete(face);
+    } else if (!run.baseLoaded.has(face)) {
+      run.baseFailed.add(face);
+      run.tileLastFailureAt = performance.now();
+    }
+    updateBaseProgress(run);
+  }
+
   function observeTileRequest(image, source) {
     const run = active;
     if (!run || !tileMatchesRun(run, source)) return;
     const token = run.token;
     const attempt = run.tileAttempt;
+    const baseFace = baseFaceForRun(run, source);
+    if (baseFace) {
+      run.baseRequested.add(baseFace);
+      if (!run.baseLoaded.has(baseFace)) run.basePending.add(baseFace);
+      updateBaseProgress(run);
+    }
     run.tileRequested += 1;
     run.tilePending += 1;
     run.tileLastEventAt = performance.now();
@@ -182,10 +224,19 @@
       if (current?.token !== token || current.tileAttempt !== attempt) return;
       current.tilePending = Math.max(0, current.tilePending - 1);
       current.tileLastEventAt = performance.now();
-      if (outcome === "loaded") current.tileLoaded += 1;
-      else {
+      if (outcome === "loaded") {
+        current.tileLoaded += 1;
+        if (baseFace) {
+          const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve();
+          void decoded.then(
+            () => settleBaseFace(current, baseFace, "loaded"),
+            () => settleBaseFace(current, baseFace, "failed"),
+          );
+        }
+      } else {
         current.tileFailed += 1;
         current.tileLastFailureAt = current.tileLastEventAt;
+        settleBaseFace(current, baseFace, "failed");
       }
     };
     const loaded = () => settle("loaded");
@@ -220,13 +271,27 @@
     window.Image = TrackedImage;
   }
 
-  function tileAttemptIsHealthy(run) {
+  function baseAttemptIsHealthy(run) {
     return Boolean(
-      run.tileRequested > 0 &&
-      run.tileLoaded > 0 &&
-      run.tileFailed === 0 &&
-      run.tilePending === 0
+      run.baseRequested.size === baseFaces.length &&
+      run.baseLoaded.size === baseFaces.length &&
+      run.baseFailed.size === 0 &&
+      run.basePending.size === 0
     );
+  }
+
+  function preloadTargetBaseTiles(run) {
+    const scene = sceneConfig(run.sceneId);
+    const prefix = tilePrefix(run.sceneId);
+    const extension = scene?.multiRes?.extension || "jpg";
+    if (!prefix) return;
+    run.baseImages = baseFaces.map((face) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.fetchPriority = "high";
+      image.src = `${prefix}1/${face}0_0.${extension}`;
+      return image;
+    });
   }
 
   function previewFor(sceneId) {
@@ -249,7 +314,13 @@
         sceneId: run.sceneId,
         sourceSceneId: run.sourceSceneId,
         targetSceneId: run.sceneId,
-        retryCount: run.retryCount
+        retryCount: run.retryCount,
+        baseRequired: baseFaces.length,
+        baseRequested: run.baseRequested.size,
+        baseLoaded: run.baseLoaded.size,
+        baseFailed: run.baseFailed.size,
+        basePending: run.basePending.size,
+        detailPending: Math.max(0, run.tilePending - run.basePending.size),
       }
     }));
   }
@@ -275,6 +346,11 @@
       tilePending: 0,
       tileLastEventAt: 0,
       tileLastFailureAt: 0,
+      baseRequested: new Set(),
+      baseLoaded: new Set(),
+      baseFailed: new Set(),
+      basePending: new Set(),
+      baseImages: [],
       // Pannellum may schedule the first tile just before emitting
       // scenechange / returning the viewer from its constructor.
       // A prime may happen before `tour.js` creates Pannellum. Its retry
@@ -297,6 +373,8 @@
     }
     overlay.dataset.sourceScene = initial ? run.sceneId : (run.sourceSceneId || "unknown");
     overlay.dataset.targetScene = run.sceneId;
+    updateBaseProgress(run);
+    preloadTargetBaseTiles(run);
     dispatch(phase, run);
     void waitUntilRenderable(run);
     return run;
@@ -333,6 +411,13 @@
     run.readiness = "retrying";
     run.attemptStartedAt = Math.max(0, performance.now() - 100);
     resetTileAttempt(run, true);
+    run.baseRequested.clear();
+    run.baseLoaded.clear();
+    run.baseFailed.clear();
+    run.basePending.clear();
+    run.baseImages = [];
+    updateBaseProgress(run);
+    preloadTargetBaseTiles(run);
     phase = "recovering";
     dispatch("recovering", run);
     try {
@@ -386,8 +471,7 @@
     return Boolean(
       viewer?.isLoaded?.() &&
       canvasMatchesRun(run) &&
-      !Boolean(viewer?.getRenderer?.()?.isLoading?.()) &&
-      tileAttemptIsHealthy(run)
+      baseAttemptIsHealthy(run)
     );
   }
 
@@ -446,8 +530,8 @@
         Math.min(run.retryCount, tileFailureRetryDelays.length - 1)
       ];
       if (
-        run.tileFailed > 0 &&
-        run.tilePending === 0 &&
+        run.baseFailed.size > 0 &&
+        run.basePending.size === 0 &&
         performance.now() - run.tileLastFailureAt >= tileRetryDelay
       ) {
         if (!reload(run)) {
@@ -532,14 +616,14 @@
     });
   }
 
-  document.documentElement.dataset.tourSceneTransition = "opaque-frame-guard-v3";
+  document.documentElement.dataset.tourSceneTransition = "target-base-progressive-v4";
   document.documentElement.dataset.tourWebglReadback = "disabled";
   const primeInitial = () => active || guard(requestedScene(), true);
   window.__rainDigitTourTransition = {
     attach,
     primeInitial,
     state: () => ({
-      variant: "opaque-frame-guard",
+      variant: "target-base-progressive",
       phase,
       initial: active?.initial ?? false,
       patchCount: 0,
@@ -553,12 +637,40 @@
       tileLoaded: active?.tileLoaded || 0,
       tileFailed: active?.tileFailed || 0,
       tilePending: active?.tilePending || 0,
+      baseRequired: baseFaces.length,
+      baseRequested: active?.baseRequested.size || 0,
+      baseLoaded: active?.baseLoaded.size || 0,
+      baseFailed: active?.baseFailed.size || 0,
+      basePending: active?.basePending.size || 0,
+      detailPending: Math.max(0, (active?.tilePending || 0) - (active?.basePending.size || 0)),
       readiness: active?.readiness || "ready",
       guarded: shell.classList.contains("is-transition-guarded")
     })
   };
+
+  function reportBootstrapOwnership() {
+    if (window.parent === window) return;
+    const slug = window.location.pathname.match(/\/tours\/([^/]+)\//)?.[1] || null;
+    const queryOrigin = new URLSearchParams(window.location.search).get("parentOrigin");
+    let targetOrigin = "*";
+    try {
+      targetOrigin = queryOrigin
+        ? new URL(queryOrigin).origin
+        : document.referrer
+          ? new URL(document.referrer).origin
+          : "*";
+    } catch {
+      targetOrigin = "*";
+    }
+    window.parent.postMessage(
+      { type: "raindigit-tour-bootstrap", version: 1, slug },
+      targetOrigin,
+    );
+  }
+
   installTileObserver();
   // This executes after tour-config.js but before tour.js constructs the
   // Pannellum canvas. The loader, not WebGL, now owns the initial paint.
   primeInitial();
+  reportBootstrapOwnership();
 })();

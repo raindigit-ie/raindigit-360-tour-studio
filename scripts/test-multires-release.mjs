@@ -298,6 +298,14 @@ async function runBrowserQa(packageRoot, pointer) {
       let rejectedBaseTiles = 0;
       let rejectBaseTilesUntil = 0;
       await page.route(
+        /\/assets\/mr\/.+\/[2-9]\/.*\.(?:webp|jpe?g)(?:\?.*)?$/,
+        async (route) => {
+          if (target.name === "chromium-desktop")
+            await new Promise((resolve) => setTimeout(resolve, 1_200));
+          await route.continue();
+        },
+      );
+      await page.route(
         /\/assets\/mr\/.+\/1\/.+\.(?:webp|jpe?g)(?:\?.*)?$/,
         async (route) => {
           if (
@@ -416,9 +424,24 @@ async function runBrowserQa(packageRoot, pointer) {
         `${target.name} did not release the first-scene transition guard.`,
       );
       assert(
-        initialTransition.variant === "opaque-frame-guard-v3",
+        initialTransition.variant === "target-base-progressive-v4",
         `${target.name} selected ${initialTransition.variant || "no transition"}.`,
       );
+      const initialComplete = initialTransition.events.find(
+        (entry) => entry.phase === "complete" && entry.initial === true,
+      );
+      assert(
+        initialComplete?.baseRequired === 6 &&
+          initialComplete.baseLoaded === 6 &&
+          initialComplete.baseFailed === 0 &&
+          initialComplete.basePending === 0,
+        `${target.name} released before the complete target base cube was decoded: ${JSON.stringify(initialComplete)}.`,
+      );
+      if (target.name === "chromium-desktop")
+        assert(
+          initialComplete.detailPending > 0,
+          "The first reveal incorrectly waited for delayed detail tiles.",
+        );
       if (target.nativeMobile)
         assert(
           initialTransition.firstFrameConnected,
@@ -1103,7 +1126,7 @@ async function main() {
       manifest.schema === "raindigit-tour-multires-release/v2" &&
         manifest.studioVersion === studioVersion &&
         manifest.formatVersion === "2.0.0" &&
-        manifest.runtimeVersion === "2.0.5" &&
+        manifest.runtimeVersion === "2.0.6" &&
         manifest.tourVersion === manifest.studioVersion,
       "Capability release identity is invalid.",
     );
@@ -1150,6 +1173,17 @@ async function main() {
     assert(
       manifest.performance.criticalBytes <= 1024 * 1024,
       "First-scene critical payload exceeds 1 MB.",
+    );
+    const inventoryByPath = new Map(
+      manifest.files.map((file) => [file.path, file.bytes]),
+    );
+    assert(
+      manifest.performance.criticalBytes ===
+        manifest.performance.criticalFiles.reduce(
+          (sum, path) => sum + (inventoryByPath.get(path) || 0),
+          0,
+        ),
+      "First-scene critical byte accounting differs from the immutable inventory.",
     );
     assert(
       manifest.performance.criticalFiles.length >= 8 &&
@@ -1546,17 +1580,21 @@ async function main() {
       "utf8",
     );
     assert(
-      transitionRuntime.includes('variant: "opaque-frame-guard"') &&
+      transitionRuntime.includes('variant: "target-base-progressive"') &&
         transitionRuntime.includes("initial-loading"),
-      "The selected opaque frame guard runtime is incomplete.",
+      "The selected target-base progressive guard runtime is incomplete.",
     );
     assert(
-      transitionRuntime.includes("opaque-frame-guard-v3") &&
+      transitionRuntime.includes("target-base-progressive-v4") &&
         transitionRuntime.includes('tourWebglReadback = "disabled"'),
       "The release runtime lacks the zero-readback cross-device transition guard.",
     );
     assert(
       transitionRuntime.includes("viewer-canvas-settled") &&
+        transitionRuntime.includes("preloadTargetBaseTiles") &&
+        transitionRuntime.includes("baseAttemptIsHealthy") &&
+        transitionRuntime.includes("baseLoaded") &&
+        transitionRuntime.includes("detailPending") &&
         transitionRuntime.includes("renderSettleDelay") &&
         transitionRuntime.includes("armBeforeSceneReset") &&
         transitionRuntime.includes("primeInitial") &&
