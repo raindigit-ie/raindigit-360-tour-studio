@@ -193,7 +193,7 @@ button {
   --tour-origin-x: 50%;
   --tour-origin-y: 50%;
   position: absolute;
-  z-index: 34;
+  z-index: 8;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
@@ -202,6 +202,11 @@ button {
   contain: strict;
   isolation: isolate;
   background: #070807;
+}
+
+.tour-shell > .tour-scene-transition--static,
+.tour-shell > .tour-scene-transition[data-phase="initial-loading"] {
+  z-index: 34;
 }
 
 .tour-scene-transition.is-active { visibility: visible; opacity: 1; }
@@ -588,11 +593,8 @@ body:not(.is-navigator-open) .scene-panel {
   pointer-events: auto;
 }
 
-/* Pannellum receives mouse and touch rotation through this transparent layer. */
 .pnlm-dragfix { pointer-events: auto; }
 
-/* WebGL stays visually above the gesture layer but is transparent to input;
-   only custom hotspots opt back into pointer events. */
 .pnlm-render-container { z-index: 2; pointer-events: none; }
 .pnlm-render-container canvas { pointer-events: none; }
 .pnlm-hotspot-base.nav-hotspot-anchor {

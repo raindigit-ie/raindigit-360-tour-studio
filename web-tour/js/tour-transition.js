@@ -79,6 +79,9 @@
   }
 
   function activateGuard(initial = false, sourceSceneId = null) {
+    // Cold start owns the full viewport. Later scene changes mask only the
+    // panorama and stay below the persistent control surface.
+    overlay.dataset.phase = initial ? "initial-loading" : "loading";
     // The static form has already covered the page. Once a concrete run is
     // armed, retain that visibility but switch to the live tile treatment.
     overlay.classList.remove("tour-scene-transition--static");
@@ -94,7 +97,6 @@
     overlay.style.removeProperty("transition");
     void overlay.offsetWidth;
     overlay.classList.add("is-active", "is-waiting");
-    overlay.dataset.phase = initial ? "initial-loading" : "loading";
     shell.classList.add("is-mobile-transition-overlay-visible");
   }
 

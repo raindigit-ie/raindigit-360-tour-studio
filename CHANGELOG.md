@@ -2,6 +2,24 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.2.5] — 2026-08-27
+
+### Fixed
+
+- Keeps the RainDigit brand and persistent tour controls visible above the
+  animated guard while walking between scenes.
+- Retains full-viewport ownership for the initial cold-start guard while the
+  post-readiness guard masks only the panorama, renderer and hotspots.
+
+### Verification
+
+- Asserts computed stacking, hit targets and unchanged control geometry during
+  real scene changes in Chromium and mobile WebKit at portrait and landscape
+  target sizes.
+- Requires every active tour to be rebuilt because this changes the public
+  runtime capability from `2.0.4` to `2.0.5` and Studio/tour capability from
+  `0.2.4` to `0.2.5`.
+
 ## [0.2.4] — 2026-08-27
 
 ### Fixed

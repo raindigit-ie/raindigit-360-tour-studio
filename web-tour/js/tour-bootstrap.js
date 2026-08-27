@@ -55,7 +55,7 @@
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");
-    await loadScript("js/tour-transition.js?v=20260827-webgl-document-recovery-v1");
+    await loadScript("js/tour-transition.js?v=20260827-persistent-controls-v1");
     await loadScript("js/tour.js?v=20260815-capture-view-v2");
     if (editing) {
       await loadScript("js/generated/editor-walking-button-list.js?v=20260810-svelte-route-thumbs-v1");

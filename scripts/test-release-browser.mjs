@@ -33,7 +33,7 @@ async function main() {
 
   try {
     if (server) await waitForServer(baseUrl);
-    await execFileAsync(process.platform === "win32" ? "npx.cmd" : "npx", ["playwright", "test", "tests/release-mobile.spec.mjs", ...process.argv.slice(2)], {
+    await execFileAsync(process.platform === "win32" ? "npx.cmd" : "npx", ["playwright", "test", "tests/release-mobile.spec.mjs", "tests/transition-control-stacking.spec.mjs", ...process.argv.slice(2)], {
       cwd: projectRoot,
       env: { ...process.env, TOUR_RELEASE_URL: baseUrl },
       maxBuffer: 8 * 1024 * 1024

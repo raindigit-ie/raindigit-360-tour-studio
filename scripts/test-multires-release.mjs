@@ -1103,7 +1103,7 @@ async function main() {
       manifest.schema === "raindigit-tour-multires-release/v2" &&
         manifest.studioVersion === studioVersion &&
         manifest.formatVersion === "2.0.0" &&
-        manifest.runtimeVersion === "2.0.4" &&
+        manifest.runtimeVersion === "2.0.5" &&
         manifest.tourVersion === manifest.studioVersion,
       "Capability release identity is invalid.",
     );

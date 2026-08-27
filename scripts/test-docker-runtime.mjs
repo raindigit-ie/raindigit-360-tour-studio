@@ -151,7 +151,7 @@ try {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       slug: "docker-runtime-verification",
-      tourVersion: "0.2.4",
+      tourVersion: "0.2.5",
       changeSummary: "Initial container verification release"
     })
   });
