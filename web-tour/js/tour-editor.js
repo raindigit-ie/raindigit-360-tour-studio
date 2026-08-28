@@ -405,6 +405,8 @@
   `;
   document.body.appendChild(panel);
   document.body.classList.add("is-editor-open");
+  panel.dataset.stage = state.activeStage;
+  document.body.dataset.editorStage = state.activeStage;
 
   const previewDialog = document.createElement("div");
   previewDialog.className = "editor-photo-preview";
@@ -3547,10 +3549,17 @@
   }
 
   function render() {
-    const scene = currentScene();
-    if (!scene) return;
     renderStages();
     renderProjectPanel();
+    const scene = currentScene();
+    if (!scene) {
+      placementSurface.hidden = true;
+      centreTarget.hidden = true;
+      placementGuides.hidden = true;
+      arrivalGuides.hidden = true;
+      document.body.classList.remove("is-editor-placing", "is-editor-centre-target");
+      return;
+    }
     renderSceneFields(scene);
     renderHotspotList(scene);
     renderArrivalPanel(scene);
@@ -4858,18 +4867,25 @@
     flush: flushStudioLogs
   };
 
-  function waitForViewerPaint() {
+  function waitForViewerPaint(timeout = 6000) {
     return new Promise((resolve) => {
-      const afterPaint = () => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+      let settled = false;
+      let timer = 0;
+      const finish = (loaded) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        api.viewer.off("load", onLoad);
+        resolve(loaded);
+      };
+      const afterPaint = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => finish(true)));
+      const onLoad = () => afterPaint();
       if (api.viewer.isLoaded()) {
         afterPaint();
         return;
       }
-      const onLoad = () => {
-        api.viewer.off("load", onLoad);
-        afterPaint();
-      };
       api.viewer.on("load", onLoad);
+      timer = window.setTimeout(() => finish(false), timeout);
     });
   }
 
@@ -4886,7 +4902,11 @@
   }
 
   async function waitForViewerSettled(timeout = 6000) {
-    await waitForViewerPaint();
+    const painted = await waitForViewerPaint(timeout);
+    if (!painted) {
+      studioLog("viewer-paint-timeout", { sceneId: api.viewer.getScene(), timeout }, true);
+      return false;
+    }
     return waitForViewerFade(timeout);
   }
 
@@ -4896,14 +4916,40 @@
     fetch(studioUrl("overrides")).then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not read draft"))),
     refreshArchives()
   ]).then(async ([, , draft]) => {
-    await waitForViewerSettled();
-    state.viewerSettled = true;
     applyDraft(draft);
     const metadataChanged = syncWorkspaceSceneMetadata("startup");
     if (resumeMode && workspaceMode && state.workspaceProject && state.activeStage === "start") {
       state.activeStage = "upload";
       studioLog("resume-fallback-upload", { projectTitle: state.workspaceProject.title }, true);
     }
+    state.initializing = false;
+    const restoredRoomPlanSceneId = window.sessionStorage.getItem("raindigit-tour-room-plan-scene");
+    if (restoredRoomPlanSceneId && state.workspaceProject?.scenes?.some((scene) => scene.id === restoredRoomPlanSceneId)) {
+      state.roomPlanSceneId = restoredRoomPlanSceneId;
+    }
+    window.sessionStorage.removeItem("raindigit-tour-room-plan-scene");
+    setStatus(state.activeStage === "start"
+      ? "Choose how to begin"
+      : !state.workspaceProject
+        ? "Ready to create a tour"
+      : state.workspaceProject.scenes.length === 0
+        ? "Tour ready. Add photos."
+        : state.activeStage === "upload"
+          ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
+        : state.savedAt ? "Saved tour loaded" : "Tour ready");
+
+    // The editor must establish its stage and full-screen layout before waiting
+    // for WebGL. Empty, start, upload, rooms and export stages do not need a
+    // panorama at all; waiting for one here previously left the tour loader
+    // permanently covering the operator interface.
+    render();
+    const viewerRequiredOnStartup = Boolean(
+      state.workspaceProject?.scenes?.length && viewerStageSet.has(state.activeStage)
+    );
+    state.viewerSettled = viewerRequiredOnStartup
+      ? await waitForViewerSettled()
+      : Boolean(api.viewer.isLoaded());
+
     const plannedPlacesChanged = syncPlannedPlacesToDraft();
     const sharedArrivalChanged = propagateArrivalViewsByTarget();
     const selected = selectedHotspot();
@@ -4922,21 +4968,6 @@
       resetArrivalQueue();
       focusNextArrivalTask("Open the destination and choose its first view");
     }
-    state.initializing = false;
-    const restoredRoomPlanSceneId = window.sessionStorage.getItem("raindigit-tour-room-plan-scene");
-    if (restoredRoomPlanSceneId && state.workspaceProject?.scenes?.some((scene) => scene.id === restoredRoomPlanSceneId)) {
-      state.roomPlanSceneId = restoredRoomPlanSceneId;
-    }
-    window.sessionStorage.removeItem("raindigit-tour-room-plan-scene");
-    setStatus(state.activeStage === "start"
-      ? "Choose how to begin"
-      : !state.workspaceProject
-        ? "Ready to create a tour"
-      : state.workspaceProject.scenes.length === 0
-        ? "Tour ready. Add photos."
-        : state.activeStage === "upload"
-          ? `${state.workspaceProject.scenes.length} photo${state.workspaceProject.scenes.length === 1 ? "" : "s"} ready`
-        : state.savedAt ? "Saved tour loaded" : "Tour ready");
     render();
     resizeViewerForStage(`startup-${state.activeStage}`);
     if (plannedPlacesChanged || sharedArrivalChanged || state.routeReferenceMigrated || metadataChanged) {

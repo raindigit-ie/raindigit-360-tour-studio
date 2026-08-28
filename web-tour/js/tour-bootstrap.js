@@ -61,7 +61,15 @@
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");
-    await loadScript("js/tour-transition.js?v=20260827-safari-decode-v2");
+    if (editing) {
+      // The public-tour transition owns six multires cube faces. Studio works
+      // directly with editable equirectangular panoramas, so mounting that
+      // transition here creates a false 0/6 loader and can cover the editor.
+      document.documentElement.classList.remove("is-tour-transition-boot");
+      document.querySelector("[data-tour-static-loader]")?.remove();
+    } else {
+      await loadScript("js/tour-transition.js?v=20260827-safari-decode-v2");
+    }
     await loadScript("js/tour.js?v=20260815-capture-view-v2");
     if (editing) {
       await loadScript("js/generated/editor-walking-button-list.js?v=20260810-svelte-route-thumbs-v1");

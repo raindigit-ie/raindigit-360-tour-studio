@@ -3,13 +3,14 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
 import sharp from "sharp";
 import { studioVersion } from "./lib/release-contract.mjs";
 
 const execFileAsync = promisify(execFile);
+const projectRoot = resolve(import.meta.dirname, "..");
 const image = process.argv[2] || process.env.RAINDIGIT_STUDIO_IMAGE || "raindigit-360-tour-studio:local";
 const platform = process.env.RAINDIGIT_DOCKER_PLATFORM || "";
 const suffix = `${process.pid}-${Date.now()}`;
@@ -90,7 +91,7 @@ try {
     "The Studio server did not authorize its editor runtime for a protected remote hostname.",
   );
   assert(
-    !(await readFile(join(root, "web-tour", "index.html"), "utf8")).includes("window.__RAINDIGIT_STUDIO_CONTEXT__"),
+    !(await readFile(join(projectRoot, "web-tour", "index.html"), "utf8")).includes("window.__RAINDIGIT_STUDIO_CONTEXT__"),
     "The server-only Studio capability leaked into the static customer template.",
   );
 

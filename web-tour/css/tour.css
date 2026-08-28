@@ -1105,7 +1105,7 @@ body.is-editor-open .toolbar {
 body[data-editor-stage="start"] .tour-shell,
 body[data-editor-stage="upload"] .tour-shell,
 body[data-editor-stage="rooms"] .tour-shell,
-body[data-editor-stage="export"] .tour-shell { visibility: hidden; }
+body[data-editor-stage="export"] .tour-shell { display: none; }
 
 body[data-editor-stage="start"] .editor-panel,
 body[data-editor-stage="upload"] .editor-panel,
@@ -1905,7 +1905,7 @@ body.is-editor-open .tour-shell {
 }
 
 body[data-editor-stage="project"]:not(.is-workspace-ready) .tour-shell {
-  visibility: hidden;
+  display: none;
 }
 
 body[data-editor-stage="project"]:not(.is-workspace-ready) .editor-panel {
@@ -2557,7 +2557,7 @@ body[data-editor-stage="project"]:not(.is-workspace-ready) #editorClose {
   body[data-editor-stage="start"] .tour-shell,
   body[data-editor-stage="upload"] .tour-shell,
   body[data-editor-stage="rooms"] .tour-shell,
-  body[data-editor-stage="export"] .tour-shell { visibility: hidden; }
+  body[data-editor-stage="export"] .tour-shell { display: none; }
 
   .editor-panel__header { min-height: 54px; padding: 8px 10px; }
   .editor-workflow { padding: 6px; }
@@ -2599,7 +2599,7 @@ body[data-editor-stage="start"] .tour-shell,
 body[data-editor-stage="upload"] .tour-shell,
 body[data-editor-stage="rooms"] .tour-shell,
 body[data-editor-stage="export"] .tour-shell {
-  visibility: hidden;
+  display: none;
 }
 
 body[data-editor-stage="start"] .editor-panel,

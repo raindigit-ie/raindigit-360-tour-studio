@@ -242,13 +242,62 @@ async function main() {
       if (request.method() === "POST" && request.url().includes("/__tour-editor/build-portable-release")) portableBuildRequests += 1;
     });
     const consoleErrors = [];
+    let injectingPlaceholderFailure = false;
     const requestFailures = [];
-    page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+    page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      if (injectingPlaceholderFailure && message.text().includes("net::ERR_FAILED")) return;
+      consoleErrors.push(message.text());
+    });
     page.on("requestfailed", (request) => requestFailures.push(`${request.url()} - ${request.failure()?.errorText || "failed"}`));
     page.on("dialog", async (dialog) => { await dialog.accept(); });
 
+    // Characterize the production failure: the editor must be usable even when
+    // its placeholder panorama never loads. WebGL readiness is not a prerequisite
+    // for creating a project or uploading the first photos.
+    injectingPlaceholderFailure = true;
+    await page.route("**/assets/studio-placeholder.svg", (route) => route.abort("failed"));
+    const emptyStudioStartedAt = Date.now();
     await page.goto(`${baseUrl}/?edit=1`);
     await assertOneTask(page, "Start a tour");
+    const emptyStudioState = await page.evaluate(() => {
+      const panel = document.querySelector(".editor-panel")?.getBoundingClientRect();
+      const shell = document.querySelector(".tour-shell");
+      const transition = document.querySelector(".tour-scene-transition");
+      const recovery = document.querySelector("[data-tour-runtime-recovery]");
+      const actuallyVisible = (element) => {
+        if (!element) return false;
+        let current = element;
+        while (current) {
+          const style = getComputedStyle(current);
+          if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+          current = current.parentElement;
+        }
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      };
+      const topLeft = document.elementFromPoint(document.documentElement.clientWidth * 0.25, document.documentElement.clientHeight * 0.5);
+      return {
+        stage: document.body.dataset.editorStage,
+        panelWidth: panel?.width || 0,
+        viewportWidth: document.documentElement.clientWidth,
+        shellVisible: actuallyVisible(shell),
+        transitionVisible: actuallyVisible(transition),
+        transitionPresent: Boolean(transition || window.__rainDigitTourTransition),
+        recoveryVisible: actuallyVisible(recovery),
+        topLeftInsideEditor: Boolean(topLeft?.closest(".editor-panel")),
+        status: document.querySelector("#editorStatus")?.textContent
+      };
+    });
+    assert(Date.now() - emptyStudioStartedAt < 2500, `Empty Studio waited for the panorama loader: ${Date.now() - emptyStudioStartedAt}ms`);
+    assert(emptyStudioState.stage === "start", `Empty Studio did not establish its start stage: ${JSON.stringify(emptyStudioState)}`);
+    assert(emptyStudioState.panelWidth >= emptyStudioState.viewportWidth - 2, `Empty Studio panel is not full-width: ${JSON.stringify(emptyStudioState)}`);
+    assert(!emptyStudioState.shellVisible && !emptyStudioState.transitionVisible && !emptyStudioState.recoveryVisible, `Tour runtime covers the empty Studio: ${JSON.stringify(emptyStudioState)}`);
+    assert(!emptyStudioState.transitionPresent, `Public tour transition mounted inside the Studio: ${JSON.stringify(emptyStudioState)}`);
+    assert(emptyStudioState.topLeftInsideEditor, `Tour runtime is still the top hit target over the editor: ${JSON.stringify(emptyStudioState)}`);
+    assert(emptyStudioState.status === "Choose how to begin", `Empty Studio did not become interactive: ${JSON.stringify(emptyStudioState)}`);
+    await page.unroute("**/assets/studio-placeholder.svg");
+    injectingPlaceholderFailure = false;
     await page.getByLabel("Tour name").fill("Guided Staff Journey");
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15_000 }),
