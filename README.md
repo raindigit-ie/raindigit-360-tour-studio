@@ -168,8 +168,8 @@ the runner profile can process up to three independent scenes; smaller machines
 automatically select a lower topology. Docker also bounds the native queues with
 `UV_THREADPOOL_SIZE=12` and `VIPS_CONCURRENCY=3`, avoiding both idle cores and
 libvips oversubscription. This removes the former 24K-wide intermediate image while
-preserving deterministic media bytes. On the 30-vCPU runner, the verified 21-scene
-12K cold build takes 83.07 seconds and a fully cached rebuild takes 9.55 seconds.
+preserving deterministic media bytes. On the 30-vCPU runner, two verified 21-scene
+12K cold builds took 71.69–83.07 seconds and a fully cached rebuild took 9.55 seconds.
 The Publish screen reports the current phase, scene progress, cache reuse and
 measured build duration instead of leaving the operator waiting. Operators may use
 `--face-concurrency` and `--scene-concurrency` for a measured fixed override; `auto`
