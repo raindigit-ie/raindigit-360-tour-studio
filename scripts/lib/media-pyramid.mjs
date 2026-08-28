@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import { availableParallelism, totalmem } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import sharp from "sharp";
@@ -9,6 +10,34 @@ const execFileAsync = promisify(execFile);
 export const MEDIA_RECIPE_VERSION =
   "ffmpeg-raw-faces+sharp-hybrid-512-2048-effort2-spline16-v3";
 export const HYBRID_MEDIA_PROFILE = "hybrid-512-2048-v1";
+const GIB = 1024 ** 3;
+
+export function recommendedFaceConcurrency({
+  parallelism = availableParallelism(),
+  memoryBytes = totalmem(),
+} = {}) {
+  const cpuLimit = Math.max(1, Math.floor(Number(parallelism) / 4));
+  const memoryLimit = Math.max(
+    1,
+    Math.floor((Number(memoryBytes) - 4 * GIB) / (2.5 * GIB)),
+  );
+  return Math.max(1, Math.min(6, cpuLimit, memoryLimit));
+}
+
+export function recommendedSceneConcurrency({
+  parallelism = availableParallelism(),
+  memoryBytes = totalmem(),
+  faceConcurrency = recommendedFaceConcurrency({ parallelism, memoryBytes }),
+} = {}) {
+  const cpuLimit = Math.max(1, Math.floor(Number(parallelism) / 10));
+  const memoryPerScene = Math.max(8 * GIB, Number(faceConcurrency) * 2 * GIB);
+  const memoryLimit = Math.max(
+    1,
+    Math.floor((Number(memoryBytes) - 8 * GIB) / memoryPerScene),
+  );
+  return Math.max(1, Math.min(3, cpuLimit, memoryLimit));
+}
+
 export function hybridMediaProfile(baseSize, tileSize) {
   return `hybrid-${baseSize}-${tileSize}-v1`;
 }
@@ -237,6 +266,9 @@ export function mediaWorkerMetadata({
   webpEffort = 2,
   projectionInterpolation = "spline16",
   faceConcurrency = 2,
+  faceConcurrencyMode = "fixed",
+  sceneConcurrency = 1,
+  sceneConcurrencyMode = "fixed",
 } = {}) {
   return {
     recipe: mediaRecipeVersion(
@@ -248,7 +280,13 @@ export function mediaWorkerMetadata({
     profile: hybridMediaProfile(baseSize, tileSize),
     projectionInterpolation,
     faceConcurrency,
+    faceConcurrencyMode,
+    sceneConcurrency,
+    sceneConcurrencyMode,
     intermediate: "rgb24-pipe",
+    availableParallelism: availableParallelism(),
+    totalMemoryBytes: totalmem(),
+    uvThreadpoolSize: Number(process.env.UV_THREADPOOL_SIZE || 4),
     sharp: sharp.versions.sharp,
     libvips: sharp.versions.vips,
     sharpConcurrency: sharp.concurrency()

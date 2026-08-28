@@ -8,14 +8,62 @@ import sharp from "sharp";
 import {
   HYBRID_MEDIA_PROFILE,
   buildFacePyramid,
+  recommendedFaceConcurrency,
+  recommendedSceneConcurrency,
 } from "./lib/media-pyramid.mjs";
+
+assert.equal(
+  recommendedFaceConcurrency({
+    parallelism: 8,
+    memoryBytes: 16 * 1024 ** 3,
+  }),
+  2,
+);
+assert.equal(
+  recommendedFaceConcurrency({
+    parallelism: 30,
+    memoryBytes: 110 * 1024 ** 3,
+  }),
+  6,
+);
+assert.equal(
+  recommendedFaceConcurrency({
+    parallelism: 2,
+    memoryBytes: 4 * 1024 ** 3,
+  }),
+  1,
+);
+assert.equal(
+  recommendedSceneConcurrency({
+    parallelism: 8,
+    memoryBytes: 16 * 1024 ** 3,
+    faceConcurrency: 2,
+  }),
+  1,
+);
+assert.equal(
+  recommendedSceneConcurrency({
+    parallelism: 30,
+    memoryBytes: 110 * 1024 ** 3,
+    faceConcurrency: 6,
+  }),
+  3,
+);
+assert.equal(
+  recommendedSceneConcurrency({
+    parallelism: 30,
+    memoryBytes: 16 * 1024 ** 3,
+    faceConcurrency: 6,
+  }),
+  1,
+);
 
 const temporaryRoot = await mkdtemp(
   join(tmpdir(), "raindigit-hybrid-media-contract-"),
 );
 const input = join(temporaryRoot, "face.png");
-  const targetRoot = join(temporaryRoot, "output");
-  const rawTargetRoot = join(temporaryRoot, "raw-output");
+const targetRoot = join(temporaryRoot, "output");
+const rawTargetRoot = join(temporaryRoot, "raw-output");
 const workRoot = join(temporaryRoot, "work");
 
 try {

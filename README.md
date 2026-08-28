@@ -162,12 +162,18 @@ automatically after the default 8 GB limit; run `npm run cache:prune` manually w
 needed. Override the location and budget with `INSTA360_TOUR_BUILD_CACHE` and
 `INSTA360_TOUR_BUILD_CACHE_MAX_GB`.
 
-The build coordinator projects one cube face at a time with FFmpeg and sends that
-face to the isolated Sharp/libvips pyramid worker. This avoids the former 24K-wide
-intermediate image. On the reference 20-scene 12K tour, the verified cold build fell
-from 46:03 to 8:46, a cached rebuild takes 23 seconds, and a one-scene picture change
-takes 47 seconds. The Publish screen reports the current phase, scene progress,
-cache reuse and measured build duration instead of leaving the operator waiting.
+The build coordinator derives bounded face and scene concurrency from the CPU and
+memory visible to the process. FFmpeg projects up to six cube faces per scene while
+the runner profile can process up to three independent scenes; smaller machines
+automatically select a lower topology. Docker also bounds the native queues with
+`UV_THREADPOOL_SIZE=12` and `VIPS_CONCURRENCY=3`, avoiding both idle cores and
+libvips oversubscription. This removes the former 24K-wide intermediate image while
+preserving deterministic media bytes. On the 30-vCPU runner, the verified 21-scene
+12K cold build takes 83.07 seconds and a fully cached rebuild takes 9.55 seconds.
+The Publish screen reports the current phase, scene progress, cache reuse and
+measured build duration instead of leaving the operator waiting. Operators may use
+`--face-concurrency` and `--scene-concurrency` for a measured fixed override; `auto`
+is the supported default.
 
 See [the product workflow](docs/product-workflow.md),
 [operator playbook](docs/operator-playbook.md), [product readiness contract](docs/product-readiness.md),

@@ -24,6 +24,8 @@ import {
   mediaRecipeVersion,
   mediaWorkerMetadata,
   projectCubeFaceRaw,
+  recommendedFaceConcurrency,
+  recommendedSceneConcurrency,
 } from "./lib/media-pyramid.mjs";
 import {
   assertPortableRelease,
@@ -64,7 +66,10 @@ function parseArguments(argv) {
     webpEffort: 2,
     jpegQuality: 86,
     projectionInterpolation: "spline16",
-    faceConcurrency: 2,
+    faceConcurrency: "auto",
+    faceConcurrencyMode: "auto",
+    sceneConcurrency: "auto",
+    sceneConcurrencyMode: "auto",
     replace: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -103,12 +108,18 @@ function parseArguments(argv) {
       options.jpegQuality = Number(argv[++index]);
     else if (argument === "--projection-interpolation")
       options.projectionInterpolation = String(argv[++index] || "");
-    else if (argument === "--face-concurrency")
-      options.faceConcurrency = Number(argv[++index]);
+    else if (argument === "--face-concurrency") {
+      const value = String(argv[++index] || "");
+      options.faceConcurrency = value === "auto" ? value : Number(value);
+    }
+    else if (argument === "--scene-concurrency") {
+      const value = String(argv[++index] || "");
+      options.sceneConcurrency = value === "auto" ? value : Number(value);
+    }
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
       console.log(
-        "Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug --tour-version <Studio version> --change-summary 'Initial portable release' [--previous-tour-version <prior Studio version>] [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version package-version] [--runtime-template release-root] [--base-size 512] [--tile-size 2048] [--fallback-size 1024] [--webp-quality 78] [--webp-effort 2] [--jpeg-quality 86] [--projection-interpolation spline16] [--face-concurrency 2] [--replace]",
+        "Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug --tour-version <Studio version> --change-summary 'Initial portable release' [--previous-tour-version <prior Studio version>] [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version package-version] [--runtime-template release-root] [--base-size 512] [--tile-size 2048] [--fallback-size 1024] [--webp-quality 78] [--webp-effort 2] [--jpeg-quality 86] [--projection-interpolation spline16] [--face-concurrency auto|1..6] [--scene-concurrency auto|1..3] [--replace]",
       );
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
@@ -163,8 +174,32 @@ function parseArguments(argv) {
     throw new Error("JPEG quality must be 84..94.");
   if (!["linear", "cubic", "spline16", "lanczos"].includes(options.projectionInterpolation))
     throw new Error("Projection interpolation must be linear, cubic, spline16 or lanczos.");
-  if (!Number.isInteger(options.faceConcurrency) || options.faceConcurrency < 1 || options.faceConcurrency > 3)
-    throw new Error("Face concurrency must be an integer from 1 to 3.");
+  if (options.faceConcurrency === "auto") {
+    options.faceConcurrency = recommendedFaceConcurrency();
+    options.faceConcurrencyMode = "auto";
+  } else {
+    if (
+      !Number.isInteger(options.faceConcurrency) ||
+      options.faceConcurrency < 1 ||
+      options.faceConcurrency > 6
+    )
+      throw new Error("Face concurrency must be auto or an integer from 1 to 6.");
+    options.faceConcurrencyMode = "fixed";
+  }
+  if (options.sceneConcurrency === "auto") {
+    options.sceneConcurrency = recommendedSceneConcurrency({
+      faceConcurrency: options.faceConcurrency,
+    });
+    options.sceneConcurrencyMode = "auto";
+  } else {
+    if (
+      !Number.isInteger(options.sceneConcurrency) ||
+      options.sceneConcurrency < 1 ||
+      options.sceneConcurrency > 3
+    )
+      throw new Error("Scene concurrency must be auto or an integer from 1 to 3.");
+    options.sceneConcurrencyMode = "fixed";
+  }
   return options;
 }
 
@@ -903,15 +938,43 @@ async function main() {
     let tileCount = 0;
     let multiresCacheHits = 0;
     let multiresCacheMisses = 0;
+    let completedScenes = 0;
+    let progressWrites = Promise.resolve();
+    const sceneResults = await mapWithConcurrency(
+      project.scenes,
+      options.sceneConcurrency,
+      async (scene) => {
+        const sceneStartedAt = performance.now();
+        const generated = await buildSceneMultires(
+          scene,
+          stagedRoot,
+          temporaryRoot,
+          options,
+        );
+        const durationMs = Math.round(performance.now() - sceneStartedAt);
+        completedScenes += 1;
+        const completed = completedScenes;
+        progressWrites = progressWrites.then(() =>
+          reportProgress(
+            options,
+            "tiles",
+            Math.round(20 + (completed / project.scenes.length) * 65),
+            `${generated.cacheHit ? "Reused" : "Optimized"} view ${completed} of ${project.scenes.length}`,
+            {
+              completedScenes: completed,
+              totalScenes: project.scenes.length,
+              sceneId: scene.id,
+              cacheHit: generated.cacheHit,
+            },
+          ),
+        );
+        await progressWrites;
+        return { scene, generated, durationMs };
+      },
+    );
+    await progressWrites;
     const sceneTimings = [];
-    for (const [sceneIndex, scene] of project.scenes.entries()) {
-      const sceneStartedAt = performance.now();
-      const generated = await buildSceneMultires(
-        scene,
-        stagedRoot,
-        temporaryRoot,
-        options,
-      );
+    for (const { scene, generated, durationMs } of sceneResults) {
       sceneBuilds.set(scene.id, generated);
       scene.type = "multires";
       scene.multiRes = generated.config;
@@ -921,22 +984,9 @@ async function main() {
       else multiresCacheMisses += 1;
       sceneTimings.push({
         id: scene.id,
-        durationMs: Math.round(performance.now() - sceneStartedAt),
+        durationMs,
         cacheHit: generated.cacheHit,
       });
-      const completedScenes = sceneIndex + 1;
-      await reportProgress(
-        options,
-        "tiles",
-        Math.round(20 + (completedScenes / project.scenes.length) * 65),
-        `${generated.cacheHit ? "Reused" : "Optimized"} view ${completedScenes} of ${project.scenes.length}`,
-        {
-          completedScenes,
-          totalScenes: project.scenes.length,
-          sceneId: scene.id,
-          cacheHit: generated.cacheHit,
-        },
-      );
     }
     timings.runtimeAndTilesMs = Math.round(performance.now() - phaseStartedAt);
     phaseStartedAt = performance.now();
@@ -1182,6 +1232,9 @@ async function main() {
             webpEffort: options.webpEffort,
             projectionInterpolation: options.projectionInterpolation,
             faceConcurrency: options.faceConcurrency,
+            faceConcurrencyMode: options.faceConcurrencyMode,
+            sceneConcurrency: options.sceneConcurrency,
+            sceneConcurrencyMode: options.sceneConcurrencyMode,
           }),
           buildMetrics: { timings, scenes: sceneTimings },
         },

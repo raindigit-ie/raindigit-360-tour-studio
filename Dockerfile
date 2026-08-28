@@ -16,19 +16,6 @@ EXPOSE 8080
 
 FROM node:22.12-alpine AS studio
 
-ARG BUILD_DATE="unknown"
-ARG VCS_REF="unknown"
-ARG VERSION="0.2.0"
-
-LABEL org.opencontainers.image.title="RainDigit 360 Tour Studio" \
-      org.opencontainers.image.description="Portable local studio for building self-hosted RainDigit 360 tours" \
-      org.opencontainers.image.url="https://raindigit.ie/services/immersive-tours" \
-      org.opencontainers.image.source="https://github.com/raindigit-ie/raindigit-360-tour-studio" \
-      org.opencontainers.image.vendor="RainDigit" \
-      org.opencontainers.image.version="$VERSION" \
-      org.opencontainers.image.revision="$VCS_REF" \
-      org.opencontainers.image.created="$BUILD_DATE"
-
 RUN apk add --no-cache \
       ca-certificates \
       ffmpeg \
@@ -47,16 +34,17 @@ ENV NODE_ENV=production \
     INSTA360_TOUR_BUILD_CACHE=/data/build-cache \
     INSTA360_TOUR_ARCHIVES=/data/archives \
     INSTA360_TOUR_BUILD_CACHE_MAX_GB=8 \
-    RAINDIGIT_TOUR_COMMIT="$VCS_REF"
+    UV_THREADPOOL_SIZE=12 \
+    VIPS_CONCURRENCY=3
 
 WORKDIR /app
-COPY --from=production-dependencies /app/node_modules ./node_modules
-COPY package.json package-lock.json ./
-COPY CHANGELOG.md ./CHANGELOG.md
-COPY config/release-contract.json ./config/release-contract.json
-COPY scripts/tour-editor-server.mjs scripts/build-tour-release.mjs scripts/build-multires-release.mjs scripts/prune-build-cache.mjs ./scripts/
-COPY scripts/lib ./scripts/lib
-COPY web-tour ./web-tour
+COPY --chown=node:node --from=production-dependencies /app/node_modules ./node_modules
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node CHANGELOG.md ./CHANGELOG.md
+COPY --chown=node:node config/release-contract.json ./config/release-contract.json
+COPY --chown=node:node scripts/tour-editor-server.mjs scripts/build-tour-release.mjs scripts/build-multires-release.mjs scripts/prune-build-cache.mjs ./scripts/
+COPY --chown=node:node scripts/lib ./scripts/lib
+COPY --chown=node:node web-tour ./web-tour
 COPY --chmod=755 docker/studio-entrypoint.sh /usr/local/bin/raindigit-studio-entrypoint
 
 RUN mkdir -p \
@@ -68,7 +56,22 @@ RUN mkdir -p \
       /data/archives \
       /app/web-tour/panoramas \
       /app/web-tour/thumbnails \
-    && chown -R node:node /app /data
+    && chown -R node:node /data
+
+ARG BUILD_DATE="unknown"
+ARG VCS_REF="unknown"
+ARG VERSION="0.2.0"
+
+ENV RAINDIGIT_TOUR_COMMIT="$VCS_REF"
+
+LABEL org.opencontainers.image.title="RainDigit 360 Tour Studio" \
+      org.opencontainers.image.description="Portable local studio for building self-hosted RainDigit 360 tours" \
+      org.opencontainers.image.url="https://raindigit.ie/services/immersive-tours" \
+      org.opencontainers.image.source="https://github.com/raindigit-ie/raindigit-360-tour-studio" \
+      org.opencontainers.image.vendor="RainDigit" \
+      org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.revision="$VCS_REF" \
+      org.opencontainers.image.created="$BUILD_DATE"
 
 USER node
 VOLUME ["/data"]
