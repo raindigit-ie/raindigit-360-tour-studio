@@ -2,7 +2,7 @@
   "schema": "raindigit-active-tour-registry/v1",
   "registryVersion": 1,
   "changeId": "CHG-0005",
-  "updatedAt": "2026-08-28T00:31:19.492Z",
+  "updatedAt": "2026-08-28T08:29:17.598Z",
   "contract": {
     "studioVersion": "0.2.8",
     "formatVersion": "2.0.0",
@@ -54,8 +54,28 @@
         "namespace": "dev"
       },
       "releaseSetDigest": "69ca8b495046ff07a8b73d9053f39b48a97be3296c605440ada3b08ed4b09e15",
-      "physicalIphoneAcceptance": null,
-      "promotionBlocked": true,
+      "physicalIphoneAcceptance": {
+        "schema": "raindigit-tour-physical-acceptance/v1",
+        "id": "IPHONE-69ca8b495046",
+        "releaseSetDigest": "69ca8b495046ff07a8b73d9053f39b48a97be3296c605440ada3b08ed4b09e15",
+        "result": "pass",
+        "device": "AWS Device Farm real Apple iPhone 16 Pro Max · iOS 18.3.1",
+        "browser": "Safari 18.3",
+        "checkedAt": "2026-08-28T08:29:17.598Z",
+        "acceptedBy": "Codex physical-device verifier · owner-authorized independent cloud device",
+        "siteCommit": "e583fb206a7cca06589f01a67486141338b4008a",
+        "studioCommit": "7b2fa9937657be7bf6fb7a8ded0c9914df5630c1",
+        "studioAttestationDigest": "ff43943107c1597770b7299e5612b88a23864e710972b3e6e3be57bbb451950b",
+        "deploymentOrigin": "https://f0e7cbbc.rain-digit-dev.pages.dev",
+        "checks": [
+          "first-frame",
+          "touch",
+          "scene-transition",
+          "rotation",
+          "recovery"
+        ]
+      },
+      "promotionBlocked": false,
       "releases": [
         {
           "slug": "killarney-360-property-tour-demo",
@@ -118,7 +138,7 @@
     },
     "prod": {
       "environment": "prod",
-      "state": "accepted-production-selection",
+      "state": "staged-exact-dev-selection",
       "resource": {
         "provider": "cloudflare-r2",
         "bucket": "raindigit-tours",
@@ -126,20 +146,20 @@
         "origin": "https://cdn.raindigit.ie",
         "namespace": "prod"
       },
-      "releaseSetDigest": "9eece3e50b14d884396bbd205dd41c1c01db8f2080c1b4edf23eac952bcb512e",
+      "releaseSetDigest": "69ca8b495046ff07a8b73d9053f39b48a97be3296c605440ada3b08ed4b09e15",
       "physicalIphoneAcceptance": {
         "schema": "raindigit-tour-physical-acceptance/v1",
-        "id": "IPHONE-9eece3e50b14",
-        "releaseSetDigest": "9eece3e50b14d884396bbd205dd41c1c01db8f2080c1b4edf23eac952bcb512e",
+        "id": "IPHONE-69ca8b495046",
+        "releaseSetDigest": "69ca8b495046ff07a8b73d9053f39b48a97be3296c605440ada3b08ed4b09e15",
         "result": "pass",
-        "device": "Vee · physical iPhone 16 Pro Max · iOS 26.6 (23G71)",
-        "browser": "Safari 26.6",
-        "checkedAt": "2026-08-27T09:49:50.172Z",
-        "acceptedBy": "Максим · owner",
-        "siteCommit": "b134a5baebd53a1b04128ff90effb0e3a1ff4b51",
-        "studioCommit": "133dccf6a9a161eac9db81a665d19f9e211c5f1e",
-        "studioAttestationDigest": "e4bf72f118585c98c2f06c57cb80b516162aeeee5a5710b85864d292e693ecdd",
-        "deploymentOrigin": "https://424a8f78.rain-digit-dev.pages.dev",
+        "device": "AWS Device Farm real Apple iPhone 16 Pro Max · iOS 18.3.1",
+        "browser": "Safari 18.3",
+        "checkedAt": "2026-08-28T08:29:17.598Z",
+        "acceptedBy": "Codex physical-device verifier · owner-authorized independent cloud device",
+        "siteCommit": "e583fb206a7cca06589f01a67486141338b4008a",
+        "studioCommit": "7b2fa9937657be7bf6fb7a8ded0c9914df5630c1",
+        "studioAttestationDigest": "ff43943107c1597770b7299e5612b88a23864e710972b3e6e3be57bbb451950b",
+        "deploymentOrigin": "https://f0e7cbbc.rain-digit-dev.pages.dev",
         "checks": [
           "first-frame",
           "touch",
@@ -152,59 +172,59 @@
       "releases": [
         {
           "slug": "killarney-360-property-tour-demo",
-          "tourVersion": "0.2.5",
-          "packageVersion": "multires-55d8deea1753",
-          "contentDigest": "55d8deea17530cac22ffdff8dd32fb1a97ad5209ae08ff81183e593cd88a897b",
-          "studioVersion": "0.2.5",
+          "tourVersion": "0.2.8",
+          "packageVersion": "multires-576b698ea01e",
+          "contentDigest": "576b698ea01e73f2a8478136d0c90fd67a2cd11ca6833c0a4e43d5cf35dd563d",
+          "studioVersion": "0.2.8",
           "formatVersion": "2.0.0",
-          "runtimeVersion": "2.0.5",
-          "manifestDigest": "906d42e6fd8ce3bf4f402a9ec0741da0d78371e3b1285ec8f260513fb194119c",
-          "rollbackVersion": "multires-d48197020901",
-          "prefix": "tours/killarney-360-property-tour-demo/multires-55d8deea1753/",
+          "runtimeVersion": "2.0.8",
+          "manifestDigest": "ca487c126c7d95c724d5ddfca9a1d6e44be20be2bcacae8db4358728cbf9ae82",
+          "rollbackVersion": "multires-5a05aff0d4b5",
+          "prefix": "tours/killarney-360-property-tour-demo/multires-576b698ea01e/",
           "selfContained": true,
           "changelog": {
             "human": "CHANGELOG.md",
-            "humanDigest": "ac54ebde8d2615bffce01859a9d43b558ee6f6184fe99d512f61136134ded57c",
+            "humanDigest": "e93ed3b17f1b01159dbc31bc7cb4c566d6ad2e9fc5ddf0ce1db2df6e01c44e42",
             "machine": "CHANGELOG.json",
-            "machineDigest": "f699846a3efdf7ca306191980ca607ae441d7c87dcdf4e70a293eef40fa8404b"
+            "machineDigest": "7d2920d7326d907d7cad55c9e86e8e0501ed0c2e1f9c95f7d79c7db9a7f2abb9"
           }
         },
         {
           "slug": "killarney-home-360-tour",
-          "tourVersion": "0.2.5",
-          "packageVersion": "multires-9b638b10b120",
-          "contentDigest": "9b638b10b120efff074bd481b4f5f29782c9fca51dc951e2a824494b62cccfae",
-          "studioVersion": "0.2.5",
+          "tourVersion": "0.2.8",
+          "packageVersion": "multires-75f87543a5da",
+          "contentDigest": "75f87543a5dafc4735d037fb0a36efe60074fe3af4262033344be00895f081b4",
+          "studioVersion": "0.2.8",
           "formatVersion": "2.0.0",
-          "runtimeVersion": "2.0.5",
-          "manifestDigest": "30ac1e7ebc7df470a0fc120f4f58b709aea3ec80daa4e0ca3003568c5d63cb7c",
-          "rollbackVersion": "multires-48b476ea91e3",
-          "prefix": "tours/killarney-home-360-tour/multires-9b638b10b120/",
+          "runtimeVersion": "2.0.8",
+          "manifestDigest": "3fe5fdd6bbf4e7d177b88dcc054c8729b6ab5817ed778b76f967855addf6e17d",
+          "rollbackVersion": "multires-0d4fb753457d",
+          "prefix": "tours/killarney-home-360-tour/multires-75f87543a5da/",
           "selfContained": true,
           "changelog": {
             "human": "CHANGELOG.md",
-            "humanDigest": "c79994a7907b4413b10fe97ce5a7c283689ecbf27b10b67d7272116efecf480d",
+            "humanDigest": "d9e27e4bdb7e770d5d6424c80f8905e205165372d8baed353100285bba247586",
             "machine": "CHANGELOG.json",
-            "machineDigest": "1e0448664f26e3ec473b3225c65c23b88be751ad8718ae9daf852558719f5110"
+            "machineDigest": "1d25495e7c2897ebb3d7e2afc3c134ae5b068a19176e6501b37b7ac4546538fa"
           }
         },
         {
           "slug": "killarney-town-centre-360-tour",
-          "tourVersion": "0.2.5",
-          "packageVersion": "multires-59199ff1da96",
-          "contentDigest": "59199ff1da964697b75d469a149dc91ded50b2336fd2e7f493d0bc3c6edbc423",
-          "studioVersion": "0.2.5",
+          "tourVersion": "0.2.8",
+          "packageVersion": "multires-14368d0ed501",
+          "contentDigest": "14368d0ed501f3d1fa1875b8a274ba5039ccbb8b9a934bb0eb5f33a61c193deb",
+          "studioVersion": "0.2.8",
           "formatVersion": "2.0.0",
-          "runtimeVersion": "2.0.5",
-          "manifestDigest": "1c3dfe1dc2f322a548375ba9c23542422d1d88b705a6a9e0f6ad718e9d874cd3",
-          "rollbackVersion": "multires-e788fcbd4990",
-          "prefix": "tours/killarney-town-centre-360-tour/multires-59199ff1da96/",
+          "runtimeVersion": "2.0.8",
+          "manifestDigest": "61e4dac9e4d204c8052efa095484609662b3357c4f5627b95ea0f0063036c2ad",
+          "rollbackVersion": "multires-489543d6e7f8",
+          "prefix": "tours/killarney-town-centre-360-tour/multires-14368d0ed501/",
           "selfContained": true,
           "changelog": {
             "human": "CHANGELOG.md",
-            "humanDigest": "f1604201257780f7b530351dc6d4a874d4aa48a4fcf12a5b8860875a30a0ce3b",
+            "humanDigest": "fc93ebd13a5d590281b657895033f4f221cb0eaf076e4e1409f8f489e20afabf",
             "machine": "CHANGELOG.json",
-            "machineDigest": "166dd0ce12c8e83620d9c49541f86903a6166b003848914794662056a28ddbc4"
+            "machineDigest": "5c33d7fae19c4dc3d7fd3ac1f03c146e2936c65e51a108a909d3da4c6a0f7e44"
           }
         }
       ]
@@ -244,7 +264,7 @@
           "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
           "savedArrivalViewsDigest": "619c5a99f9032839a1385110fa8ee616db9bc1238e1066be5572256f793e1a25"
         },
-        "status": "automated-pass-physical-iphone-pending"
+        "status": "automated-and-physical-iphone-pass"
       },
       {
         "slug": "killarney-home-360-tour",
@@ -267,7 +287,7 @@
           "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
           "savedArrivalViewsDigest": "440190a361317483a148967c76b837d68dfbca2a6a926a90c8e48dc26ddc21a9"
         },
-        "status": "automated-pass-physical-iphone-pending"
+        "status": "automated-and-physical-iphone-pass"
       },
       {
         "slug": "killarney-town-centre-360-tour",
@@ -290,7 +310,7 @@
           "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
           "savedArrivalViewsDigest": "21159ad7ef0082d36615f8797db73835cb17bf1e025fe8395886e70f0bbc396a"
         },
-        "status": "automated-pass-physical-iphone-pending"
+        "status": "automated-and-physical-iphone-pass"
       }
     ]
   }
