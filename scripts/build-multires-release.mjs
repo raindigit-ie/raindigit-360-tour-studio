@@ -20,9 +20,10 @@ import { promisify } from "node:util";
 import vm from "node:vm";
 import {
   buildFacePyramid,
-  MEDIA_RECIPE_VERSION,
+  hybridMediaProfile,
+  mediaRecipeVersion,
   mediaWorkerMetadata,
-  projectCubeFace,
+  projectCubeFaceRaw,
 } from "./lib/media-pyramid.mjs";
 import {
   assertPortableRelease,
@@ -56,10 +57,14 @@ function parseArguments(argv) {
     previousTourVersion: null,
     changeSummary: null,
     runtimeTemplate: null,
-    tileSize: 512,
+    baseSize: 512,
+    tileSize: 2048,
     fallbackSize: 1024,
     webpQuality: 78,
+    webpEffort: 2,
     jpegQuality: 86,
+    projectionInterpolation: "spline16",
+    faceConcurrency: 2,
     replace: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -86,16 +91,24 @@ function parseArguments(argv) {
       options.runtimeTemplate = resolve(argv[++index] || "");
     else if (argument === "--tile-size")
       options.tileSize = Number(argv[++index]);
+    else if (argument === "--base-size")
+      options.baseSize = Number(argv[++index]);
     else if (argument === "--fallback-size")
       options.fallbackSize = Number(argv[++index]);
     else if (argument === "--webp-quality")
       options.webpQuality = Number(argv[++index]);
+    else if (argument === "--webp-effort")
+      options.webpEffort = Number(argv[++index]);
     else if (argument === "--jpeg-quality")
       options.jpegQuality = Number(argv[++index]);
+    else if (argument === "--projection-interpolation")
+      options.projectionInterpolation = String(argv[++index] || "");
+    else if (argument === "--face-concurrency")
+      options.faceConcurrency = Number(argv[++index]);
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
       console.log(
-        "Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug --tour-version <Studio version> --change-summary 'Initial portable release' [--previous-tour-version <prior Studio version>] [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version package-version] [--runtime-template release-root] [--tile-size 512] [--fallback-size 1024] [--webp-quality 78] [--jpeg-quality 86] [--replace]",
+        "Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug --tour-version <Studio version> --change-summary 'Initial portable release' [--previous-tour-version <prior Studio version>] [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version package-version] [--runtime-template release-root] [--base-size 512] [--tile-size 2048] [--fallback-size 1024] [--webp-quality 78] [--webp-effort 2] [--jpeg-quality 86] [--projection-interpolation spline16] [--face-concurrency 2] [--replace]",
       );
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
@@ -115,8 +128,15 @@ function parseArguments(argv) {
     throw new Error(
       "--rollback-version must be a legacy-* or multires-* content version.",
     );
-  if (![256, 512, 1024].includes(options.tileSize))
-    throw new Error("Tile size must be 256, 512 or 1024 pixels.");
+  if (![512, 1024, 2048].includes(options.tileSize))
+    throw new Error("Detail tile size must be 512, 1024 or 2048 pixels.");
+  if (
+    !Number.isInteger(options.baseSize) ||
+    options.baseSize < 256 ||
+    options.baseSize > 1024 ||
+    options.baseSize > options.tileSize
+  )
+    throw new Error("Base face size must be 256..1024 pixels and no larger than the detail tile.");
   if (
     !Number.isInteger(options.fallbackSize) ||
     options.fallbackSize < 512 ||
@@ -130,11 +150,21 @@ function parseArguments(argv) {
   )
     throw new Error("WebP quality must be 75..80.");
   if (
+    !Number.isInteger(options.webpEffort) ||
+    options.webpEffort < 0 ||
+    options.webpEffort > 6
+  )
+    throw new Error("WebP effort must be 0..6.");
+  if (
     !Number.isInteger(options.jpegQuality) ||
     options.jpegQuality < 84 ||
     options.jpegQuality > 94
   )
     throw new Error("JPEG quality must be 84..94.");
+  if (!["linear", "cubic", "spline16", "lanczos"].includes(options.projectionInterpolation))
+    throw new Error("Projection interpolation must be linear, cubic, spline16 or lanczos.");
+  if (!Number.isInteger(options.faceConcurrency) || options.faceConcurrency < 1 || options.faceConcurrency > 3)
+    throw new Error("Face concurrency must be an integer from 1 to 3.");
   return options;
 }
 
@@ -162,6 +192,22 @@ async function run(command, arguments_, options = {}) {
     });
   } catch (error) {
     throw new Error(`${command} failed: ${error.stderr || error.message}`);
+  }
+}
+
+async function copyTree(source, destination) {
+  await mkdir(destination, { recursive: true });
+  try {
+    // Native cp batches traversal and data transfer in one process. Node's
+    // recursive fs.cp performs hundreds of individual JS operations for a
+    // complete tour cache, which dominated otherwise warm builds.
+    await execFileAsync("cp", ["-R", `${source}/.`, `${destination}/`], {
+      maxBuffer: 8 * 1024 * 1024,
+    });
+  } catch (error) {
+    if (error.code !== "ENOENT")
+      throw new Error(`Native cache copy failed: ${error.stderr || error.message}`);
+    await cp(source, destination, { recursive: true, force: true });
   }
 }
 
@@ -328,7 +374,14 @@ function maxLevel(size, tileSize) {
   return levels;
 }
 
-function multiresCacheKey(sourceHash, cubeSize, levels, options) {
+function multiresCacheKey(
+  sourceHash,
+  cubeSize,
+  levels,
+  baseSize,
+  detailTileSize,
+  options,
+) {
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -336,11 +389,19 @@ function multiresCacheKey(sourceHash, cubeSize, levels, options) {
         sourceHash,
         cubeSize,
         levels,
-        tileSize: options.tileSize,
+        mediaProfile: hybridMediaProfile(baseSize, detailTileSize),
+        baseSize,
+        detailTileSize,
         fallbackSize: options.fallbackSize,
         webpQuality: options.webpQuality,
+        webpEffort: options.webpEffort,
         jpegQuality: options.jpegQuality,
-        mediaRecipe: MEDIA_RECIPE_VERSION,
+        mediaRecipe: mediaRecipeVersion(
+          baseSize,
+          detailTileSize,
+          options.webpEffort,
+          options.projectionInterpolation,
+        ),
       }),
     )
     .digest("hex");
@@ -358,17 +419,14 @@ async function restoreMultiresCache(cacheDir, cacheKey, targetRoot) {
         metadata.key === cacheKey,
       "Multires cache metadata is invalid.",
     );
-    for (const file of metadata.files || []) {
+    await mapWithConcurrency(metadata.files || [], 32, async (file) => {
       const info = await stat(join(entry, "assets", file.path));
       assert(
         info.size === file.bytes,
         `Multires cache size mismatch: ${file.path}`,
       );
-    }
-    await cp(join(entry, "assets"), targetRoot, {
-      recursive: true,
-      force: true,
     });
+    await copyTree(join(entry, "assets"), targetRoot);
     const accessedAt = new Date();
     await utimes(join(entry, "metadata.json"), accessedAt, accessedAt);
     return {
@@ -402,10 +460,7 @@ async function storeMultiresCache(
   await rm(temporary, { recursive: true, force: true });
   await mkdir(temporary, { recursive: true });
   try {
-    await cp(targetRoot, join(temporary, "assets"), {
-      recursive: true,
-      force: true,
-    });
+    await copyTree(targetRoot, join(temporary, "assets"));
     await writeFile(
       join(temporary, "metadata.json"),
       `${JSON.stringify(
@@ -557,11 +612,19 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
   );
 
   const cubeSize = cubeResolution(dimensions.width);
-  const levels = maxLevel(cubeSize, options.tileSize);
+  const detailTileSize = Math.min(cubeSize, options.tileSize);
+  const levels = maxLevel(cubeSize, detailTileSize);
   const sourceHash = createHash("sha256")
     .update(await readFile(source))
     .digest("hex");
-  const cacheKey = multiresCacheKey(sourceHash, cubeSize, levels, options);
+  const cacheKey = multiresCacheKey(
+    sourceHash,
+    cubeSize,
+    levels,
+    options.baseSize,
+    detailTileSize,
+    options,
+  );
   const contentHash = cacheKey.slice(0, 20);
   const relativeRoot = `assets/mr/${contentHash}`;
   const targetRoot = join(stagedRoot, relativeRoot);
@@ -576,23 +639,32 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
     );
     if (cached) return { relativeRoot, ...cached };
 
-    let tileCount = 0;
-    for (const face of faceLetters) {
-      const facePath = join(sceneTemporaryRoot, `${face}.png`);
-      await projectCubeFace({ source, face, output: facePath, cubeSize });
-      tileCount += await buildFacePyramid({
-        input: facePath,
-        face,
-        targetRoot,
-        temporaryRoot: sceneTemporaryRoot,
-        levels,
-        tileSize: options.tileSize,
-        fallbackSize: options.fallbackSize,
-        webpQuality: options.webpQuality,
-        jpegQuality: options.jpegQuality,
-      });
-      await rm(facePath, { force: true });
-    }
+    const faceTileCounts = await mapWithConcurrency(
+      faceLetters,
+      options.faceConcurrency,
+      async (face) => {
+        const projected = await projectCubeFaceRaw({
+          source,
+          face,
+          cubeSize,
+          interpolation: options.projectionInterpolation,
+        });
+        return buildFacePyramid({
+          input: projected,
+          face,
+          targetRoot,
+          temporaryRoot: sceneTemporaryRoot,
+          levels,
+          baseSize: options.baseSize,
+          tileSize: detailTileSize,
+          fallbackSize: options.fallbackSize,
+          webpQuality: options.webpQuality,
+          webpEffort: options.webpEffort,
+          jpegQuality: options.jpegQuality,
+        });
+      },
+    );
+    const tileCount = faceTileCounts.reduce((sum, count) => sum + count, 0);
 
     const preview = await makePreview(source);
     const config = {
@@ -601,9 +673,11 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
       fallbackPath: "/fallback/%s",
       extension: "webp",
       fallbackExtension: "jpg",
-      tileResolution: options.tileSize,
+      tileResolution: detailTileSize,
       maxLevel: levels,
       cubeResolution: cubeSize,
+      mediaProfile: hybridMediaProfile(options.baseSize, detailTileSize),
+      baseResolution: options.baseSize,
       equirectangularThumbnail: preview,
     };
     await storeMultiresCache(
@@ -764,6 +838,7 @@ async function main() {
       "--quality",
       "94",
       "--preserve-resolution",
+      "--preserve-neutral-source",
       "--replace",
     ];
     if (options.cacheDir) baseArguments.push("--cache-dir", options.cacheDir);
@@ -786,10 +861,23 @@ async function main() {
     const configPath = join(stagedRoot, "js", "tour-config.js");
     const pannellumPath = join(stagedRoot, "js", "pannellum.js");
     const pannellumSource = await readFile(pannellumPath, "utf8");
-    const patchedPannellum = pannellumSource.replace(
-      'H.replace("%s",Q[t])+"."+m.extension:m[t].src',
-      'H.replace("%s",Q[t])+"."+(m.fallbackExtension||m.extension):m[t].src',
+    const pannellumFallbackPatches = [
+      [
+        'H.replace("%s",Q[t])+"."+m.extension:m[t].src',
+        'H.replace("%s",Q[t])+"."+(m.fallbackExtension||m.extension):m[t].src',
+      ],
+    ];
+    const matchingFallbackPatch = pannellumFallbackPatches.find(([needle]) =>
+      pannellumSource.includes(needle)
     );
+    const modernFallbackPattern = /([\w$]+)\.replace\("%s",([\w$]+)\[([\w$]+)\]\)\+\(([\w$]+)\.extension\?"\."\+\4\.extension:""\)/;
+    const patchedPannellum = matchingFallbackPatch
+      ? pannellumSource.replace(...matchingFallbackPatch)
+      : pannellumSource.replace(
+          modernFallbackPattern,
+          (_, path, sides, side, media) =>
+            `${path}.replace("%s",${sides}[${side}])+(${media}.fallbackExtension||${media}.extension?"."+(${media}.fallbackExtension||${media}.extension):"")`,
+        );
     assert(
       patchedPannellum !== pannellumSource,
       "Pannellum fallback-extension compatibility patch did not apply.",
@@ -978,10 +1066,13 @@ async function main() {
       sceneIds,
       sceneViews,
       hotspotGraph,
+      mediaProfile: hybridMediaProfile(options.baseSize, options.tileSize),
+      baseSize: options.baseSize,
       tileSize: options.tileSize,
       sourceWidth: firstSceneDimensions.width,
       sourceHeight: firstSceneDimensions.height,
       webpQuality: options.webpQuality,
+      webpEffort: options.webpEffort,
       fallbackFormat: "jpeg",
       fallbackSize: options.fallbackSize,
       fileCount: payloadFiles.length,
@@ -1085,7 +1176,13 @@ async function main() {
           bytes: payloadBytes,
           contentDigest: digest,
           cache,
-          mediaWorker: mediaWorkerMetadata(),
+          mediaWorker: mediaWorkerMetadata({
+            baseSize: options.baseSize,
+            tileSize: options.tileSize,
+            webpEffort: options.webpEffort,
+            projectionInterpolation: options.projectionInterpolation,
+            faceConcurrency: options.faceConcurrency,
+          }),
           buildMetrics: { timings, scenes: sceneTimings },
         },
         null,

@@ -22,7 +22,11 @@
   // The six target level-1 faces are the correctness gate. Detail levels are
   // deliberately allowed to continue through Pannellum's native progressive
   // renderer after the first stable target frame is presented.
-  const presentationSettleDelay = reducedMotion ? 20 : 80;
+  // This is a correctness delay, not decorative motion, so reduced-motion
+  // must not shorten it. The embedded Pannellum preview texture owns any
+  // not-yet-filled detail area; these turns let the six verified base faces
+  // reach the compositor without waiting for progressive detail.
+  const presentationSettleDelay = 80;
   const presentationFrameCount = 2;
   const guardCellDuration = reducedMotion ? 160 : 1_180;
   const guardSettleDuration = reducedMotion ? 80 : 180;
@@ -653,7 +657,7 @@
     });
   }
 
-  document.documentElement.dataset.tourSceneTransition = "target-base-progressive-v5";
+  document.documentElement.dataset.tourSceneTransition = "target-base-progressive-v8";
   document.documentElement.dataset.tourWebglReadback = "disabled";
   const primeInitial = () => active || guard(requestedScene(), true);
   window.__rainDigitTourTransition = {

@@ -10,6 +10,7 @@ const CDN_ORIGIN = (process.env.R2_CDN_ORIGIN || "https://cdn.raindigit.ie").rep
 const packagesRoot = resolve(process.env.TZ3_PACKAGES_ROOT || ".artifacts/tz3/packages");
 const immutable = "public, max-age=31536000, immutable";
 const concurrency = Number(process.env.TZ3_UPLOAD_CONCURRENCY || 6);
+const expectedReleaseCount = Number(process.env.TZ3_EXPECTED_RELEASES || 2);
 const releaseSlugs = new Set((process.env.TZ3_RELEASE_SLUGS || "")
   .split(",")
   .map((slug) => slug.trim())
@@ -90,6 +91,9 @@ async function parallel(items, worker) {
 }
 
 const token = await oauthToken();
+if (!Number.isInteger(expectedReleaseCount) || expectedReleaseCount < 1) {
+  throw new Error("TZ3_EXPECTED_RELEASES must be a positive integer.");
+}
 const packageDirectories = (await readdir(packagesRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => join(packagesRoot, entry.name));
@@ -104,7 +108,11 @@ for (const packageDirectory of packageDirectories) {
     releases.push({ manifest, root });
   }
 }
-if (releases.length !== 2) throw new Error(`Expected exactly 2 corrected-inventory candidate releases, found ${releases.length}.`);
+if (releases.length !== expectedReleaseCount) {
+  throw new Error(
+    `Expected exactly ${expectedReleaseCount} candidate release(s), found ${releases.length}.`,
+  );
+}
 const selectedReleases = releaseSlugs.size
   ? releases.filter((release) => releaseSlugs.has(release.manifest.slug))
   : releases;
@@ -130,6 +138,7 @@ for (const release of selectedReleases.sort((a, b) => a.manifest.slug.localeComp
   const remoteByKey = new Map(remoteBefore.map((object) => [object.key, object]));
   let reused = 0;
   let uploaded = 0;
+  const syncStartedAt = performance.now();
   await parallel(local, async (file, index) => {
     const existing = remoteByKey.get(file.key);
     if (existing) {
@@ -150,13 +159,27 @@ for (const release of selectedReleases.sort((a, b) => a.manifest.slug.localeComp
     uploaded += 1;
     if ((index + 1) % 1000 === 0) console.log(`${release.manifest.slug}: processed ${index + 1}/${local.length}`);
   });
+  const syncMs = Math.round(performance.now() - syncStartedAt);
 
+  const inventoryVerifyStartedAt = performance.now();
   const remoteAfter = await listPrefix(token, prefix);
   if (remoteAfter.length !== local.length) throw new Error(`${prefix}: R2 object count ${remoteAfter.length} != local ${local.length}.`);
   const remoteBytes = remoteAfter.reduce((sum, object) => sum + Number(object.size), 0);
   const localBytes = local.reduce((sum, file) => sum + file.bytes, 0);
   if (remoteBytes !== localBytes) throw new Error(`${prefix}: R2 byte count ${remoteBytes} != local ${localBytes}.`);
+  const remoteAfterByKey = new Map(remoteAfter.map((object) => [object.key, object]));
+  for (const file of local) {
+    const remote = remoteAfterByKey.get(file.key);
+    const etag = String(remote?.etag || "").replace(/^\"|\"$/g, "");
+    if (!remote || Number(remote.size) !== file.bytes || etag !== file.md5) {
+      throw new Error(`${file.key}: full R2 inventory verification failed.`);
+    }
+  }
+  const inventoryVerifyMs = Math.round(
+    performance.now() - inventoryVerifyStartedAt,
+  );
 
+  const sampleVerifyStartedAt = performance.now();
   const samples = [0, 1, 2, ...Array.from({ length: 7 }, (_, index) => Math.floor(index * (local.length - 1) / 6))]
     .map((index) => local[index])
     .filter((file, index, list) => list.findIndex((candidate) => candidate.key === file.key) === index);
@@ -169,6 +192,7 @@ for (const release of selectedReleases.sort((a, b) => a.manifest.slug.localeComp
     if (sha256 !== file.sha256) throw new Error(`${file.key}: CDN SHA-256 mismatch.`);
     verifiedSamples.push({ key: file.key, bytes: body.byteLength, sha256, cacheControl: response.headers.get("cache-control") });
   }
+  const sampleVerifyMs = Math.round(performance.now() - sampleVerifyStartedAt);
   evidence.push({
     slug: release.manifest.slug,
     version: release.manifest.version,
@@ -179,6 +203,13 @@ for (const release of selectedReleases.sort((a, b) => a.manifest.slug.localeComp
     reused,
     remoteFiles: remoteAfter.length,
     remoteBytes,
+    fullInventoryVerified: local.length,
+    timings: {
+      syncMs,
+      inventoryVerifyMs,
+      sampleVerifyMs,
+      totalMs: syncMs + inventoryVerifyMs + sampleVerifyMs,
+    },
     verifiedSamples
   });
   console.log(`${release.manifest.slug}: ${uploaded} uploaded, ${reused} reused, ${remoteAfter.length} verified.`);

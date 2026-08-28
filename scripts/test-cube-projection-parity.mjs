@@ -5,7 +5,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { FACE_VIEWS, projectCubeFace } from "./lib/media-pyramid.mjs";
+import sharp from "sharp";
+import { FACE_VIEWS, projectCubeFaceRaw } from "./lib/media-pyramid.mjs";
 
 const execFileAsync = promisify(execFile);
 const faces = ["f", "b", "u", "d", "l", "r"].map((name, index) => ({ name, index, ...FACE_VIEWS[name] }));
@@ -41,7 +42,7 @@ async function main() {
     ]);
     await execFileAsync("ffmpeg", [
       "-hide_banner", "-loglevel", "error", "-y", "-i", source,
-      "-vf", `v360=input=equirect:output=c6x1:out_forder=fbudlr:interp=lanczos:w=${cubeSize * 6}:h=${cubeSize}`,
+      "-vf", `v360=input=equirect:output=c6x1:out_forder=fbudlr:interp=spline16:w=${cubeSize * 6}:h=${cubeSize}`,
       "-frames:v", "1", strip
     ]);
 
@@ -50,7 +51,19 @@ async function main() {
       const reference = join(root, "reference", `${face.name}.png`);
       const candidate = join(root, "candidate", `${face.name}.png`);
       await runMagick([strip, "-crop", `${cubeSize}x${cubeSize}+${face.index * cubeSize}+0`, "+repage", reference]);
-      await projectCubeFace({ source, face: face.name, output: candidate, cubeSize });
+      const projected = await projectCubeFaceRaw({
+        source,
+        face: face.name,
+        cubeSize,
+        interpolation: "spline16",
+      });
+      await sharp(projected.data, {
+        raw: {
+          width: projected.width,
+          height: projected.height,
+          channels: projected.channels,
+        },
+      }).png({ compressionLevel: 1 }).toFile(candidate);
       let comparison = "";
       try {
         await runMagick(["compare", "-metric", "RMSE", reference, candidate, "null:"]);

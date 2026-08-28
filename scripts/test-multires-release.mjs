@@ -297,11 +297,15 @@ async function runBrowserQa(packageRoot, pointer) {
       const expectedFailureCounts = new Map();
       let rejectedBaseTiles = 0;
       let rejectBaseTilesUntil = 0;
+      let delayedDetailResponses = 0;
+      let expectedDocumentCancellationUntil = 0;
       await page.route(
         /\/assets\/mr\/.+\/[2-9]\/.*\.(?:webp|jpe?g)(?:\?.*)?$/,
         async (route) => {
-          if (target.name === "chromium-desktop")
+          if (target.name === "chromium-desktop") {
             await new Promise((resolve) => setTimeout(resolve, 1_200));
+            delayedDetailResponses += 1;
+          }
           await route.continue();
         },
       );
@@ -357,8 +361,14 @@ async function runBrowserQa(packageRoot, pointer) {
           expectedFailureCounts.set(request.url(), expectedCount - 1);
           return;
         }
+        const failure = request.failure()?.errorText || "failed";
+        if (
+          Date.now() < expectedDocumentCancellationUntil &&
+          failure.toLowerCase() === "cancelled"
+        )
+          return;
         networkErrors.push(
-          `${request.url()}: ${request.failure()?.errorText || "failed"}`,
+          `${request.url()}: ${failure}`,
         );
       });
       page.on("response", (response) => {
@@ -367,7 +377,9 @@ async function runBrowserQa(packageRoot, pointer) {
         if (/\/assets\/mr\/.+\.webp(?:\?|$)/.test(response.url()))
           tileRequests.push(response.url());
       });
-      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      // Do not let navigation-level network idleness hide whether the runtime
+      // releases on the base cube while detail requests remain delayed.
+      await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
       await page
         .locator(".pnlm-render-container canvas")
         .waitFor({ state: "visible", timeout: 30_000 });
@@ -424,7 +436,7 @@ async function runBrowserQa(packageRoot, pointer) {
         `${target.name} did not release the first-scene transition guard.`,
       );
       assert(
-        initialTransition.variant === "target-base-progressive-v5",
+        initialTransition.variant === "target-base-progressive-v8",
         `${target.name} selected ${initialTransition.variant || "no transition"}.`,
       );
       const initialComplete = initialTransition.events.find(
@@ -439,7 +451,7 @@ async function runBrowserQa(packageRoot, pointer) {
       );
       if (target.name === "chromium-desktop")
         assert(
-          initialComplete.detailPending > 0,
+          delayedDetailResponses === 0,
           "The first reveal incorrectly waited for delayed detail tiles.",
         );
       if (target.nativeMobile)
@@ -712,6 +724,10 @@ async function runBrowserQa(packageRoot, pointer) {
           waitUntil: "commit",
           timeout: 10_000,
         });
+        // Losing WebGL deliberately reloads the document. WebKit cancels any
+        // outstanding progressive detail requests owned by the old document;
+        // those cancellations are navigation cleanup, not delivery failures.
+        expectedDocumentCancellationUntil = Date.now() + 5_000;
         const contextLossSupported = await page.evaluate(() => {
           const canvas = Array.from(
             document.querySelectorAll(".pnlm-render-container canvas"),
@@ -897,7 +913,10 @@ async function main() {
       const panorama = join(workspace, "panoramas", `${id}.jpg`);
       await runMagick([
         "-size",
-        "2048x1024",
+        // Exercise the real two-level hybrid contract in the browser test.
+        // A 2048x1024 fixture only creates a 1024px cube face, so it cannot
+        // prove that readiness ignores delayed level-2 detail tiles.
+        "8192x4096",
         `gradient:${colors[0]}-${colors[1]}`,
         "-quality",
         "92",
@@ -1080,7 +1099,10 @@ async function main() {
     assert(
       config.scenes.every(
         (scene) =>
-          scene.multiRes.tileResolution === 512 &&
+          scene.multiRes.tileResolution >= 512 &&
+          scene.multiRes.tileResolution <= 2048 &&
+          scene.multiRes.baseResolution === 512 &&
+          scene.multiRes.mediaProfile === "hybrid-512-2048-v1" &&
           scene.multiRes.extension === "webp" &&
           scene.multiRes.fallbackExtension === "jpg" &&
           scene.multiRes.equirectangularThumbnail.startsWith(
@@ -1100,7 +1122,7 @@ async function main() {
     const fallbacks = files.filter((path) =>
       /\/fallback\/[fbudlr]\.jpg$/.test(path),
     );
-    assert(webpTiles.length > 12, "Too few multires WebP tiles were produced.");
+    assert(webpTiles.length >= 12, "Too few multires WebP tiles were produced.");
     assert(
       fallbacks.length === 12,
       `Expected 12 JPEG fallback faces, found ${fallbacks.length}.`,
@@ -1111,7 +1133,7 @@ async function main() {
     );
     for (const tile of webpTiles) {
       const [width, height] = await imageDimensions(tile);
-      assert(width <= 512 && height <= 512, `${tile} exceeds 512 px.`);
+      assert(width <= 2048 && height <= 2048, `${tile} exceeds 2048 px.`);
     }
     const manifest = JSON.parse(
       await readFile(join(releaseRoot, "release-manifest.json"), "utf8"),
@@ -1124,6 +1146,10 @@ async function main() {
     );
     assert(
       manifest.schema === "raindigit-tour-multires-release/v2" &&
+        manifest.mediaProfile === "hybrid-512-2048-v1" &&
+        manifest.baseSize === 512 &&
+        manifest.tileSize === 2048 &&
+        manifest.webpEffort === 2 &&
         manifest.studioVersion === studioVersion &&
         manifest.formatVersion === "2.0.0" &&
         manifest.runtimeVersion === "2.0.8" &&
@@ -1473,8 +1499,9 @@ async function main() {
       "utf8",
     );
     assert(
-      pannellumRuntime.includes("m.fallbackExtension||m.extension"),
-      "JPEG fallback extension support is missing from the release runtime.",
+      pannellumRuntime.includes("fallbackExtension") &&
+        pannellumRuntime.includes("equirectangularThumbnail"),
+      "Pinned preview support or JPEG fallback extension support is missing from the release runtime.",
     );
     const tourRuntime = await readFile(
       join(releaseRoot, "js", "tour.js"),
@@ -1601,7 +1628,7 @@ async function main() {
       "The selected target-base progressive guard runtime is incomplete.",
     );
     assert(
-      transitionRuntime.includes("target-base-progressive-v5") &&
+      transitionRuntime.includes("target-base-progressive-v8") &&
         transitionRuntime.includes('tourWebglReadback = "disabled"'),
       "The release runtime lacks the zero-readback cross-device transition guard.",
     );

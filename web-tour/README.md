@@ -40,7 +40,10 @@ Upload the complete `web-tour` folder to the site and embed:
 - The Rooms icon always opens the navigator after it is closed. Fullscreen uses Pannellum first, with a full-viewport fallback when a browser/iframe blocks native fullscreen.
 - The route strip is intentionally a sequence, not a floor plan. Do not invent room geometry from panoramas; use a real floor plan if spatial mapping is required.
 - Add `?scene=scene-003&yaw=150&pitch=-18` to inspect an exact doorway during QA; these URL parameters do not change the standard tour UI.
-- Viewer: Pannellum 2.5.6, bundled locally in `css/pannellum.css` and `js/pannellum.js`.
+- Viewer: Pannellum pinned to the immutable upstream commit recorded in
+  `vendor/pannellum.json`, bundled locally in `css/pannellum.css` and
+  `js/pannellum.js`. Regenerate it with `npm run vendor:pannellum`; the command
+  verifies every source, output and license digest before writing success.
 - `build:release` and multires exports content-version every mutable CSS/JavaScript reference. Keep the generated `?v=<digest>` values when uploading to Rain Digit or a customer website; never hand-edit or strip them. HTML/runtime files must revalidate, while hashed panorama media may be cached immutably. This prevents a long-lived iPhone Safari tab from combining an old bootstrap with a new viewer.
 - Viewer/runtime, delivery, embed, or exporter changes require automated mobile WebKit plus a physical iPhone Safari check of both the direct package and a customer-style iframe before promotion. A desktop-only pass is not release evidence.
 

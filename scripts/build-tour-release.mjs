@@ -30,6 +30,7 @@ function parseArguments(argv) {
     quality: 86,
     preserveResolution: false,
     preserveSource: false,
+    preserveNeutralSource: false,
     replace: false
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -43,9 +44,10 @@ function parseArguments(argv) {
     else if (argument === "--quality") options.quality = Number(argv[++index]);
     else if (argument === "--preserve-resolution") options.preserveResolution = true;
     else if (argument === "--preserve-source") options.preserveSource = true;
+    else if (argument === "--preserve-neutral-source") options.preserveNeutralSource = true;
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
-      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--cache-dir path] [--quality 84..94] [--preserve-resolution] [--preserve-source] [--replace]");
+      console.log("Usage: node scripts/build-tour-release.mjs [--workspace path] [--output path] [--zip file.zip] [--single file.html] [--embed file.html] [--cache-dir path] [--quality 84..94] [--preserve-resolution] [--preserve-source] [--preserve-neutral-source] [--replace]");
       process.exit(0);
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -388,7 +390,18 @@ function isNeutralAdjustment(adjustment) {
   );
 }
 
-async function buildScene(scene, workspace, output, draft, temporaryRoot, quality, preserveResolution, preserveSource, cacheDir) {
+async function buildScene(
+  scene,
+  workspace,
+  output,
+  draft,
+  temporaryRoot,
+  quality,
+  preserveResolution,
+  preserveSource,
+  preserveNeutralSource,
+  cacheDir,
+) {
   const input = join(workspace, scene.panorama);
   const source = await readFile(input);
   const dimensions = jpegDimensions(source);
@@ -396,12 +409,15 @@ async function buildScene(scene, workspace, output, draft, temporaryRoot, qualit
   const outputDimensions = releaseDimensions(dimensions, preserveResolution);
   const areas = Array.isArray(draft.localAdjustments?.[scene.id]) ? draft.localAdjustments[scene.id] : [];
   const adjustment = draft.sceneAdjustments?.[scene.id] || null;
+  const useSourceDirectly = preserveSource || (
+    preserveNeutralSource && isNeutralAdjustment(adjustment) && areas.length === 0
+  );
   const sourceHash = createHash("sha256").update(source).digest("hex");
-  const cacheKey = sceneDerivativeCacheKey(sourceHash, adjustment, areas, quality, outputDimensions, preserveResolution, preserveSource);
+  const cacheKey = sceneDerivativeCacheKey(sourceHash, adjustment, areas, quality, outputDimensions, preserveResolution, useSourceDirectly);
   const cached = await restoreSceneDerivative(cacheDir, cacheKey, output);
   if (cached) return cached;
   const finishedImage = join(temporaryRoot, `${scene.id}-finished.jpg`);
-  if (preserveSource) {
+  if (useSourceDirectly) {
     assert(preserveResolution, "--preserve-source requires --preserve-resolution.");
     assert(isNeutralAdjustment(draft.sceneAdjustments?.[scene.id]) && areas.length === 0, `${scene.id} has image adjustments and cannot use --preserve-source.`);
     await copyFile(input, finishedImage);
@@ -450,6 +466,11 @@ async function copyRuntime(output) {
   await cp(join(source, "css"), join(output, "css"), { recursive: true });
   await mkdir(join(output, "js"), { recursive: true });
   await cp(join(source, "js", "pannellum.js"), join(output, "js", "pannellum.js"));
+  await mkdir(join(output, "licenses"), { recursive: true });
+  await cp(
+    join(source, "licenses", "pannellum-LICENSE.txt"),
+    join(output, "licenses", "pannellum-LICENSE.txt"),
+  );
   await cp(join(source, "js", "tour-bootstrap-release.js"), join(output, "js", "tour-bootstrap.js"));
   await cp(join(source, tourMonitoringRuntimeBundle), join(output, "js", "tour-monitoring.js"));
   await mkdir(join(output, "js", "generated"), { recursive: true });
@@ -591,7 +612,18 @@ async function main() {
     let cacheHits = 0;
     let cacheMisses = 0;
     for (const scene of project.scenes) {
-      const result = await buildScene(scene, workspace, options.output, draft || {}, temporaryRoot, options.quality, options.preserveResolution, options.preserveSource, options.cacheDir);
+      const result = await buildScene(
+        scene,
+        workspace,
+        options.output,
+        draft || {},
+        temporaryRoot,
+        options.quality,
+        options.preserveResolution,
+        options.preserveSource,
+        options.preserveNeutralSource,
+        options.cacheDir,
+      );
       scene.panorama = result.panorama;
       scene.thumb = result.thumb;
       delete scene.sourceHash;
@@ -624,7 +656,7 @@ async function main() {
       singleHtml = await createSingleHtml(options.output, project, singleTarget);
     }
     if (options.embed) await createEmbedHtml(singleHtml, options.embed);
-    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality, preserveResolution: options.preserveResolution, preserveSource: options.preserveSource, cache: { enabled: Boolean(options.cacheDir), hits: cacheHits, misses: cacheMisses } }, null, 2));
+    console.log(JSON.stringify({ output: options.output, zip: options.zip, single: options.single, embed: options.embed, scenes: project.scenes.length, prunedScenes: prunedScenes.map((scene) => ({ id: scene.id, title: scene.title })), mediaBytes: totalBytes, quality: options.quality, preserveResolution: options.preserveResolution, preserveSource: options.preserveSource, preserveNeutralSource: options.preserveNeutralSource, cache: { enabled: Boolean(options.cacheDir), hits: cacheHits, misses: cacheMisses } }, null, 2));
   } catch (error) {
     await rm(temporaryRoot, { recursive: true, force: true });
     throw error;

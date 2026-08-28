@@ -1,0 +1,38 @@
+{
+  "schema": "raindigit-vendored-javascript/v1",
+  "project": "Pannellum",
+  "repository": "https://github.com/mpetroff/pannellum",
+  "commit": "99f4afd686e807d374a764231a58255f7dd853b6",
+  "fetchedFrom": "https://raw.githubusercontent.com/mpetroff/pannellum/99f4afd686e807d374a764231a58255f7dd853b6",
+  "inputs": [
+    {
+      "name": "libpannellum.js",
+      "sha256": "5d6a3ad0f9ab60c094a2ba425f5aae9b5296bd83435fa26a9e33f8ee39b49dab"
+    },
+    {
+      "name": "pannellum.js",
+      "sha256": "9765531ab1c24f1b92529e568f5160ab6f0c88c5a50d089c46c8b7993982c974"
+    }
+  ],
+  "license": {
+    "name": "COPYING",
+    "sha256": "e20b384f83f8f580d69e32d2419e093d777830689b3ab48cafbe4284b6ebc3c1"
+  },
+  "build": {
+    "tool": "esbuild",
+    "version": "0.28.2",
+    "target": "es2018",
+    "minify": true
+  },
+  "patches": [
+    {
+      "id": "webkit-async-preview-texture-race",
+      "reason": "Ignore stale thumbnail callbacks and rebind the preview texture before asynchronous upload."
+    }
+  ],
+  "output": {
+    "path": "web-tour/js/pannellum.js",
+    "sha256": "4e8c5b5841964f0f5004179b11b88f99c6b1df4c65c0564a87f95fe414696a6d",
+    "bytes": 71023
+  }
+}
