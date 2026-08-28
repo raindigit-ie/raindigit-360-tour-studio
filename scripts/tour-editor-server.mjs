@@ -856,6 +856,23 @@ async function serveFile(response, root, relativePath, cacheControl = "no-store"
   createReadStream(filePath).pipe(response);
 }
 
+async function serveStudioIndex(response) {
+  const source = await readFile(join(webRoot, "index.html"), "utf8");
+  const bootstrapMarker = '<script defer src="js/tour-bootstrap.js?v=20260817-scene-transition-v1"></script>';
+  if (!source.includes(bootstrapMarker)) {
+    throw new Error("Studio index is missing its bootstrap marker.");
+  }
+  const capability = {
+    editor: !previewMode,
+    preview: true,
+    framePicker: !previewMode,
+  };
+  const injection = `<script>window.__RAINDIGIT_STUDIO_CONTEXT__=Object.freeze(${JSON.stringify(capability)})</script>`;
+  const html = source.replace(bootstrapMarker, `${injection}\n    ${bootstrapMarker}`);
+  response.writeHead(200, responseHeaders("text/html; charset=utf-8"));
+  response.end(html);
+}
+
 const server = createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${host}:${port}`);
   try {
@@ -1612,7 +1629,11 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const relativePath = url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname).replace(/^\/+/, "");
+    if (url.pathname === "/") {
+      await serveStudioIndex(response);
+      return;
+    }
+    const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, "");
     await serveFile(response, webRoot, relativePath);
   } catch (error) {
     const statusCode = error.code === "ENOENT" ? 404 : error.code === "ETOOLARGE" ? 413 : error.code === "EINPUT" ? 400 : 500;

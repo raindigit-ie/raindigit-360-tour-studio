@@ -85,6 +85,14 @@ try {
   const editorResponse = await fetch(`${baseUrl}/?edit=1`);
   const editorHtml = await editorResponse.text();
   assert(editorResponse.ok && editorHtml.includes("RainDigit"), "The editor HTML did not load from the container.");
+  assert(
+    editorHtml.includes("window.__RAINDIGIT_STUDIO_CONTEXT__") && editorHtml.includes('"editor":true'),
+    "The Studio server did not authorize its editor runtime for a protected remote hostname.",
+  );
+  assert(
+    !(await readFile(join(root, "web-tour", "index.html"), "utf8")).includes("window.__RAINDIGIT_STUDIO_CONTEXT__"),
+    "The server-only Studio capability leaked into the static customer template.",
+  );
 
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

@@ -4,9 +4,10 @@
   const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
   const query = new URLSearchParams(window.location.search);
   const local = localHosts.has(window.location.hostname);
-  const editing = local && query.get("edit") === "1";
-  const previewing = local && query.get("preview") === "1";
-  const framePicking = local && query.get("frame-picker") === "1";
+  const studioContext = window.__RAINDIGIT_STUDIO_CONTEXT__ || {};
+  const editing = (local || studioContext.editor === true) && query.get("edit") === "1";
+  const previewing = (local || studioContext.preview === true) && query.get("preview") === "1";
+  const framePicking = (local || studioContext.framePicker === true) && query.get("frame-picker") === "1";
   const endpoint = editing || framePicking ? "__tour-editor" : previewing ? "__tour-preview" : null;
   const workspace = endpoint && query.get("workspace") === "1";
   document.documentElement.dataset.tourWebglBuffer = "default";

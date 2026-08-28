@@ -4,10 +4,11 @@ const configScenes = {};
 const viewParams = new URLSearchParams(window.location.search);
 const requestedScene = viewParams.get("scene");
 const initialScene = sceneById[requestedScene] ? requestedScene : firstScene;
+const studioRuntimeContext = window.__RAINDIGIT_STUDIO_CONTEXT__ || {};
 const isLocalEditorRequest = viewParams.get("edit") === "1" &&
-  ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
+  (["127.0.0.1", "localhost", "::1"].includes(window.location.hostname) || studioRuntimeContext.editor === true);
 const isLocalDraftPreview = viewParams.get("preview") === "1" &&
-  ["127.0.0.1", "localhost", "::1"].includes(window.location.hostname);
+  (["127.0.0.1", "localhost", "::1"].includes(window.location.hostname) || studioRuntimeContext.preview === true);
 const localEditorDefaultHfov = 94;
 const defaultSceneAdjustment = Object.freeze({ brightness: 100, contrast: 100, saturation: 100, warmth: 0 });
 const sceneAdjustments = Object.fromEntries(scenes.map((scene) => [scene.id, { ...defaultSceneAdjustment }]));
@@ -501,7 +502,9 @@ function applyDraft(draft) {
 }
 
 /* RELEASE_STRIP_START: local editor bridge */
-// The editor module is dynamically loaded only on a local ?edit=1 URL.
+// The editor bridge is exposed only on localhost or when the Studio server
+// explicitly authorizes this document. Static customer releases never receive
+// that server-injected capability.
 if (isLocalEditorRequest) {
   window.__TOUR_EDITOR_API = {
     viewer,
