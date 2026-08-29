@@ -1,0 +1,8 @@
+{
+  "schema": "raindigit-tour-monitoring-origins/v1",
+  "policy": "Only exact checked-in HTTPS origins are emitted into immutable tour packages. Add a customer host here before exporting its tour; environment input may only narrow this allowlist.",
+  "defaults": [
+    "https://cdn.raindigit.ie"
+  ],
+  "tours": {}
+}

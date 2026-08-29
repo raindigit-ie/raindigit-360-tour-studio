@@ -57,15 +57,26 @@ function testContract() {
     () => productionOriginsFromEnvironment({ RAINDIGIT_TOUR_SENTRY_ORIGINS: "https://*.example.com" }),
     "A wildcard production origin was accepted.",
   );
+  expectThrow(
+    () => tourMonitoringConfig({
+      identity,
+      slug: "test-tour",
+      environment: {
+        RAINDIGIT_TOUR_SENTRY_DSN: "https://public-key@o1.ingest.sentry.io/123",
+        RAINDIGIT_TOUR_SENTRY_ORIGINS: "https://tours.customer.example",
+      },
+    }),
+    "An unlisted customer origin was accepted.",
+  );
   const enabled = tourMonitoringConfig({
     identity,
     slug: "test-tour",
     environment: {
       RAINDIGIT_TOUR_SENTRY_DSN: "https://public-key@o1.ingest.sentry.io/123",
-      RAINDIGIT_TOUR_SENTRY_ORIGINS: "https://cdn.raindigit.ie,https://tours.customer.example",
+      RAINDIGIT_TOUR_SENTRY_ORIGINS: "https://cdn.raindigit.ie",
     },
   });
-  assert(enabled.enabled && enabled.productionOrigins.length === 2, "Valid production monitoring was not enabled.");
+  assert(enabled.enabled && enabled.productionOrigins.length === 1, "Valid production monitoring was not enabled.");
   const injected = injectTourMonitoringConfig(
     '<script data-tour-monitoring-config>old</script>',
     { ...enabled, slug: "</script><script>alert(1)</script>" },

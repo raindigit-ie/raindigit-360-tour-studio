@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export const monitoringConfigMarker = "data-tour-monitoring-config";
 export const sentryBrowserBundle = "js/generated/sentry-browser-10.71.0.min.js";
@@ -13,15 +15,17 @@ export const defaultProductionTourOrigins = Object.freeze([
   "https://cdn.raindigit.ie",
 ]);
 
+const approvedOriginConfigPath = join(
+  import.meta.dirname,
+  "../../config/tour-monitoring-origins.json",
+);
+
 export function productionTourMonitoringEnvironment(environment = process.env) {
   return {
     ...environment,
     RAINDIGIT_TOUR_SENTRY_DSN:
       String(environment.RAINDIGIT_TOUR_SENTRY_DSN || "").trim() ||
       productionTourSentryDsn,
-    RAINDIGIT_TOUR_SENTRY_ORIGINS:
-      String(environment.RAINDIGIT_TOUR_SENTRY_ORIGINS || "").trim() ||
-      defaultProductionTourOrigins.join(","),
   };
 }
 
@@ -31,6 +35,7 @@ function exactHttpsOrigin(value) {
     candidate.protocol !== "https:" ||
     candidate.username ||
     candidate.password ||
+    candidate.hostname.includes("*") ||
     candidate.pathname !== "/" ||
     candidate.search ||
     candidate.hash
@@ -56,22 +61,57 @@ function publicSentryDsn(value) {
   return candidate.href;
 }
 
-export function productionOriginsFromEnvironment(environment = process.env) {
+function approvedOriginConfig() {
+  const config = JSON.parse(readFileSync(approvedOriginConfigPath, "utf8"));
+  if (config.schema !== "raindigit-tour-monitoring-origins/v1") {
+    throw new Error("Tour monitoring origin allowlist schema is invalid.");
+  }
+  return config;
+}
+
+export function approvedProductionOrigins(slug, config = approvedOriginConfig()) {
+  const candidates = [
+    ...(Array.isArray(config.defaults) ? config.defaults : defaultProductionTourOrigins),
+    ...(Array.isArray(config.tours?.[slug]) ? config.tours[slug] : []),
+  ];
+  const origins = candidates
+    .map((value) => exactHttpsOrigin(value))
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .sort();
+  if (!origins.length) {
+    throw new Error(`Tour monitoring allowlist has no origin for ${slug}.`);
+  }
+  return origins;
+}
+
+export function productionOriginsFromEnvironment(
+  environment = process.env,
+  slug,
+  config = approvedOriginConfig(),
+) {
   const source = String(environment.RAINDIGIT_TOUR_SENTRY_ORIGINS || "").trim();
-  if (!source) return [];
-  const origins = source
+  const allowed = approvedProductionOrigins(slug, config);
+  if (!source) return allowed;
+  const requested = source
     .split(",")
     .map((value) => exactHttpsOrigin(value))
     .filter((value, index, values) => values.indexOf(value) === index);
-  if (origins.some((origin) => origin.includes("*"))) {
-    throw new Error("Tour monitoring does not permit wildcard production origins.");
+  if (requested.some((origin) => !allowed.includes(origin))) {
+    throw new Error(
+      `Tour monitoring origin is not explicitly approved for ${slug}; add it to config/tour-monitoring-origins.json before export.`,
+    );
   }
-  return origins.sort();
+  return requested.sort();
 }
 
 export function tourMonitoringConfig({ identity, slug, environment = process.env }) {
   const rawDsn = String(environment.RAINDIGIT_TOUR_SENTRY_DSN || "").trim();
-  const productionOrigins = productionOriginsFromEnvironment(environment);
+  const requestedOrigins = String(environment.RAINDIGIT_TOUR_SENTRY_ORIGINS || "").trim();
+  const usesCanonicalDefault =
+    rawDsn === productionTourSentryDsn && !requestedOrigins;
+  const productionOrigins = usesCanonicalDefault || requestedOrigins
+    ? productionOriginsFromEnvironment(environment, slug)
+    : [];
   if (!rawDsn && productionOrigins.length) {
     throw new Error("Tour monitoring origins were supplied without RAINDIGIT_TOUR_SENTRY_DSN.");
   }
