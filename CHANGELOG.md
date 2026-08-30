@@ -2,6 +2,24 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.2.9] — 2026-08-30
+
+### Fixed
+
+- Makes the production-only monitoring runtime a new explicit Studio/tour
+  capability (`0.2.9` / runtime `2.0.9`) so every active package must be
+  regenerated from the canonical template before it can be selected.
+- Rejects legacy or AWS-labelled physical-device summaries when deciding
+  whether a historic PROD selection can remain accepted. Only a complete v2
+  physical iPhone Safari record for the exact release set can authorize a
+  promotion.
+
+### Migration
+
+- Every active tour must be runtime-revised, immutable-uploaded, graph-tested
+  twice and physically accepted on iPhone Safari before PROD promotion. The
+  previous `0.2.8` selection remains rollback-only evidence.
+
 ## [0.2.8] — 2026-08-27
 
 ### Added

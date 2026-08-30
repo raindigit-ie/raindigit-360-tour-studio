@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { assertPackageRollbackLineage } from "./lib/release-lineage.mjs";
+import { isValidProductionPhysicalAcceptance } from "./lib/production-physical-acceptance.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -83,6 +84,7 @@ registry.contract = {
   verificationProfile: contract.verificationProfile,
   compatibilityPolicy: "exact-contract"
 };
+delete registry.pendingMigration;
 registry.selectors.dev = {
   ...registry.selectors.dev,
   state: "dev-remote-verified",
@@ -92,9 +94,15 @@ registry.selectors.dev = {
   releases
 };
 const previousProd = registry.selectors.prod;
-const previousProdAcceptanceIsValid =
-  previousProd.physicalIphoneAcceptance?.result === "pass" &&
-  previousProd.physicalIphoneAcceptance?.releaseSetDigest === previousProd.releaseSetDigest;
+const previousProdAcceptanceIsValid = isValidProductionPhysicalAcceptance(
+  previousProd.physicalIphoneAcceptance,
+  previousProd.releaseSetDigest
+);
+if (!previousProdAcceptanceIsValid) {
+  previousProd.physicalIphoneAcceptance = null;
+  previousProd.promotionBlocked = true;
+  previousProd.state = "quarantined-invalid-physical-evidence";
+}
 if (
   previousProd.state === "staged-exact-dev-selection" &&
   previousProd.releaseSetDigest !== ledger.dev.releaseSetDigest &&

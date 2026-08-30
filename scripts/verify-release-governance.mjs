@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseTourConfig, tourGraphIdentity } from "./lib/tour-graph-identity.mjs";
 import { assertReleaseLineage } from "./lib/release-lineage.mjs";
+import { assertStudioSourceCompatibility } from "./lib/candidate-migration-contract.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -57,10 +58,7 @@ const studioPackage = readJson(join(projectRoot, "package.json"));
 const contract = readJson(join(projectRoot, "config/release-contract.json"));
 
 assert(registry.schema === "raindigit-active-tour-registry/v1", "Active-tour registry schema is invalid.");
-assert(registry.contract.studioVersion === studioPackage.version, "Registry Studio version differs from package.json.");
-assert(registry.contract.formatVersion === contract.formatVersion, "Registry format version differs from the Studio contract.");
-assert(registry.contract.runtimeVersion === contract.runtimeVersion, "Registry runtime version differs from the Studio contract.");
-assert(registry.contract.verificationProfile === contract.verificationProfile, "Registry verification profile differs from the Studio contract.");
+assertStudioSourceCompatibility({ registry, studioPackage, contract });
 assert(attestation.schema === "raindigit-tour-release-attestation/v1", "DEV attestation schema is invalid.");
 assert(attestation.changeId === registry.changeId, "DEV attestation change differs from the registry.");
 assert(attestation.environment === "dev", "DEV attestation environment is invalid.");

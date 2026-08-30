@@ -11,9 +11,9 @@
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "4151c344eafc6b99d6e4489a182f66498b31868a4505ed1c3458afcd99aecf17"
+    "sha256": "60d28a421ff9d2f047e3c7de468f9ec61657f2a1aeb9b6e1b914bdf79b4f537c"
   },
-  "migrationMatrixDigest": "8e133cb30fc84ff91ae1933cbbd3f84f41cb547a67e924914ee7870ccca6638a",
+  "migrationMatrixDigest": "bfda260b9f53805551dcd3d862cc04be3e57161d6f47b3695893793755574a95",
   "contract": {
     "studioVersion": "0.2.8",
     "tourVersion": "0.2.8",
@@ -145,30 +145,18 @@
       }
     ],
     "physicalIphoneAcceptance": {
-      "schema": "raindigit-tour-physical-acceptance/v1",
-      "id": "IPHONE-69ca8b495046",
-      "releaseSetDigest": "69ca8b495046ff07a8b73d9053f39b48a97be3296c605440ada3b08ed4b09e15",
-      "result": "pass",
-      "device": "AWS Device Farm real Apple iPhone 16 Pro Max · iOS 18.3.1",
-      "browser": "Safari 18.3",
-      "checkedAt": "2026-08-28T08:29:17.598Z",
-      "acceptedBy": "Codex physical-device verifier · owner-authorized independent cloud device",
-      "siteCommit": "e583fb206a7cca06589f01a67486141338b4008a",
-      "studioCommit": "7b2fa9937657be7bf6fb7a8ded0c9914df5630c1",
-      "studioAttestationDigest": "ff43943107c1597770b7299e5612b88a23864e710972b3e6e3be57bbb451950b",
-      "deploymentOrigin": "https://f0e7cbbc.rain-digit-dev.pages.dev",
-      "checks": [
-        "first-frame",
-        "touch",
-        "scene-transition",
-        "rotation",
-        "recovery"
-      ]
+      "result": "pending",
+      "requiredFor": "prod",
+      "releaseSetDigest": "69ca8b495046ff07a8b73d9053f39b48a97be3296c605440ada3b08ed4b09e15"
     }
   },
   "promotion": {
-    "blocked": false,
-    "reasons": []
+    "blocked": true,
+    "reasons": [
+      "physical-iphone-safari-acceptance-pending",
+      "legacy-aws-evidence-invalid",
+      "pending-studio-capability-migration"
+    ]
   },
-  "attestationDigest": "bc702f1cb4fd6f028c83c1521ba5427090d2ad4898d5ce90e36955f97a410cfb"
+  "attestationDigest": "2f5f7686dfa03fb5da382a485e3ce14d40773b44a3f932fa3d28dbc4e4905c5f"
 }

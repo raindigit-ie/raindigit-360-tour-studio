@@ -94,10 +94,10 @@ async function testBrowserRuntime() {
     environment: "production",
     productionOrigins: ["https://cdn.raindigit.ie"],
     sdkUrl: "/js/generated/sdk.js",
-    release: "raindigit-tour-runtime@2.0.8",
-    studioVersion: "0.2.8",
-    runtimeVersion: "2.0.8",
-    tourVersion: "0.2.8",
+    release: "raindigit-tour-runtime@2.0.9",
+    studioVersion: "0.2.9",
+    runtimeVersion: "2.0.9",
+    tourVersion: "0.2.9",
     slug: "test-tour",
   };
   const html = `<!doctype html><html><head><script>window.TOUR_MONITORING_CONFIG=${JSON.stringify(config)}</script><script src="/js/tour-monitoring.js"></script></head><body><main class="tour-shell"></main></body></html>`;

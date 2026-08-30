@@ -2,7 +2,7 @@
   "name": "raindigit-360-tour-studio",
   "private": true,
   "type": "module",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Local RainDigit studio for preparing self-hosted 360 property tours.",
   "homepage": "https://raindigit.ie/services/immersive-tours",
   "repository": {
@@ -50,7 +50,7 @@
     "test:transition-stacking": "node scripts/test-transition-stacking-contract.mjs",
     "test:monitoring-contract": "node scripts/test-tour-monitoring-contract.mjs",
     "test:monitoring": "node scripts/test-tour-monitoring.mjs",
-    "test:release-governance": "npm run test:release-lineage && npm run test:brand-widget && npm run test:transition-stacking && npm run test:monitoring-contract && node scripts/verify-release-governance.mjs",
+    "test:release-governance": "npm run test:release-lineage && npm run test:brand-widget && npm run test:transition-stacking && npm run test:monitoring-contract && node scripts/test-production-physical-acceptance.mjs && node scripts/test-candidate-migration-contract.mjs && node scripts/verify-release-governance.mjs",
     "release:attest-dev": "node scripts/update-dev-release-governance.mjs --verified",
     "test:projection": "node scripts/test-cube-projection-parity.mjs",
     "test:cache": "node scripts/test-build-cache-pruning.mjs",
