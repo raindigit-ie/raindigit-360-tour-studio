@@ -41,6 +41,7 @@ function parseArguments(argv) {
     tourVersion: null,
     previousTourVersion: null,
     changeSummary: null,
+    rollbackVersion: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -57,9 +58,11 @@ function parseArguments(argv) {
       options.previousTourVersion = String(argv[++index] || "");
     else if (argument === "--change-summary")
       options.changeSummary = String(argv[++index] || "");
+    else if (argument === "--rollback-version")
+      options.rollbackVersion = String(argv[++index] || "");
     else if (argument === "--help") {
       console.log(
-        "Usage: node scripts/revise-multires-runtime.mjs --package package-root --tour-version <Studio version> --change-summary 'Migrated to portable v2' [--previous-tour-version <prior Studio version>] [--runtime-template web-tour] [--color-matrix '20 SVG matrix values']",
+        "Usage: node scripts/revise-multires-runtime.mjs --package package-root --tour-version <Studio version> --change-summary 'Migrated to portable v2' [--previous-tour-version <prior Studio version>] [--rollback-version package-version] [--runtime-template web-tour] [--color-matrix '20 SVG matrix values']",
       );
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
@@ -75,6 +78,13 @@ function parseArguments(argv) {
   });
   if (String(options.changeSummary || "").trim().length < 8)
     throw new Error("--change-summary must describe this tour version.");
+  if (
+    options.rollbackVersion &&
+    !/^(?:legacy|bounded|multires)-[a-f0-9]{8,64}$/.test(options.rollbackVersion)
+  )
+    throw new Error(
+      "--rollback-version must be a legacy-*, multires-* or bounded-* content version.",
+    );
   if (options.colorMatrix) {
     const values = options.colorMatrix.split(/\s+/).map(Number);
     if (
@@ -469,7 +479,7 @@ async function main() {
     const pointer = devChannelPointer({
       slug: manifest.slug,
       packageVersion: version,
-      previousPackageVersion: sourceManifest.version,
+      previousPackageVersion: options.rollbackVersion || sourceManifest.version,
       immutablePrefix,
       contentDigest: digest,
       generatedAt,
