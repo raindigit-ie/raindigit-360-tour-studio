@@ -161,10 +161,9 @@ function toPannellumHotspot(scene, hotspot, hotspotIndex) {
     pitch: hotspot.pitch,
     yaw: hotspot.yaw,
     type: "scene",
-    sceneId: hotspot.target,
-    targetYaw: hotspot.targetYaw,
-    targetPitch: hotspot.targetPitch,
-    targetHfov: hotspot.targetHfov,
+    // RainDigit owns bounded-media preparation and the exact saved arrival
+    // view. Omitting Pannellum's sceneId prevents its native onclick from
+    // racing loadSceneSafely for the same pointer gesture.
     clickHandlerFunc: (_event, args) => void loadSceneSafely(args.sceneId, args.targetPitch, args.targetYaw, args.targetHfov),
     clickHandlerArgs: { sceneId: hotspot.target, targetPitch: hotspot.targetPitch, targetYaw: hotspot.targetYaw, targetHfov: hotspot.targetHfov },
     cssClass: "nav-hotspot-anchor",

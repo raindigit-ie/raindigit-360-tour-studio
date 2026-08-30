@@ -548,6 +548,15 @@ async function runBrowserQa(packageRoot, pointer) {
       );
       const firstHotspot = page.locator(".nav-hotspot-anchor").first();
       await firstHotspot.waitFor({ state: "attached" });
+      const nativeNavigationHandlers = await firstHotspot.evaluate((hotspot) => ({
+        click: hotspot.onclick?.toString() ?? null,
+        touchend: hotspot.ontouchend?.toString() ?? null,
+      }));
+      assert(
+        nativeNavigationHandlers.click === null &&
+          nativeNavigationHandlers.touchend === null,
+        `${target.name} installed a second native scene-navigation owner on the hotspot: ${JSON.stringify(nativeNavigationHandlers)}.`,
+      );
       assert(
         (await firstHotspot.getAttribute("aria-label"))?.toLowerCase() ===
           "go to second",
@@ -1541,6 +1550,10 @@ async function main() {
     assert(
       tourRuntime.includes("sceneFadeDuration: 0"),
       "The native scene fade can replay on top of the RainDigit scene transition.",
+    );
+    assert(
+      !/type:\s*"scene",\s*sceneId:\s*hotspot\.target/.test(tourRuntime),
+      "The release runtime lets Pannellum race RainDigit for hotspot navigation.",
     );
     assert(
       tourRuntime.includes("window.__tourViewer = viewer"),
