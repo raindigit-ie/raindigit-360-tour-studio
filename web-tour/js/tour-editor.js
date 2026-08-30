@@ -352,7 +352,7 @@
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
           <div class="editor-publish-card">
             <strong>Optimized website tour is ready</strong>
-            <span id="editorMultiresSummary">Four bounded media files per view, exact manifest and rollback pointer are included.</span>
+            <span id="editorMultiresSummary">Four bounded media files per view. Structural checks run during build; browser checks remain a separate gate.</span>
             <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadMultires" download="raindigit-tour-web-package.zip">Download bounded package</a>
             <a class="editor-button editor-button--wide" id="editorPreviewMultires" target="_blank" rel="noopener">Open bounded preview</a>
           </div>
@@ -3302,9 +3302,15 @@
     const reusedViews = state.release.multires?.cache?.boundedMedia?.hits || 0;
     const cacheSummary = reusedViews > 0 ? ` · reused ${reusedViews}/${state.release.multires.scenes} view${reusedViews === 1 ? "" : "s"}` : "";
     const buildSummary = lastBuildMs === 0 ? " · already current" : Number.isFinite(lastBuildMs) ? ` · built in ${Math.max(1, Math.round(lastBuildMs / 1000))}s` : "";
+    const structuralSummary = state.release.multires?.verification?.structural?.status === "passed"
+      ? "structural checks passed"
+      : "structural checks not passed";
+    const browserSummary = state.release.multires?.verification?.browser?.status === "passed"
+      ? "browser checks passed"
+      : "browser checks not run";
     elements.MultiresSummary.textContent = state.release.multires?.ready
-      ? `${state.release.multires.scenes} views · ${state.release.multires.mediaObjectsPerScene || 4} bounded media files per view · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · tour ${state.release.multires.tourVersion} · Studio ${state.release.multires.studioVersion} · immutable ${state.release.multires.packageVersion}`
-      : "Four bounded media files per view, exact manifest and rollback pointer are included.";
+      ? `${state.release.multires.scenes} views · ${state.release.multires.mediaObjectsPerScene || 4} bounded media files per view · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · ${structuralSummary} · ${browserSummary} · tour ${state.release.multires.tourVersion} · Studio ${state.release.multires.studioVersion} · immutable ${state.release.multires.packageVersion}`
+      : "Four bounded media files per view. Structural checks run during build; browser checks remain a separate gate.";
     elements.BuildPortable.hidden = Boolean(state.release.legacyReady);
     elements.BuildPortable.disabled = !workspaceMode || state.building || !state.release.ready;
     elements.BuildPortable.textContent = state.building && state.buildingMode === "portable"

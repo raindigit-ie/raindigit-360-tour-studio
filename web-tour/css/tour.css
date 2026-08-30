@@ -589,10 +589,10 @@ body:not(.is-navigator-open) .scene-panel {
 
 .pnlm-dragfix { pointer-events: auto; }
 
-/* Hotspots must paint above the bounded-media canvas. */
-.viewer.pnlm-container > .pnlm-ui { z-index: 3; }
+.viewer.pnlm-container > .pnlm-ui { z-index: auto; }
 .pnlm-render-container { z-index: 2; pointer-events: none; }
 .pnlm-render-container canvas { pointer-events: none; }
+.is-tour-ready .viewer .pnlm-interaction-msg:empty { display: none; pointer-events: none; }
 .pnlm-hotspot-base.nav-hotspot-anchor {
   z-index: 3;
   width: 44px !important;

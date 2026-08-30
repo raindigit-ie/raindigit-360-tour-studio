@@ -24,6 +24,7 @@ import {
 } from "./lib/release-contract.mjs";
 import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
 import { assertBoundedMediaInventory } from "./lib/bounded-media-contract.mjs";
+import { installPublicRuntime } from "./lib/public-runtime-inventory.mjs";
 
 function parseArguments(argv) {
   const options = {
@@ -110,23 +111,6 @@ function parseArguments(argv) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
-}
-
-function releaseTourStyles(source) {
-  const stripStart = "/* RELEASE_STRIP_START: studio-only styles */";
-  const stripEnd = "/* RELEASE_STRIP_END: studio-only styles */";
-  const stripStartIndex = source.indexOf(stripStart);
-  const stripEndIndex = source.indexOf(stripEnd);
-  assert(
-    stripStartIndex >= 0 && stripEndIndex > stripStartIndex,
-    "The canonical Studio stylesheet has invalid release-strip markers.",
-  );
-  const release = `${source.slice(0, stripStartIndex).trimEnd()}\n`;
-  assert(
-    !/\.editor-panel|\.frame-picker-app/.test(release),
-    "Studio-only styles leaked into the revised public tour stylesheet.",
-  );
-  return release;
 }
 
 function staticTourLoaderMarkup() {
@@ -334,50 +318,18 @@ async function main() {
     );
     await writeFile(join(stagedRelease, "index.html"), neutralIndex, "utf8");
     assert(
-      await stat(join(stagedRelease, "js", "tour-chrome.js")).catch(() => null),
-      "Runtime revision source is missing the deferred production chrome.",
-    );
-    assert(
       await stat(join(stagedRelease, "js", "tour-monitoring.js")).catch(
         () => null,
       ),
       "Runtime revision source is missing canonical production monitoring.",
     );
 
-    const runtimeSource = await readFile(
-      join(options.runtimeTemplate, "js", "tour.js"),
-      "utf8",
-    );
-    const stylesheetSource = await readFile(
-      join(options.runtimeTemplate, "css", "tour.css"),
-      "utf8",
-    );
-    await writeFile(
-      join(stagedRelease, "css", "tour.css"),
-      releaseTourStyles(stylesheetSource),
-      "utf8",
-    );
-    await writeFile(
-      join(stagedRelease, "js", "tour.js"),
-      reviseRuntime(runtimeSource, options.colorMatrix),
-      "utf8",
-    );
-    await cp(
-      join(options.runtimeTemplate, "js", "tour-bootstrap-release.js"),
-      join(stagedRelease, "js", "tour-bootstrap.js"),
-    );
-    await cp(
-      join(options.runtimeTemplate, "js", "bounded-media-runtime.js"),
-      join(stagedRelease, "js", "bounded-media-runtime.js"),
-    );
-    await cp(
-      join(options.runtimeTemplate, "js", "pannellum.js"),
-      join(stagedRelease, "js", "pannellum.js"),
-    );
-    await cp(
-      join(options.runtimeTemplate, "js", "tour-transition.js"),
-      join(stagedRelease, "js", "tour-transition.js"),
-    );
+    await installPublicRuntime({
+      sourceRoot: options.runtimeTemplate,
+      targetRoot: stagedRelease,
+      transformTourRuntime: (source) =>
+        reviseRuntime(source, options.colorMatrix),
+    });
 
     const configPath = join(stagedRelease, "js", "tour-config.js");
     const configSource = await readFile(configPath, "utf8");
@@ -466,6 +418,20 @@ async function main() {
             },
           }
         : {}),
+      verification: {
+        structural: {
+          status: "passed",
+          checks: [
+            "portable-release",
+            "bounded-media-inventory",
+            "public-runtime-slice",
+          ],
+        },
+        browser: {
+          status: "not-run",
+          reason: "Runtime revision invalidates prior browser evidence; the revised candidate requires a fresh browser gate.",
+        },
+      },
       performance: {
         ...sourceManifest.performance,
         criticalFiles,
@@ -533,6 +499,7 @@ async function main() {
           mediaFilesVerifiedUnchanged: mediaBefore.size,
           selfContained: true,
           criticalBytes,
+          verification: manifest.verification,
         },
         null,
         2,

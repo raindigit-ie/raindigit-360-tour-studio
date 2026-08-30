@@ -1121,6 +1121,14 @@ async function main() {
     const releaseResponse = await page.request.get(new URL(href, baseUrl).href);
     assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The optimized website package was not built correctly.");
     const statusBeforePortableBuild = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();
+    const buildSummaryText = await page.locator("#editorMultiresSummary").textContent();
+    assert(
+      statusBeforePortableBuild.multires.verification?.structural?.status === "passed" &&
+        statusBeforePortableBuild.multires.verification?.browser?.status === "not-run" &&
+        buildSummaryText.includes("structural checks passed") &&
+        buildSummaryText.includes("browser checks not run"),
+      `Studio build summary does not distinguish structural and browser verification: ${JSON.stringify({ statusBeforePortableBuild, buildSummaryText })}`,
+    );
     const reusedBuildResponse = await page.request.post(`${baseUrl}/__tour-editor/build-release?workspace=1`, {
       data: {
         slug: statusBeforePortableBuild.multires.slug,

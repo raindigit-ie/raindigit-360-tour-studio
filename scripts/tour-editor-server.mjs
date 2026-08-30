@@ -440,6 +440,31 @@ async function releaseStatus() {
       const pointer = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.pointer), "utf8"));
       const releaseManifest = JSON.parse(await readFile(join(releaseMultiresRoot, metadata.releaseManifest), "utf8"));
       const packageVersion = metadata.packageVersion || metadata.version;
+      const topology = releaseManifest.mediaTopology || {};
+      const sceneIds = Array.isArray(releaseManifest.sceneIds)
+        ? releaseManifest.sceneIds
+        : [];
+      const mediaCounts = new Map(
+        sceneIds.map((sceneId) => [
+          sceneId,
+          (releaseManifest.mediaInventory || []).filter(
+            (object) => object.sceneId === sceneId,
+          ).length,
+        ]),
+      );
+      const boundedTopology =
+        topology.preferredObjectsPerScene >= 2 &&
+        topology.preferredObjectsPerScene <= 3 &&
+        topology.minObjectsPerScene === 2 &&
+        topology.hardMaxObjectsPerScene === 5 &&
+        topology.actualObjectsPerScene >= topology.minObjectsPerScene &&
+        topology.actualObjectsPerScene <= topology.hardMaxObjectsPerScene &&
+        topology.actualObjectsPerScene === 4 &&
+        sceneIds.length > 0 &&
+        sceneIds.every(
+          (sceneId) => mediaCounts.get(sceneId) === topology.actualObjectsPerScene,
+        );
+      const verification = releaseManifest.verification || {};
       const ready = metadata.inputFingerprint === inputFingerprint
         && pointer.packageVersion === packageVersion
         && pointer.studioVersion === identity.studioVersion
@@ -450,9 +475,9 @@ async function releaseStatus() {
         && releaseManifest.deliveryCapability === "bounded-media-v1"
         && releaseManifest.mediaProfile === "bounded-equirect-base-mobile4096-desktop8192-fallback-v1"
         && releaseManifest.mediaRecipeVersion === "progressive-equirectangular-v1"
-        && releaseManifest.mediaTopology?.actualObjectsPerScene === 4
-        && releaseManifest.mediaTopology?.hardMaxObjectsPerScene === 5
-        && releaseManifest.mediaInventory?.length === releaseManifest.sceneIds?.length * 4;
+        && boundedTopology
+        && verification.structural?.status === "passed"
+        && ["not-run", "passed"].includes(verification.browser?.status);
       multires = {
         ready,
         bytes: multiresArchive.size,
@@ -477,6 +502,7 @@ async function releaseStatus() {
         cache: metadata.cache || null,
         cacheMaintenance: metadata.cacheMaintenance || null,
         buildMetrics: metadata.buildMetrics || null,
+        verification,
         updatedAt: multiresArchive.mtime.toISOString()
       };
     } catch (error) {

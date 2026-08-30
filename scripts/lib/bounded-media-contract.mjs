@@ -8,6 +8,7 @@ export const MEDIA_PROFILE =
 export const MEDIA_RECIPE_VERSION = "progressive-equirectangular-v1";
 export const COMPILER_RECIPE =
   "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1";
+export const MIN_OBJECTS = 2;
 export const HARD_MAX_OBJECTS = 5;
 export const REQUIRED_OBJECT_ROLES = Object.freeze([
   "base",
@@ -34,9 +35,21 @@ function mediaObjects(media, sceneId) {
   assert(media.mediaProfile === MEDIA_PROFILE, sceneId + " media profile is incompatible.");
   assert(media.mediaRecipeVersion === MEDIA_RECIPE_VERSION, sceneId + " media recipe version is incompatible.");
   assert(media.compilerRecipe === COMPILER_RECIPE, sceneId + " compiler recipe is incompatible.");
-  assert(media.objectCount === REQUIRED_OBJECT_ROLES.length, sceneId + " must declare exactly four bounded media objects.");
-  assert(media.objectCount <= HARD_MAX_OBJECTS, sceneId + " exceeds the bounded media hard maximum.");
   assert(Array.isArray(media.objects), sceneId + " bounded media object list is missing.");
+  assert(
+    Number.isInteger(media.objectCount) &&
+      media.objectCount >= MIN_OBJECTS &&
+      media.objectCount <= HARD_MAX_OBJECTS,
+    `${sceneId} must contain ${MIN_OBJECTS}..${HARD_MAX_OBJECTS} bounded media objects.`,
+  );
+  assert(
+    media.objectCount === media.objects.length,
+    sceneId + " declared media object count does not match its object list.",
+  );
+  assert(
+    media.objectCount === REQUIRED_OBJECT_ROLES.length,
+    sceneId + " current bounded recipe must declare exactly four media objects.",
+  );
   const roles = media.objects.map((object) => object?.role);
   assert(
     JSON.stringify(roles) === JSON.stringify(REQUIRED_OBJECT_ROLES),

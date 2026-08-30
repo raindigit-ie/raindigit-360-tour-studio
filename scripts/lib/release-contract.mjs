@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { assertBoundedMediaInventory } from "./bounded-media-contract.mjs";
+import { PUBLIC_RUNTIME_INVENTORY } from "./public-runtime-inventory.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 const packageMetadata = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
@@ -103,7 +104,15 @@ export async function assertPortableRelease(root, config) {
   if (config.scenes.some((scene) => /^https?:\/\//i.test(scene.thumb || "") || /^https?:\/\//i.test(scene.panorama || "") || /^https?:\/\//i.test(scene.multiRes?.basePath || "") || scene.boundedMedia?.objects?.some((object) => /^https?:\/\//i.test(object.path || "")))) {
     throw new Error("Portable release contains an external scene-media dependency.");
   }
-  const required = ["index.html", "css/pannellum.css", "css/tour.css", "js/pannellum.js", "js/bounded-media-runtime.js", "js/tour-bootstrap.js", "js/tour-config.js", "js/tour-monitoring.js", "js/generated/sentry-browser-10.71.0.min.js", "js/tour-transition.js", "js/tour.js", "licenses/pannellum-LICENSE.txt", "CHANGELOG.json", "CHANGELOG.md", "INSTALL.txt"];
+  const required = [
+    "index.html",
+    ...PUBLIC_RUNTIME_INVENTORY.map((entry) => entry.target),
+    "js/tour-config.js",
+    "licenses/pannellum-LICENSE.txt",
+    "CHANGELOG.json",
+    "CHANGELOG.md",
+    "INSTALL.txt",
+  ];
   await Promise.all(required.map(async (path) => {
     const body = await readFile(join(root, path));
     if (body.byteLength === 0) throw new Error(`Portable release file is empty: ${path}`);

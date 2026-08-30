@@ -36,6 +36,7 @@ import {
 import {
   assertBoundedMediaInventory,
   expectedMediaInventory,
+  MIN_OBJECTS as BOUNDED_MEDIA_MIN_OBJECTS,
 } from "./lib/bounded-media-contract.mjs";
 import {
   assertPortableRelease,
@@ -46,10 +47,9 @@ import {
 import {
   injectTourMonitoringConfig,
   productionTourMonitoringEnvironment,
-  sentryBrowserBundle,
-  tourMonitoringRuntimeBundle,
   tourMonitoringConfig,
 } from "./lib/tour-monitoring-contract.mjs";
+import { installPublicRuntime } from "./lib/public-runtime-inventory.mjs";
 import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -410,10 +410,13 @@ async function deferRuntimeChrome(entrypoint, stagedRoot) {
     "The runtime chrome is incomplete.",
   );
   const chromeRuntime = `(()=>{const s=document.querySelector(".tour-shell");if(!s||s.querySelector(".topbar"))return;s.insertAdjacentHTML("beforeend",${JSON.stringify(chromeMarkup)})})();\n`;
-  await writeFile(
+  const canonicalChrome = await readFile(
     join(stagedRoot, "js", "tour-chrome.js"),
-    chromeRuntime,
     "utf8",
+  );
+  assert(
+    canonicalChrome === chromeRuntime,
+    "The authored runtime chrome differs from the canonical public runtime inventory.",
   );
   let shellOnly = `${entrypoint.slice(0, chromeStart)}\n    ${entrypoint.slice(mainEnd)}`;
   const bootstrapPattern =
@@ -904,8 +907,9 @@ async function buildSceneBounded(scene, stagedRoot, options) {
     ]),
   );
   assert(
-    media.objectCount === 4 &&
+    media.objectCount >= BOUNDED_MEDIA_MIN_OBJECTS &&
       media.objectCount <= BOUNDED_MEDIA_HARD_MAX_OBJECTS &&
+      media.objectCount === 4 &&
       media.deliveryCapability === BOUNDED_MEDIA_DELIVERY_CAPABILITY &&
       media.mediaProfile === BOUNDED_MEDIA_PROFILE &&
       media.mediaRecipeVersion === BOUNDED_MEDIA_RECIPE_VERSION,
@@ -926,63 +930,8 @@ async function buildSceneBounded(scene, stagedRoot, options) {
 
 async function applyRuntimeTemplate(stagedRoot, templateRoot) {
   if (!templateRoot) return;
-  await Promise.all([
-    cp(join(templateRoot, "index.html"), join(stagedRoot, "index.html")),
-    cp(join(templateRoot, "css"), join(stagedRoot, "css"), {
-      recursive: true,
-      force: true,
-    }),
-    cp(
-      join(templateRoot, "assets", "raindigit-mark.svg"),
-      join(stagedRoot, "assets", "raindigit-mark.svg"),
-    ),
-    cp(
-      join(templateRoot, "js", "pannellum.js"),
-      join(stagedRoot, "js", "pannellum.js"),
-    ),
-    cp(
-      join(templateRoot, "js", "bounded-media-runtime.js"),
-      join(stagedRoot, "js", "bounded-media-runtime.js"),
-    ),
-    cp(
-      join(templateRoot, "js", "tour-transition.js"),
-      join(stagedRoot, "js", "tour-transition.js"),
-    ),
-    cp(join(templateRoot, "js", "tour.js"), join(stagedRoot, "js", "tour.js")),
-    cp(
-      join(templateRoot, "js", "tour-bootstrap-release.js"),
-      join(stagedRoot, "js", "tour-bootstrap.js"),
-    ),
-    cp(
-      join(templateRoot, tourMonitoringRuntimeBundle),
-      join(stagedRoot, "js", "tour-monitoring.js"),
-    ),
-    cp(
-      join(templateRoot, sentryBrowserBundle),
-      join(stagedRoot, sentryBrowserBundle),
-    ),
-  ]);
-
-  const cssPath = join(stagedRoot, "css", "tour.css");
-  let css = await readFile(cssPath, "utf8");
-  const studioStylesStart = "/* RELEASE_STRIP_START: studio-only styles */";
-  const studioStylesEnd = "/* RELEASE_STRIP_END: studio-only styles */";
-  const studioStylesStartIndex = css.indexOf(studioStylesStart);
-  const studioStylesEndIndex = css.indexOf(studioStylesEnd);
-  assert(
-    studioStylesStartIndex >= 0 &&
-      studioStylesEndIndex > studioStylesStartIndex,
-    "The runtime stylesheet is missing the studio-only release markers.",
-  );
-  css = `${css.slice(0, studioStylesStartIndex).trimEnd()}\n`;
-  assert(
-    !css.includes(".editor-panel") && !css.includes(".frame-picker-app"),
-    "Studio-only styles leaked into the public release.",
-  );
-  if (!css.includes(".tour-first-frame")) {
-    css = `${css.trimEnd()}\n\n.tour-first-frame { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; pointer-events:none; opacity:1; transition:opacity 180ms ease; }\n.is-tour-ready .tour-first-frame { opacity:0; }\n@media (prefers-reduced-motion: reduce) { .tour-first-frame { transition:none; } }\n`;
-  }
-  await writeFile(cssPath, css, "utf8");
+  await cp(join(templateRoot, "index.html"), join(stagedRoot, "index.html"));
+  await installPublicRuntime({ sourceRoot: templateRoot, targetRoot: stagedRoot });
 
   const runtimePath = join(stagedRoot, "js", "tour.js");
   const runtime = await readFile(runtimePath, "utf8");
@@ -1164,6 +1113,7 @@ async function main() {
       compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
       mediaTopology: {
         preferredObjectsPerScene: 3,
+        minObjectsPerScene: BOUNDED_MEDIA_MIN_OBJECTS,
         hardMaxObjectsPerScene: BOUNDED_MEDIA_HARD_MAX_OBJECTS,
         actualObjectsPerScene: 4,
         roles: ["base", "mobile-detail", "desktop-detail", "fallback"],
@@ -1220,6 +1170,12 @@ async function main() {
       previousTourVersion: options.previousTourVersion,
       changeSummary: options.changeSummary,
     });
+    const persistedEntrypoint = await readFile(entrypointPath, "utf8");
+    assert(
+      persistedEntrypoint.includes("data-runtime-loader") &&
+        persistedEntrypoint.includes("js/tour-chrome.js"),
+      "The bounded release entrypoint lost its canonical deferred runtime chrome reference.",
+    );
     await versionTourRuntime(stagedRoot);
     await rm(join(stagedRoot, "assets", "p"), { recursive: true, force: true });
     seoPerformance.criticalBytes = (
@@ -1237,6 +1193,20 @@ async function main() {
     await Promise.all(sourcePanoramaPaths.filter(Boolean).map((path) => rm(join(stagedRoot, path), { force: true })));
     await assertPortableRelease(stagedRoot, project);
     const mediaInventory = await assertBoundedMediaInventory(stagedRoot, project);
+    const verification = {
+      structural: {
+        status: "passed",
+        checks: [
+          "portable-release",
+          "bounded-media-inventory",
+          "content-versioned-public-runtime",
+        ],
+      },
+      browser: {
+        status: "not-run",
+        reason: "Studio build creates a candidate; browser verification is a separate pre-promotion gate.",
+      },
+    };
     const payloadFiles = await fileInventory(stagedRoot);
     const digest = digestInventory(payloadFiles);
     const version = `bounded-${digest.slice(0, 12)}`;
@@ -1300,12 +1270,14 @@ async function main() {
       compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
       mediaTopology: {
         preferredObjectsPerScene: 3,
+        minObjectsPerScene: BOUNDED_MEDIA_MIN_OBJECTS,
         hardMaxObjectsPerScene: BOUNDED_MEDIA_HARD_MAX_OBJECTS,
         actualObjectsPerScene: 4,
         roles: ["base", "mobile-detail", "desktop-detail", "fallback"],
         qualityDecision: "adaptive-desktop-8192-mobile-4096",
       },
       mediaInventory,
+      verification,
       baseSize: options.baseSize,
       sourceWidth: firstSceneDimensions.width,
       sourceHeight: firstSceneDimensions.height,
@@ -1415,6 +1387,7 @@ async function main() {
           mediaProfile: BOUNDED_MEDIA_PROFILE,
           mediaRecipeVersion: BOUNDED_MEDIA_RECIPE_VERSION,
           compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
+          verification,
           files: payloadFiles.length,
           bytes: payloadBytes,
           contentDigest: digest,

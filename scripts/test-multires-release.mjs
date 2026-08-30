@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import {
+  cp,
   mkdtemp,
   mkdir,
   readFile,
@@ -23,6 +24,15 @@ import {
   releaseIdentity,
   studioVersion,
 } from "./lib/release-contract.mjs";
+import {
+  expectedMediaInventory,
+  HARD_MAX_OBJECTS,
+  MIN_OBJECTS,
+} from "./lib/bounded-media-contract.mjs";
+import {
+  assertPublicRuntimeSliceEqual,
+  PUBLIC_RUNTIME_INVENTORY,
+} from "./lib/public-runtime-inventory.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -600,21 +610,59 @@ async function runBrowserQa(packageRoot, pointer) {
       const hotspotStacking = await firstHotspot.evaluate((hotspot) => {
         const userInterface = hotspot.closest(".pnlm-ui");
         const renderer = document.querySelector(".pnlm-render-container");
+        const interactionMessage = document.querySelector(
+          ".pnlm-interaction-msg.pnlm-info-box",
+        );
         const box = hotspot.getBoundingClientRect();
         const hit = document.elementFromPoint(
           box.left + box.width / 2,
           box.top + box.height / 2,
         );
+        const interactionStyle = getComputedStyle(interactionMessage);
+        const interactionBox = interactionMessage.getBoundingClientRect();
+        const centerHit = document.elementFromPoint(
+          window.innerWidth / 2,
+          window.innerHeight / 2,
+        );
         return {
-          userInterfaceZ: Number(getComputedStyle(userInterface).zIndex),
+          ready: document.documentElement.classList.contains("is-tour-ready"),
+          userInterfaceZ: getComputedStyle(userInterface).zIndex,
           rendererZ: Number(getComputedStyle(renderer).zIndex),
+          hotspotZ: Number(getComputedStyle(hotspot).zIndex),
+          hotspotVisible:
+            getComputedStyle(hotspot).visibility !== "hidden" &&
+            getComputedStyle(hotspot).display !== "none" &&
+            box.width >= 39.5 &&
+            box.height >= 39.5,
           ownsHitTarget: hit === hotspot || hotspot.contains(hit),
+          interaction: {
+            empty: interactionMessage.textContent.trim() === "",
+            display: interactionStyle.display,
+            visibility: interactionStyle.visibility,
+            opacity: Number(interactionStyle.opacity),
+            pointerEvents: interactionStyle.pointerEvents,
+            width: interactionBox.width,
+            height: interactionBox.height,
+            ownsViewportCenter:
+              centerHit === interactionMessage ||
+              interactionMessage.contains(centerHit),
+          },
         };
       });
       assert(
-        hotspotStacking.userInterfaceZ > hotspotStacking.rendererZ &&
+        hotspotStacking.ready &&
+          hotspotStacking.userInterfaceZ === "auto" &&
+          hotspotStacking.hotspotZ > hotspotStacking.rendererZ &&
+          hotspotStacking.hotspotVisible &&
           hotspotStacking.ownsHitTarget,
-        `${target.name} hotspot is interactive but its parent layer is below the panorama: ${JSON.stringify(hotspotStacking)}.`,
+        `${target.name} authored hotspot is not the visible, hittable layer above the panorama: ${JSON.stringify(hotspotStacking)}.`,
+      );
+      assert(
+        hotspotStacking.interaction.empty &&
+          hotspotStacking.interaction.display === "none" &&
+          hotspotStacking.interaction.pointerEvents === "none" &&
+          !hotspotStacking.interaction.ownsViewportCenter,
+        `${target.name} exposes the empty Pannellum interaction overlay after READY: ${JSON.stringify(hotspotStacking.interaction)}.`,
       );
       const changedPixelRatio = await visibleHotspotPixelRatio(
         page,
@@ -1001,6 +1049,7 @@ async function main() {
   const secondOutput = join(root, "package-repeat");
   const metadataOnlyOutput = join(root, "package-metadata-only");
   const oneSceneOutput = join(root, "package-one-scene-change");
+  const runtimeRevisionOutput = join(root, "package-runtime-revision");
   const cache = join(root, "build-cache");
   const zip = join(root, "future-multires-qa.zip");
   try {
@@ -1210,6 +1259,20 @@ async function main() {
       ),
       "Bounded-media contract is incomplete.",
     );
+    for (const invalidCount of [MIN_OBJECTS - 1, HARD_MAX_OBJECTS + 1]) {
+      const invalid = structuredClone(config);
+      invalid.scenes[0].boundedMedia.objectCount = invalidCount;
+      let rejected = false;
+      try {
+        expectedMediaInventory(invalid);
+      } catch {
+        rejected = true;
+      }
+      assert(
+        rejected,
+        `Bounded-media contract accepted ${invalidCount} objects for one scene.`,
+      );
+    }
 
     const files = await walk(releaseRoot);
     const boundedMediaFiles = files.filter((path) =>
@@ -1257,8 +1320,11 @@ async function main() {
         manifest.mediaRecipeVersion === "progressive-equirectangular-v1" &&
         manifest.compilerRecipe ===
           "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1" &&
+        manifest.mediaTopology.minObjectsPerScene === 2 &&
         manifest.mediaTopology.actualObjectsPerScene === 4 &&
         manifest.mediaTopology.hardMaxObjectsPerScene === 5 &&
+        manifest.verification.structural.status === "passed" &&
+        manifest.verification.browser.status === "not-run" &&
         manifest.studioVersion === studioVersion &&
         manifest.formatVersion === releaseContract.formatVersion &&
         manifest.runtimeVersion === releaseContract.runtimeVersion &&
@@ -1910,19 +1976,67 @@ async function main() {
       (await stat(join(releaseRoot, "css", "tour.css"))).size <= 20 * 1024,
       "The public tour stylesheet still contains studio-only UI.",
     );
+    for (const target of ["css/pannellum.css", "js/tour-chrome.js"])
+      assert(
+        PUBLIC_RUNTIME_INVENTORY.some((entry) => entry.target === target),
+        `Canonical public runtime inventory omitted ${target}.`,
+      );
+    await cp(output, runtimeRevisionOutput, { recursive: true });
+    await Promise.all(
+      ["css/pannellum.css", "js/tour-chrome.js"].map((target) =>
+        writeFile(
+          join(runtimeRevisionOutput, pointer.prefix, target),
+          `/* deliberately stale ${target} runtime-only fixture */\n`,
+          "utf8",
+        ),
+      ),
+    );
+    const { stdout: revisionOutput } = await execFileAsync(
+      process.execPath,
+      [
+        join(projectRoot, "scripts", "revise-multires-runtime.mjs"),
+        "--package",
+        runtimeRevisionOutput,
+        "--tour-version",
+        studioVersion,
+        "--previous-tour-version",
+        studioVersion,
+        "--change-summary",
+        "Canonical public runtime equality fixture.",
+        "--rollback-version",
+        pointer.packageVersion,
+        "--generated-at",
+        "2026-08-30T00:00:00.000Z",
+      ],
+      { cwd: projectRoot, maxBuffer: 8 * 1024 * 1024, timeout: 120_000 },
+    );
+    const revisionMetadata = JSON.parse(revisionOutput);
+    const revisedPointer = JSON.parse(
+      await readFile(
+        join(
+          runtimeRevisionOutput,
+          "channels",
+          "dev",
+          "future-multires-qa",
+          "current.json",
+        ),
+        "utf8",
+      ),
+    );
+    const revisedReleaseRoot = join(runtimeRevisionOutput, revisedPointer.prefix);
+    await assertPublicRuntimeSliceEqual(releaseRoot, revisedReleaseRoot);
+    assert(
+      revisionMetadata.verification.structural.status === "passed" &&
+        revisionMetadata.verification.browser.status === "not-run",
+      `Runtime revision reported dishonest verification state: ${revisionOutput}.`,
+    );
     const revisedRuntime = await readFile(
       join(projectRoot, "scripts", "revise-multires-runtime.mjs"),
       "utf8",
     );
     assert(
-      revisedRuntime.includes(
-        'join(options.runtimeTemplate, "css", "tour.css")',
-      ) &&
-        revisedRuntime.includes(
-          'join(stagedRelease, "css", "tour.css")',
-        ) &&
-        revisedRuntime.includes("releaseTourStyles(stylesheetSource)"),
-      "Runtime-only fleet revisions must install the stripped canonical Studio stylesheet.",
+      revisedRuntime.includes("installPublicRuntime"),
+      "Runtime-only fleet revisions must install the canonical public runtime inventory.",
     );
     assert(
       revisedRuntime.includes('argument === "--generated-at"') &&

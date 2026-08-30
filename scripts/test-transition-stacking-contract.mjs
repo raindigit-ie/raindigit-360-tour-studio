@@ -25,8 +25,18 @@ assert.match(
 );
 assert.match(
   css,
-  /\.viewer\.pnlm-container\s*>\s*\.pnlm-ui\s*\{\s*z-index:\s*3\s*;\s*\}[\s\S]*?\.pnlm-render-container\s*\{\s*z-index:\s*2\s*;/,
-  "The complete Pannellum UI parent must paint above the compositor-promoted panorama."
+  /\.viewer\.pnlm-container\s*>\s*\.pnlm-ui\s*\{\s*z-index:\s*auto\s*;\s*\}[\s\S]*?\.pnlm-render-container\s*\{\s*z-index:\s*2\s*;/,
+  "The complete Pannellum UI parent must not be raised above the panorama."
+);
+assert.match(
+  css,
+  /\.is-tour-ready\s+\.viewer\s+\.pnlm-interaction-msg:empty\s*\{[\s\S]*?display:\s*none\s*;[\s\S]*?pointer-events:\s*none\s*;/,
+  "An empty native Pannellum interaction box must not paint or intercept the READY viewport."
+);
+assert.match(
+  css,
+  /\.pnlm-hotspot-base\.nav-hotspot-anchor\s*\{[\s\S]*?z-index:\s*3\s*;/,
+  "Only authored navigation hotspots must paint above the compositor-promoted panorama."
 );
 
 const phaseAssignment = runtime.indexOf(
