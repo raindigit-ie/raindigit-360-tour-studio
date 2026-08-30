@@ -184,7 +184,11 @@
     sceneConfig.type = "equirectangular";
     sceneConfig.panorama = canvas;
     sceneConfig.dynamic = true;
-    sceneConfig.dynamicUpdate = false;
+    // Pannellum only initializes a dynamic equirectangular scene when
+    // dynamicUpdate is enabled. The tour runtime disables continuous updates
+    // immediately after the first renderer load, then re-enables them only
+    // for the one-frame detail replacement.
+    sceneConfig.dynamicUpdate = true;
     sceneConfig.boundedMedia = media;
     return true;
   }

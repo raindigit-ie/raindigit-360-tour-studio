@@ -234,7 +234,7 @@ for (const scene of scenes) {
       ? {
           panorama: scene.id === initialScene ? initialBoundedCanvas : scene.boundedMedia.base,
           dynamic: scene.id === initialScene,
-          dynamicUpdate: false,
+          dynamicUpdate: true,
           boundedMedia: scene.boundedMedia,
         }
       : scene.type === "multires" && scene.multiRes
@@ -931,6 +931,10 @@ window.addEventListener("message", (event) => {
 });
 
 viewer.on("load", () => {
+  // A dynamic canvas must start with updates enabled so Pannellum creates the
+  // renderer. Once the base frame exists, suspend continuous texture uploads;
+  // boundedMediaRuntime.upgrade() explicitly re-arms exactly one detail frame.
+  viewer.setUpdate(false);
   revealRenderedTour();
   setActiveScene(viewer.getScene());
   void boundedMediaRuntime?.upgrade(viewer, viewer.getScene());
@@ -938,6 +942,12 @@ viewer.on("load", () => {
   window.requestAnimationFrame(removeOrphanHotspotElements);
   window.requestAnimationFrame(() => emitTourDebug("runtime-scene-loaded", navigationHotspotInventory(viewer.getScene())));
 });
+if (viewer.isLoaded()) {
+  // Dynamic canvas initialization can complete synchronously before the load
+  // listener is attached. Preserve the same base -> detail path in that case.
+  viewer.setUpdate(false);
+  void boundedMediaRuntime?.upgrade(viewer, viewer.getScene());
+}
 revealRenderedTour();
 setActiveScene(initialScene);
   if (isLocalDraftPreview) setNavigatorOpen(true);

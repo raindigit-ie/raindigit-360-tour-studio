@@ -45,8 +45,9 @@ function prototypeDocument() {
     "<script src=\"/pannellum.js\"></script><script>" +
     "(() => {" +
     "const state = window.__boundedPrototype = {" +
-    "phase: 'loading-base', baseLoaded: false, detailLoaded: false," +
-    "setUpdateCalled: false, sameCanvas: false, scene: null," +
+    "phase: 'loading-base', baseLoaded: false, baseRendered: false, detailLoaded: false," +
+    "baseUpdateSuspended: false, detailUpdateSuspended: false, setUpdateCalled: false, sameCanvas: false, scene: null," +
+    "baseRenderedAt: null, detailLoadedAt: null," +
     "pitch: null, yaw: null, hfov: null, loadCount: 0, widthBefore: null, widthAfter: null" +
     "};" +
     "const loadImage = (source) => new Promise((resolve, reject) => {" +
@@ -59,16 +60,19 @@ function prototypeDocument() {
     "state.baseLoaded = true; state.phase = 'base-canvas-ready';" +
     "const viewer = pannellum.viewer('panorama', {" +
     "default: { firstScene: 'target', autoLoad: true, sceneFadeDuration: 0, hfov: 92 }," +
-    "scenes: { target: { type: 'equirectangular', panorama: canvas, dynamic: true, dynamicUpdate: false, pitch: 7, yaw: -31, hfov: 92 }}" +
+    "scenes: { target: { type: 'equirectangular', panorama: canvas, dynamic: true, dynamicUpdate: true, pitch: 7, yaw: -31, hfov: 92 }}" +
     "});" +
     "state.viewer = viewer; viewer.on('load', () => { state.loadCount += 1; state.phase = 'base-rendered'; });" +
+    "const baseDeadline = performance.now() + 3000; while (!viewer.isLoaded() && performance.now() < baseDeadline) await new Promise((resolve) => setTimeout(resolve, 16));" +
+    "if (!viewer.isLoaded()) throw new Error('dynamic base renderer did not initialize');" +
+    "state.baseRendered = true; state.baseRenderedAt = performance.now(); viewer.setUpdate(false); state.baseUpdateSuspended = true; state.phase = 'base-rendered';" +
     "await new Promise((resolve) => setTimeout(resolve, 140));" +
     "state.pitch = viewer.getPitch(); state.yaw = viewer.getYaw(); state.hfov = viewer.getHfov();" +
-    "const detail = await loadImage('/assets/detail.webp'); state.widthBefore = canvas.width; canvas.width = detail.naturalWidth; canvas.height = detail.naturalHeight; context.drawImage(detail, 0, 0, canvas.width, canvas.height); state.widthAfter = canvas.width;" +
+    "const detail = await loadImage('/assets/detail.webp'); state.detailLoadedAt = performance.now(); state.widthBefore = canvas.width; canvas.width = detail.naturalWidth; canvas.height = detail.naturalHeight; context.drawImage(detail, 0, 0, canvas.width, canvas.height); state.widthAfter = canvas.width;" +
     "state.detailLoaded = true; state.phase = 'detail-drawn'; viewer.setUpdate(true); state.setUpdateCalled = true;" +
     "state.sameCanvas = viewer.getConfig().panorama === canvas; state.scene = viewer.getScene();" +
     "state.pitchAfter = viewer.getPitch(); state.yawAfter = viewer.getYaw(); state.hfovAfter = viewer.getHfov();" +
-    "await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); state.phase = 'detail-rendered';" +
+    "await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); viewer.setUpdate(false); state.detailUpdateSuspended = true; state.phase = 'detail-rendered';" +
     "})().catch((error) => { state.phase = 'error'; state.error = String(error); });" +
     "})();" +
     "</script></body></html>";
@@ -88,7 +92,9 @@ async function runEngine(name, engine, assets) {
   });
   assert(!errors.length, name + " page errors: " + errors.join(" | "));
   assert(state.phase === "detail-rendered", name + " did not complete dynamic canvas update: " + JSON.stringify(state));
-  assert(state.baseLoaded && state.detailLoaded, name + " did not load base and detail: " + JSON.stringify(state));
+  assert(state.baseLoaded && state.baseRendered && state.detailLoaded, name + " did not render base before loading detail: " + JSON.stringify(state));
+  assert(state.baseRenderedAt < state.detailLoadedAt, name + " loaded detail before proving the base frame: " + JSON.stringify(state));
+  assert(state.baseUpdateSuspended && state.detailUpdateSuspended, name + " left continuous dynamic texture uploads enabled: " + JSON.stringify(state));
   assert(state.setUpdateCalled && state.sameCanvas, name + " did not use the same dynamic canvas: " + JSON.stringify(state));
   assert(state.widthBefore === 1024 && state.widthAfter === 2048, name + " did not upgrade the same canvas from base to detail dimensions: " + JSON.stringify(state));
   assert(state.scene === "target", name + " changed scene during detail update: " + JSON.stringify(state));
