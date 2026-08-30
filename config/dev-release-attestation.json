@@ -1,55 +1,55 @@
 {
   "schema": "raindigit-tour-release-attestation/v1",
-  "attestationId": "ATT-CHG-0005-DEV-f04781245731",
+  "attestationId": "ATT-CHG-0005-DEV-8f5e7e2437ce",
   "changeId": "CHG-0005",
   "environment": "dev",
   "status": "complete-dev-candidate",
-  "createdAt": "2026-08-30T17:27:07.066Z",
+  "createdAt": "2026-08-30T18:17:15.766Z",
   "actor": {
     "id": "codex-root",
     "role": "release-verifier"
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "d2b0d665f2b3cd89d1a4a475d56354108ca00cc539f81db39c13f26aa829943c"
+    "sha256": "4ab98fd459aba389e0ed42f859d3255ddc0b6fb4c026f7fd4e950b18bca1eddf"
   },
-  "migrationMatrixDigest": "bfe2a1fea8348ebf9ba0032c1d639230939476dc1fc62017c167c8d055e87758",
+  "migrationMatrixDigest": "3cd814bd58307a145cc793cfe1721358a66242015d98bb80fb5714f269209080",
   "contract": {
-    "studioVersion": "0.3.4",
-    "tourVersion": "0.3.4",
+    "studioVersion": "0.3.5",
+    "tourVersion": "0.3.5",
     "formatVersion": "3.0.0",
-    "runtimeVersion": "3.0.4",
+    "runtimeVersion": "3.0.5",
     "verificationProfile": "raindigit-portable-tour-v3"
   },
-  "releaseSetDigest": "f047812457317769f20fdce386db6f671e8deb196d188bad301ffd2beddc9118",
+  "releaseSetDigest": "8f5e7e2437ce7ca829d6cef209f069f1abe3654ad3f96353b755d3a0a60433e6",
   "packages": [
     {
       "slug": "killarney-360-property-tour-demo",
-      "packageVersion": "bounded-9d1dad2d1f61",
-      "contentDigest": "9d1dad2d1f617a11cc02d71348f156eca4d16ca62b62fbe1c0481d0faf7498a6",
-      "manifestDigest": "4c544a12d543806e2be9c43f8f29ed5084df9a60b0fb138a2c945fe21dc7b2c5",
-      "humanChangelogDigest": "27d90736cc95726c92cea165aeb13f8f17cb282783250fd4a655c9fd5364a4dd",
-      "machineChangelogDigest": "b7fe8991f3e256ed2708ad2726cfc9a9cb6a8177e8565567ea27a2f3ab169ad9",
+      "packageVersion": "bounded-8b184ee1cd49",
+      "contentDigest": "8b184ee1cd4943a5008f575d033974c3890a55cdcd84783b474f67e400144967",
+      "manifestDigest": "6d0fc207f251affdb8946c6f4e1d1e15dd6dc1520e799de90ffa2438789b6d2c",
+      "humanChangelogDigest": "85a19d048b0fbf6179ed46b2b38bc830ad11a727179cfc3dc86a6b499004f5e3",
+      "machineChangelogDigest": "ee39a03b9a8629aeb552dbb85aadfca7736daa80b451fde5dd5ace1966ed3fa0",
       "sceneGraphDigest": "a243f7d6be9d83716242967ba118c99b2d8e6ad6f928c874ec091e0383d13abc",
       "savedArrivalViewsDigest": "619c5a99f9032839a1385110fa8ee616db9bc1238e1066be5572256f793e1a25"
     },
     {
       "slug": "killarney-home-360-tour",
-      "packageVersion": "bounded-622895bf81cd",
-      "contentDigest": "622895bf81cd838135d8dd946a059d064cc770e447c57087f19d6c206923b211",
-      "manifestDigest": "cbd3e604cae2c89c8811d50a36813bdcd896fb2d8454f93c37c5bda64ebecafc",
-      "humanChangelogDigest": "2a4b8110e32ab0789d1f87ddcab72004cc5b6f7c0cc999de584b84f5ba4bc196",
-      "machineChangelogDigest": "7bf7e6fa24efd86988aa2a62832467b61f307e6f5e33e3a091e73dd5516736ee",
+      "packageVersion": "bounded-47ca1218d997",
+      "contentDigest": "47ca1218d997b0eede8a905b6b9405e09f6c18052fb9948ea0b54479e96712b1",
+      "manifestDigest": "4a27086c8231ce31c9d0accc8e4581b9d928e782cacd0c2af6aaf058523fbd05",
+      "humanChangelogDigest": "f227279e1a7042bf0dde17f0eaa8d784bf7e3a052b791d67196a2f13394bce98",
+      "machineChangelogDigest": "4fb2d28ce1d166503f8c0883acec7c56746778122d3fabe59d61adecbdf51938",
       "sceneGraphDigest": "b37038a6aab84f253f140afbf74deb9bcc2c4d6a579e6297a281a3962711c0f2",
       "savedArrivalViewsDigest": "440190a361317483a148967c76b837d68dfbca2a6a926a90c8e48dc26ddc21a9"
     },
     {
       "slug": "killarney-town-centre-360-tour",
-      "packageVersion": "bounded-b718280e3f3a",
-      "contentDigest": "b718280e3f3a9cb294dde1708457ad77e262fe36e143dbf4826ca540cff09ef8",
-      "manifestDigest": "56c6ec811caf064c6c7652de576efe5fdc4c7ebf5bfe26184a17f185ae4744f7",
-      "humanChangelogDigest": "c88b929579bb7e824e393b265e26428f0044cf1aebdb7de5052cce31cdaa7d45",
-      "machineChangelogDigest": "608e89d284f74006356ab0774b5940b86efaf34c4fc05a5bef56859c5911f412",
+      "packageVersion": "bounded-d49fc2942612",
+      "contentDigest": "d49fc294261292f53ae67850ed5fdcdb77fd96f2384c1992851c821f98ae4d6c",
+      "manifestDigest": "c1fc1a4255a7183db9744a53bce15681577c6bb3287eb7d5c00caec89e046b79",
+      "humanChangelogDigest": "c93fb3bb521b6ba9c4eedda10cc1b847010884f48e6b8b840f8be4683c5134f2",
+      "machineChangelogDigest": "30d9851a1ab5629784cc93bf048b9249c7efc35c922b60a0391bed124fe85d43",
       "sceneGraphDigest": "fff8bb6cb10edba7c8faa80cbad7dc5612b564e4264f67306c1ae7fcfec868cf",
       "savedArrivalViewsDigest": "21159ad7ef0082d36615f8797db73835cb17bf1e025fe8395886e70f0bbc396a"
     }
@@ -147,7 +147,7 @@
     "physicalIphoneAcceptance": {
       "result": "pending",
       "requiredFor": "prod",
-      "releaseSetDigest": "f047812457317769f20fdce386db6f671e8deb196d188bad301ffd2beddc9118"
+      "releaseSetDigest": "8f5e7e2437ce7ca829d6cef209f069f1abe3654ad3f96353b755d3a0a60433e6"
     }
   },
   "promotion": {
@@ -158,5 +158,5 @@
       "separate-prod-credential-boundary-not-yet-proven"
     ]
   },
-  "attestationDigest": "6e291f2d5ad5530e13cd027ccab8dfe608ac7eef84e57628e9e05c2f168dce28"
+  "attestationDigest": "97e09fbd431b70224c77f8d38823c46acfb58509b6092526e6ba33af734b5db6"
 }
