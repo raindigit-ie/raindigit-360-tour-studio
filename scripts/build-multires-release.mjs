@@ -26,7 +26,17 @@ import {
   projectCubeFaceRaw,
   recommendedFaceConcurrency,
   recommendedSceneConcurrency,
+  BOUNDED_MEDIA_COMPILER_RECIPE,
+  BOUNDED_MEDIA_DELIVERY_CAPABILITY,
+  BOUNDED_MEDIA_HARD_MAX_OBJECTS,
+  BOUNDED_MEDIA_PROFILE,
+  BOUNDED_MEDIA_RECIPE_VERSION,
+  buildBoundedMedia,
 } from "./lib/media-pyramid.mjs";
+import {
+  assertBoundedMediaInventory,
+  expectedMediaInventory,
+} from "./lib/bounded-media-contract.mjs";
 import {
   assertPortableRelease,
   devChannelPointer,
@@ -58,12 +68,18 @@ function parseArguments(argv) {
     tourVersion: null,
     previousTourVersion: null,
     changeSummary: null,
-    runtimeTemplate: null,
-    baseSize: 512,
+    // Studio's checked-in template is the only runtime / brand source for
+    // every bounded export. An explicit template remains available for
+    // controlled fixture builds, but ordinary CLI and Studio UI builds must
+    // never depend on a previously generated release directory.
+    runtimeTemplate: join(projectRoot, "web-tour"),
+    baseSize: 2048,
     tileSize: 2048,
+    mobileDetailSize: 4096,
+    desktopDetailSize: 8192,
     fallbackSize: 1024,
-    webpQuality: 78,
-    webpEffort: 2,
+    webpQuality: 82,
+    webpEffort: 4,
     jpegQuality: 86,
     projectionInterpolation: "spline16",
     faceConcurrency: "auto",
@@ -98,6 +114,10 @@ function parseArguments(argv) {
       options.tileSize = Number(argv[++index]);
     else if (argument === "--base-size")
       options.baseSize = Number(argv[++index]);
+    else if (argument === "--mobile-detail-size")
+      options.mobileDetailSize = Number(argv[++index]);
+    else if (argument === "--desktop-detail-size")
+      options.desktopDetailSize = Number(argv[++index]);
     else if (argument === "--fallback-size")
       options.fallbackSize = Number(argv[++index]);
     else if (argument === "--webp-quality")
@@ -119,7 +139,7 @@ function parseArguments(argv) {
     else if (argument === "--replace") options.replace = true;
     else if (argument === "--help") {
       console.log(
-        "Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug --tour-version <Studio version> --change-summary 'Initial portable release' [--previous-tour-version <prior Studio version>] [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version package-version] [--runtime-template release-root] [--base-size 512] [--tile-size 2048] [--fallback-size 1024] [--webp-quality 78] [--webp-effort 2] [--jpeg-quality 86] [--projection-interpolation spline16] [--face-concurrency auto|1..6] [--scene-concurrency auto|1..3] [--replace]",
+        "Usage: node scripts/build-multires-release.mjs --workspace path --output package-root --slug project-slug --tour-version <Studio version> --change-summary 'Initial bounded release' [--previous-tour-version <prior Studio version>] [--zip package.zip] [--cache-dir path] [--progress-file path] [--rollback-version package-version] [--runtime-template Studio-template-root] [--base-size 2048] [--mobile-detail-size 4096] [--desktop-detail-size 8192] [--fallback-size 1024] [--webp-quality 82] [--webp-effort 4] [--jpeg-quality 86] [--scene-concurrency auto|1..3] [--replace]",
       );
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
@@ -134,20 +154,29 @@ function parseArguments(argv) {
     throw new Error("--change-summary must describe this tour version.");
   if (
     options.rollbackVersion &&
-    !/^(?:legacy|multires)-[a-f0-9]{8,64}$/.test(options.rollbackVersion)
+    !/^(?:legacy|bounded|multires)-[a-f0-9]{8,64}$/.test(options.rollbackVersion)
   )
     throw new Error(
-      "--rollback-version must be a legacy-* or multires-* content version.",
+      "--rollback-version must be a legacy-*, multires-* or bounded-* content version.",
     );
-  if (![512, 1024, 2048].includes(options.tileSize))
-    throw new Error("Detail tile size must be 512, 1024 or 2048 pixels.");
   if (
     !Number.isInteger(options.baseSize) ||
-    options.baseSize < 256 ||
-    options.baseSize > 1024 ||
-    options.baseSize > options.tileSize
+    options.baseSize < 1024 ||
+    options.baseSize > 2048
   )
-    throw new Error("Base face size must be 256..1024 pixels and no larger than the detail tile.");
+    throw new Error("Bounded base width must be 1024..2048 pixels.");
+  if (
+    !Number.isInteger(options.mobileDetailSize) ||
+    options.mobileDetailSize < options.baseSize ||
+    options.mobileDetailSize > 4096
+  )
+    throw new Error("Bounded mobile detail width must be at least the base and no more than 4096 pixels.");
+  if (
+    !Number.isInteger(options.desktopDetailSize) ||
+    options.desktopDetailSize < options.mobileDetailSize ||
+    options.desktopDetailSize > 8192
+  )
+    throw new Error("Bounded desktop detail width must be at least mobile detail and no more than 8192 pixels.");
   if (
     !Number.isInteger(options.fallbackSize) ||
     options.fallbackSize < 512 ||
@@ -157,9 +186,9 @@ function parseArguments(argv) {
   if (
     !Number.isInteger(options.webpQuality) ||
     options.webpQuality < 75 ||
-    options.webpQuality > 80
+    options.webpQuality > 95
   )
-    throw new Error("WebP quality must be 75..80.");
+    throw new Error("WebP quality must be 75..95.");
   if (
     !Number.isInteger(options.webpEffort) ||
     options.webpEffort < 0 ||
@@ -247,9 +276,11 @@ async function copyTree(source, destination) {
 }
 
 async function runMagick(arguments_) {
-  for (const binary of ["magick", "convert"]) {
+  const identifyMode = arguments_[0] === "identify";
+  const commandArguments = identifyMode ? arguments_.slice(1) : arguments_;
+  for (const binary of identifyMode ? ["identify", "magick"] : ["magick", "convert"]) {
     try {
-      return await execFileAsync(binary, arguments_, {
+      return await execFileAsync(binary, identifyMode && binary === "magick" ? ["identify", ...commandArguments] : commandArguments, {
         maxBuffer: 8 * 1024 * 1024,
       });
     } catch (error) {
@@ -257,7 +288,7 @@ async function runMagick(arguments_) {
       throw new Error(`${binary} failed: ${error.stderr || error.message}`);
     }
   }
-  throw new Error("ImageMagick is required for multires export.");
+  throw new Error("ImageMagick is required for bounded-media export.");
 }
 
 async function imageDimensions(path) {
@@ -520,6 +551,100 @@ async function storeMultiresCache(
     await rm(temporary, { recursive: true, force: true });
   }
 }
+function boundedMediaCacheKey(sourceHash, options) {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      schema: "raindigit-bounded-media-scene-cache/v1",
+      sourceHash,
+      baseWidth: options.baseSize,
+      mobileDetailWidth: options.mobileDetailSize,
+      desktopDetailWidth: options.desktopDetailSize,
+      fallbackWidth: options.fallbackSize,
+      webpQuality: options.webpQuality,
+      webpEffort: options.webpEffort,
+      jpegQuality: options.jpegQuality,
+      deliveryCapability: BOUNDED_MEDIA_DELIVERY_CAPABILITY,
+      mediaProfile: BOUNDED_MEDIA_PROFILE,
+      mediaRecipeVersion: BOUNDED_MEDIA_RECIPE_VERSION,
+      compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
+    }))
+    .digest("hex");
+}
+
+async function restoreBoundedMediaCache(cacheDir, cacheKey, targetRoot) {
+  if (!cacheDir) return null;
+  const entry = join(cacheDir, "bounded-media-scenes-v1", cacheKey);
+  try {
+    const metadata = JSON.parse(await readFile(join(entry, "metadata.json"), "utf8"));
+    assert(
+      metadata.schema === "raindigit-bounded-media-scene-cache/v1" &&
+        metadata.key === cacheKey &&
+        metadata.media?.deliveryCapability === BOUNDED_MEDIA_DELIVERY_CAPABILITY &&
+        metadata.media?.mediaProfile === BOUNDED_MEDIA_PROFILE &&
+        metadata.media?.mediaRecipeVersion === BOUNDED_MEDIA_RECIPE_VERSION &&
+        metadata.media?.objectCount <= BOUNDED_MEDIA_HARD_MAX_OBJECTS,
+      "Bounded-media cache metadata is invalid.",
+    );
+    const actualFiles = await fileInventory(join(entry, "assets"));
+    assert(
+      JSON.stringify(actualFiles) === JSON.stringify(metadata.files),
+      "Bounded-media cache inventory or digest is invalid.",
+    );
+    await copyTree(join(entry, "assets"), targetRoot);
+    const accessedAt = new Date();
+    await utimes(join(entry, "metadata.json"), accessedAt, accessedAt);
+    return {
+      objectCount: metadata.media.objectCount,
+      media: metadata.media,
+      config: metadata.config,
+      cacheHit: true,
+    };
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      await rm(entry, { recursive: true, force: true });
+    }
+    return null;
+  }
+}
+
+async function storeBoundedMediaCache(cacheDir, cacheKey, targetRoot, media, config) {
+  if (!cacheDir) return;
+  const parent = join(cacheDir, "bounded-media-scenes-v1");
+  const entry = join(parent, cacheKey);
+  const temporary = join(parent, "." + cacheKey + "." + process.pid + "." + Date.now() + ".tmp");
+  const files = await fileInventory(targetRoot);
+  assert(
+    media.objectCount === files.length &&
+      media.objectCount <= BOUNDED_MEDIA_HARD_MAX_OBJECTS,
+    "Bounded-media cache object count does not match actual files.",
+  );
+  await mkdir(parent, { recursive: true });
+  await rm(temporary, { recursive: true, force: true });
+  await mkdir(temporary, { recursive: true });
+  try {
+    await copyTree(targetRoot, join(temporary, "assets"));
+    await writeFile(
+      join(temporary, "metadata.json"),
+      JSON.stringify({
+        schema: "raindigit-bounded-media-scene-cache/v1",
+        key: cacheKey,
+        media,
+        config,
+        files,
+        createdAt: new Date().toISOString(),
+      }, null, 2) + "\n",
+      "utf8",
+    );
+    await rename(temporary, entry).catch(async (error) => {
+      if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+      await rm(temporary, { recursive: true, force: true });
+    });
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+
 
 async function makePreview(input) {
   const directory = await mkdtemp(join(tmpdir(), "raindigit-tour-preview-"));
@@ -588,14 +713,10 @@ async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
   );
   const firstBuild = sceneBuilds.get(project.firstScene);
   assert(firstScene && firstBuild, "First-scene multires output is missing.");
-  const firstLevelRoot = join(stagedRoot, firstBuild.relativeRoot, "1");
-  const firstLevelTiles = (await readdir(firstLevelRoot))
-    .filter((file) => file.endsWith(".webp"))
-    .sort()
-    .map((file) => `${firstBuild.relativeRoot}/1/${file}`);
-  const fallbackFiles = faceLetters.map(
-    (face) => `${firstBuild.relativeRoot}/fallback/${face}.jpg`,
-  );
+  const firstMediaFiles = firstBuild.media.objects.map((object) => object.path);
+  const fallbackFiles = firstBuild.media.objects
+    .filter((object) => object.role === "fallback")
+    .map((object) => object.path);
   const seoDraft = {
     schema: "raindigit-tour-seo/v1",
     title: project.title,
@@ -632,7 +753,7 @@ async function buildSeoAssets(input, stagedRoot, project, sceneBuilds) {
       "js/tour-transition.js",
       "js/tour.js",
       "js/tour-config.js",
-      ...firstLevelTiles,
+      firstBuild.media.base,
     ],
   };
 }
@@ -728,6 +849,81 @@ async function buildSceneMultires(scene, stagedRoot, temporaryRoot, options) {
   }
 }
 
+async function buildSceneBounded(scene, stagedRoot, options) {
+  const source = join(stagedRoot, scene.panorama);
+  const sourceHash = createHash("sha256").update(await readFile(source)).digest("hex");
+  const cacheKey = boundedMediaCacheKey(sourceHash, options);
+  const relativeRoot = "assets/bm/" + cacheKey.slice(0, 20);
+  const targetRoot = join(stagedRoot, relativeRoot);
+  await mkdir(targetRoot, { recursive: true });
+  const cached = await restoreBoundedMediaCache(options.cacheDir, cacheKey, targetRoot);
+  if (cached) return { relativeRoot, sourceHash, ...cached };
+
+  const generated = await buildBoundedMedia({
+    input: source,
+    targetRoot,
+    baseWidth: options.baseSize,
+    mobileDetailWidth: options.mobileDetailSize,
+    desktopDetailWidth: options.desktopDetailSize,
+    fallbackWidth: options.fallbackSize,
+    webpQuality: options.webpQuality,
+    webpEffort: options.webpEffort,
+    jpegQuality: options.jpegQuality,
+  });
+  const preview = await makePreview(source);
+  const media = {
+    deliveryCapability: generated.deliveryCapability,
+    mediaProfile: generated.mediaProfile,
+    mediaRecipeVersion: generated.mediaRecipeVersion,
+    compilerRecipe: generated.compilerRecipe,
+    source: { ...generated.source, sha256: sourceHash },
+    objectCount: generated.objectCount,
+    objects: generated.objects.map((object) => ({
+      ...object,
+      path: relativeRoot + "/" + object.file,
+    })),
+    base: relativeRoot + "/base.webp",
+    mobileDetail: relativeRoot + "/mobile-detail.webp",
+    desktopDetail: relativeRoot + "/desktop-detail.webp",
+    fallback: relativeRoot + "/fallback.jpg",
+    preview,
+  };
+  const actualFiles = await fileInventory(targetRoot);
+  const actualByPath = new Map(
+    actualFiles.map((file) => [relativeRoot + "/" + file.path, file]),
+  );
+  media.objects = media.objects.map((object) => {
+    const file = actualByPath.get(object.path);
+    assert(file, "Generated bounded-media object is missing: " + object.path);
+    return { ...object, bytes: file.bytes, sha256: file.sha256 };
+  });
+  media.mediaDigests = Object.fromEntries(
+    media.objects.map((object) => [
+      object.role,
+      { path: object.path, bytes: object.bytes, sha256: object.sha256 },
+    ]),
+  );
+  assert(
+    media.objectCount === 4 &&
+      media.objectCount <= BOUNDED_MEDIA_HARD_MAX_OBJECTS &&
+      media.deliveryCapability === BOUNDED_MEDIA_DELIVERY_CAPABILITY &&
+      media.mediaProfile === BOUNDED_MEDIA_PROFILE &&
+      media.mediaRecipeVersion === BOUNDED_MEDIA_RECIPE_VERSION,
+    "Bounded-media scene profile is inconsistent.",
+  );
+  const config = { type: "bounded-media", boundedMedia: media };
+  await storeBoundedMediaCache(options.cacheDir, cacheKey, targetRoot, media, config);
+  return {
+    relativeRoot,
+    sourceHash,
+    objectCount: media.objectCount,
+    media,
+    config,
+    cacheHit: false,
+  };
+}
+
+
 async function applyRuntimeTemplate(stagedRoot, templateRoot) {
   if (!templateRoot) return;
   await Promise.all([
@@ -745,12 +941,16 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
       join(stagedRoot, "js", "pannellum.js"),
     ),
     cp(
+      join(templateRoot, "js", "bounded-media-runtime.js"),
+      join(stagedRoot, "js", "bounded-media-runtime.js"),
+    ),
+    cp(
       join(templateRoot, "js", "tour-transition.js"),
       join(stagedRoot, "js", "tour-transition.js"),
     ),
     cp(join(templateRoot, "js", "tour.js"), join(stagedRoot, "js", "tour.js")),
     cp(
-      join(templateRoot, "js", "tour-bootstrap.js"),
+      join(templateRoot, "js", "tour-bootstrap-release.js"),
       join(stagedRoot, "js", "tour-bootstrap.js"),
     ),
     cp(
@@ -785,45 +985,30 @@ async function applyRuntimeTemplate(stagedRoot, templateRoot) {
   await writeFile(cssPath, css, "utf8");
 
   const runtimePath = join(stagedRoot, "js", "tour.js");
-  let runtime = await readFile(runtimePath, "utf8");
-  const legacySceneConfig = `    type: "equirectangular",
-    panorama: scene.panorama,`;
-  const multiresSceneConfig = `    type: scene.type === "multires" ? "multires" : "equirectangular",
-    ...(scene.type === "multires" ? { multiRes: scene.multiRes } : { panorama: scene.panorama }),`;
-  if (runtime.includes(legacySceneConfig))
-    runtime = runtime.replace(legacySceneConfig, multiresSceneConfig);
-  assert(
-    runtime.includes("multiRes: scene.multiRes") &&
-      runtime.includes('"multires"'),
-    "The runtime does not support multires scene configuration.",
+  const runtime = await readFile(runtimePath, "utf8");
+  const boundedRuntime = await readFile(
+    join(stagedRoot, "js", "bounded-media-runtime.js"),
+    "utf8",
   );
-  if (!runtime.includes("window.__tourViewer = viewer")) {
-    runtime += `\nwindow.__tourViewer = viewer;\n`;
-  }
-  if (!runtime.includes("__rainDigitTourTransition?.attach(viewer)")) {
-    runtime += `\nwindow.__rainDigitTourTransition?.attach(viewer);\n`;
-  }
-  if (!runtime.includes("function revealRenderedTour")) {
-    runtime = runtime.replace(
-      'viewer.on("load", () => {',
-      'function revealRenderedTour() {\n  const canvas = viewer.getContainer().querySelector(".pnlm-render-container canvas");\n  const runtimeStylesState = document.documentElement.dataset.runtimeStyles;\n  const runtimeStylesReady = !runtimeStylesState || runtimeStylesState === "ready";\n  const transition = window.__rainDigitTourTransition?.state?.();\n  const transitionReady = !window.__rainDigitTourTransition || transition?.phase === "ready";\n  if (viewer.isLoaded() && canvas?.width > 0 && canvas?.height > 0 && runtimeStylesReady && transitionReady) {\n    document.documentElement.classList.add("is-tour-ready");\n    return;\n  }\n  // Animation frames may be suspended indefinitely while this tour is\n  // embedded below the fold. A timer keeps the portable tour booting before\n  // the host scrolls it into view.\n  window.setTimeout(revealRenderedTour, 16);\n}\nviewer.on("load", () => {\n  revealRenderedTour();',
-    );
-    runtime = runtime.replace(
-      "setActiveScene(initialScene);",
-      "revealRenderedTour();\nsetActiveScene(initialScene);",
-    );
-  }
   assert(
-    runtime.includes('type: "raindigit-tour-ready"') &&
+    boundedRuntime.includes("__rainDigitBoundedMediaRuntime") &&
+      boundedRuntime.includes("dynamicUpdate") &&
+      boundedRuntime.includes("setUpdate") &&
+      boundedRuntime.includes("fallbackAttempts") &&
+      boundedRuntime.includes("captureTerminal"),
+    "The canonical bounded-media runtime is incomplete.",
+  );
+  assert(
+    runtime.includes("boundedMediaRuntime") &&
+      runtime.includes("initialBoundedCanvas") &&
+      runtime.includes("sceneId: hotspot.target") &&
+      runtime.includes("window.__tourViewer = viewer") &&
+      runtime.includes("__rainDigitTourTransition?.attach(viewer)") &&
+      runtime.includes("function revealRenderedTour") &&
+      runtime.includes('type: "raindigit-tour-ready"') &&
       runtime.includes("window.parent.postMessage"),
-    "The generated runtime does not publish the honest host-readiness contract.",
+    "The canonical tour runtime does not contain the bounded-media and readiness contracts.",
   );
-  assert(
-    runtime.includes("window.__tourViewer = viewer") &&
-      runtime.includes("__rainDigitTourTransition?.attach(viewer)"),
-    "The generated runtime must expose and attach its viewer before readiness can be trusted.",
-  );
-  await writeFile(runtimePath, runtime, "utf8");
 }
 
 function digestInventory(files) {
@@ -849,7 +1034,7 @@ async function main() {
   // package. Docker mounts /data separately from /tmp, and an atomic rename
   // across those filesystems fails with EXDEV.
   const temporaryRoot = await mkdtemp(
-    join(finalParent, ".raindigit-multires-"),
+    join(finalParent, ".raindigit-bounded-"),
   );
   const stagedRoot = join(temporaryRoot, "staged-release");
   const packageRoot = join(temporaryRoot, "package");
@@ -886,9 +1071,9 @@ async function main() {
 
     await reportProgress(
       options,
-      "tiles",
+      "bounded-media",
       20,
-      "Building optimized scene tiles",
+      "Building bounded scene media",
       { completedScenes: 0, totalScenes: baseMetadata.scenes },
     );
     phaseStartedAt = performance.now();
@@ -896,28 +1081,11 @@ async function main() {
     const configPath = join(stagedRoot, "js", "tour-config.js");
     const pannellumPath = join(stagedRoot, "js", "pannellum.js");
     const pannellumSource = await readFile(pannellumPath, "utf8");
-    const pannellumFallbackPatches = [
-      [
-        'H.replace("%s",Q[t])+"."+m.extension:m[t].src',
-        'H.replace("%s",Q[t])+"."+(m.fallbackExtension||m.extension):m[t].src',
-      ],
-    ];
-    const matchingFallbackPatch = pannellumFallbackPatches.find(([needle]) =>
-      pannellumSource.includes(needle)
-    );
-    const modernFallbackPattern = /([\w$]+)\.replace\("%s",([\w$]+)\[([\w$]+)\]\)\+\(([\w$]+)\.extension\?"\."\+\4\.extension:""\)/;
-    const patchedPannellum = matchingFallbackPatch
-      ? pannellumSource.replace(...matchingFallbackPatch)
-      : pannellumSource.replace(
-          modernFallbackPattern,
-          (_, path, sides, side, media) =>
-            `${path}.replace("%s",${sides}[${side}])+(${media}.fallbackExtension||${media}.extension?"."+(${media}.fallbackExtension||${media}.extension):"")`,
-        );
     assert(
-      patchedPannellum !== pannellumSource,
-      "Pannellum fallback-extension compatibility patch did not apply.",
+      pannellumSource.includes("setUpdate") &&
+        pannellumSource.includes("dynamicUpdate"),
+      "The canonical Pannellum runtime lacks dynamic equirectangular updates.",
     );
-    await writeFile(pannellumPath, patchedPannellum, "utf8");
     const project = readTourConfig(await readFile(configPath, "utf8"));
     const identity = releaseIdentity({
       tourVersion: options.tourVersion,
@@ -933,11 +1101,12 @@ async function main() {
       "First-scene panorama is missing before multires conversion.",
     );
     const firstSceneDimensions = await imageDimensions(firstSceneSource);
+    const sourcePanoramaPaths = project.scenes.map((scene) => scene.panorama);
     const sceneIds = project.scenes.map((scene) => scene.id);
     const sceneBuilds = new Map();
-    let tileCount = 0;
-    let multiresCacheHits = 0;
-    let multiresCacheMisses = 0;
+    let mediaObjectCount = 0;
+    let boundedMediaCacheHits = 0;
+    let boundedMediaCacheMisses = 0;
     let completedScenes = 0;
     let progressWrites = Promise.resolve();
     const sceneResults = await mapWithConcurrency(
@@ -945,10 +1114,9 @@ async function main() {
       options.sceneConcurrency,
       async (scene) => {
         const sceneStartedAt = performance.now();
-        const generated = await buildSceneMultires(
+        const generated = await buildSceneBounded(
           scene,
           stagedRoot,
-          temporaryRoot,
           options,
         );
         const durationMs = Math.round(performance.now() - sceneStartedAt);
@@ -957,7 +1125,7 @@ async function main() {
         progressWrites = progressWrites.then(() =>
           reportProgress(
             options,
-            "tiles",
+            "bounded-media",
             Math.round(20 + (completed / project.scenes.length) * 65),
             `${generated.cacheHit ? "Reused" : "Optimized"} view ${completed} of ${project.scenes.length}`,
             {
@@ -976,18 +1144,32 @@ async function main() {
     const sceneTimings = [];
     for (const { scene, generated, durationMs } of sceneResults) {
       sceneBuilds.set(scene.id, generated);
-      scene.type = "multires";
-      scene.multiRes = generated.config;
+      scene.type = "bounded-media";
+      scene.boundedMedia = generated.media;
       delete scene.panorama;
-      tileCount += generated.tileCount;
-      if (generated.cacheHit) multiresCacheHits += 1;
-      else multiresCacheMisses += 1;
+      mediaObjectCount += generated.objectCount;
+      if (generated.cacheHit) boundedMediaCacheHits += 1;
+      else boundedMediaCacheMisses += 1;
       sceneTimings.push({
         id: scene.id,
         durationMs,
         cacheHit: generated.cacheHit,
       });
     }
+    Object.assign(project, {
+      deliveryCapability: BOUNDED_MEDIA_DELIVERY_CAPABILITY,
+      mediaProfile: BOUNDED_MEDIA_PROFILE,
+      mediaRecipeVersion: BOUNDED_MEDIA_RECIPE_VERSION,
+      mediaRecipe: BOUNDED_MEDIA_RECIPE_VERSION,
+      compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
+      mediaTopology: {
+        preferredObjectsPerScene: 3,
+        hardMaxObjectsPerScene: BOUNDED_MEDIA_HARD_MAX_OBJECTS,
+        actualObjectsPerScene: 4,
+        roles: ["base", "mobile-detail", "desktop-detail", "fallback"],
+        qualityDecision: "adaptive-desktop-8192-mobile-4096",
+      },
+    });
     timings.runtimeAndTilesMs = Math.round(performance.now() - phaseStartedAt);
     phaseStartedAt = performance.now();
     await writeFile(
@@ -1016,7 +1198,7 @@ async function main() {
     );
     const firstFrameData = project.scenes.find(
       (scene) => scene.id === project.firstScene,
-    )?.multiRes?.equirectangularThumbnail;
+    )?.boundedMedia?.preview;
     assert(
       firstFrameData?.startsWith("data:image/webp;base64,"),
       "The inline first-frame preview is missing.",
@@ -1047,7 +1229,6 @@ async function main() {
     });
     await versionTourRuntime(stagedRoot);
     await rm(join(stagedRoot, "assets", "p"), { recursive: true, force: true });
-    await assertPortableRelease(stagedRoot, project);
     seoPerformance.criticalBytes = (
       await Promise.all(
         seoPerformance.criticalFiles.map(
@@ -1060,9 +1241,12 @@ async function main() {
       seoPerformance.criticalBytes <= seoPerformance.criticalBudgetBytes,
       `First-scene critical payload is ${seoPerformance.criticalBytes} bytes; budget is ${seoPerformance.criticalBudgetBytes} bytes.`,
     );
+    await Promise.all(sourcePanoramaPaths.filter(Boolean).map((path) => rm(join(stagedRoot, path), { force: true })));
+    await assertPortableRelease(stagedRoot, project);
+    const mediaInventory = await assertBoundedMediaInventory(stagedRoot, project);
     const payloadFiles = await fileInventory(stagedRoot);
     const digest = digestInventory(payloadFiles);
-    const version = `multires-${digest.slice(0, 12)}`;
+    const version = `bounded-${digest.slice(0, 12)}`;
     const immutablePrefix = `tours/${options.slug}/${version}/`;
     const payloadBytes = payloadFiles.reduce(
       (sum, file) => sum + file.bytes,
@@ -1092,7 +1276,7 @@ async function main() {
       })),
     );
     const manifest = {
-      schema: "raindigit-tour-multires-release/v2",
+      schema: "raindigit-tour-bounded-release/v1",
       title: project.title,
       slug: options.slug,
       version,
@@ -1116,9 +1300,20 @@ async function main() {
       sceneIds,
       sceneViews,
       hotspotGraph,
-      mediaProfile: hybridMediaProfile(options.baseSize, options.tileSize),
+      deliveryCapability: BOUNDED_MEDIA_DELIVERY_CAPABILITY,
+      mediaProfile: BOUNDED_MEDIA_PROFILE,
+      mediaRecipeVersion: BOUNDED_MEDIA_RECIPE_VERSION,
+      mediaRecipe: BOUNDED_MEDIA_RECIPE_VERSION,
+      compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
+      mediaTopology: {
+        preferredObjectsPerScene: 3,
+        hardMaxObjectsPerScene: BOUNDED_MEDIA_HARD_MAX_OBJECTS,
+        actualObjectsPerScene: 4,
+        roles: ["base", "mobile-detail", "desktop-detail", "fallback"],
+        qualityDecision: "adaptive-desktop-8192-mobile-4096",
+      },
+      mediaInventory,
       baseSize: options.baseSize,
-      tileSize: options.tileSize,
       sourceWidth: firstSceneDimensions.width,
       sourceHeight: firstSceneDimensions.height,
       webpQuality: options.webpQuality,
@@ -1195,7 +1390,7 @@ async function main() {
         hits: 0,
         misses: project.scenes.length,
       },
-      multires: { hits: multiresCacheHits, misses: multiresCacheMisses },
+      boundedMedia: { hits: boundedMediaCacheHits, misses: boundedMediaCacheMisses },
     };
     await reportProgress(options, "complete", 100, "Tour package ready", {
       cache,
@@ -1221,21 +1416,26 @@ async function main() {
           rollbackVersion: options.rollbackVersion,
           scenes: project.scenes.length,
           hotspots: hotspotGraph.length,
-          tiles: tileCount,
+          mediaObjects: mediaObjectCount,
+          mediaObjectsPerScene: 4,
+          deliveryCapability: BOUNDED_MEDIA_DELIVERY_CAPABILITY,
+          mediaProfile: BOUNDED_MEDIA_PROFILE,
+          mediaRecipeVersion: BOUNDED_MEDIA_RECIPE_VERSION,
+          compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
           files: payloadFiles.length,
           bytes: payloadBytes,
           contentDigest: digest,
           cache,
-          mediaWorker: mediaWorkerMetadata({
-            baseSize: options.baseSize,
-            tileSize: options.tileSize,
+          compiler: {
+            recipe: BOUNDED_MEDIA_COMPILER_RECIPE,
+            baseWidth: options.baseSize,
+            mobileDetailWidth: options.mobileDetailSize,
+            desktopDetailWidth: options.desktopDetailSize,
+            fallbackWidth: options.fallbackSize,
+            webpQuality: options.webpQuality,
             webpEffort: options.webpEffort,
-            projectionInterpolation: options.projectionInterpolation,
-            faceConcurrency: options.faceConcurrency,
-            faceConcurrencyMode: options.faceConcurrencyMode,
-            sceneConcurrency: options.sceneConcurrency,
-            sceneConcurrencyMode: options.sceneConcurrencyMode,
-          }),
+            jpegQuality: options.jpegQuality,
+          },
           buildMetrics: { timings, scenes: sceneTimings },
         },
         null,

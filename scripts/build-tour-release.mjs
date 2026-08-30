@@ -466,6 +466,10 @@ async function copyRuntime(output) {
   await cp(join(source, "css"), join(output, "css"), { recursive: true });
   await mkdir(join(output, "js"), { recursive: true });
   await cp(join(source, "js", "pannellum.js"), join(output, "js", "pannellum.js"));
+  await cp(
+    join(source, "js", "bounded-media-runtime.js"),
+    join(output, "js", "bounded-media-runtime.js"),
+  );
   await mkdir(join(output, "licenses"), { recursive: true });
   await cp(
     join(source, "licenses", "pannellum-LICENSE.txt"),

@@ -444,8 +444,15 @@ async function releaseStatus() {
         && pointer.packageVersion === packageVersion
         && pointer.studioVersion === identity.studioVersion
         && pointer.tourVersion === identity.tourVersion
+        && releaseManifest.schema === "raindigit-tour-bounded-release/v1"
         && releaseManifest.packageVersion === packageVersion
-        && releaseManifest.contentDigest === metadata.contentDigest;
+        && releaseManifest.contentDigest === metadata.contentDigest
+        && releaseManifest.deliveryCapability === "bounded-media-v1"
+        && releaseManifest.mediaProfile === "bounded-equirect-base-mobile4096-desktop8192-fallback-v1"
+        && releaseManifest.mediaRecipeVersion === "progressive-equirectangular-v1"
+        && releaseManifest.mediaTopology?.actualObjectsPerScene === 4
+        && releaseManifest.mediaTopology?.hardMaxObjectsPerScene === 5
+        && releaseManifest.mediaInventory?.length === releaseManifest.sceneIds?.length * 4;
       multires = {
         ready,
         bytes: multiresArchive.size,
@@ -460,6 +467,11 @@ async function releaseStatus() {
         entrypoint: metadata.entrypoint,
         pointer: metadata.pointer,
         contentDigest: metadata.contentDigest,
+        deliveryCapability: releaseManifest.deliveryCapability,
+        mediaProfile: releaseManifest.mediaProfile,
+        mediaRecipeVersion: releaseManifest.mediaRecipeVersion,
+        mediaObjects: metadata.mediaObjects,
+        mediaObjectsPerScene: metadata.mediaObjectsPerScene,
         scenes: metadata.scenes,
         hotspots: metadata.hotspots,
         cache: metadata.cache || null,
@@ -1345,7 +1357,7 @@ const server = createServer(async (request, response) => {
         updateReleaseBuildState("preflight", 8, "Checking tour connections");
         await assertWorkspaceReadyForRelease(project);
         const inputFingerprint = await releaseInputFingerprint();
-        updateReleaseBuildState("optimizing", 18, "Optimizing panoramas and building web tiles");
+        updateReleaseBuildState("optimizing", 18, "Building bounded base, mobile detail, desktop detail and fallback media");
         const multiresBuilder = join(projectRoot, "scripts", "build-multires-release.mjs");
         const { stdout: multiresOutput } = await execFileAsync(process.execPath, [
           multiresBuilder,

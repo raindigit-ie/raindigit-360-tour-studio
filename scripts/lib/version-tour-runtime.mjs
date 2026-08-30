@@ -37,6 +37,7 @@ export async function versionTourRuntime(root) {
   const bootstrapFiles = new Map([
     ["js/pannellum.js", join(root, "js", "pannellum.js")],
     ["js/tour-config.js", join(root, "js", "tour-config.js")],
+    ["js/bounded-media-runtime.js", join(root, "js", "bounded-media-runtime.js")],
     ["js/tour-transition.js", join(root, "js", "tour-transition.js")],
     ["js/tour.js", join(root, "js", "tour.js")]
   ]);

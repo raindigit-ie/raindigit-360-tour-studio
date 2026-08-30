@@ -17,6 +17,9 @@
   const guardColumns = 6;
   const guardRows = 4;
   const baseFaces = ["f", "b", "u", "d", "l", "r"];
+  function baseFacesForRun(run) {
+    return sceneConfig(run.sceneId)?.boundedMedia ? ["base"] : baseFaces;
+  }
   const pollInterval = 50;
   const renderSettleDelay = reducedMotion ? 20 : 80;
   // The six target level-1 faces are the correctness gate. Detail levels are
@@ -150,9 +153,11 @@
   }
 
   function tilePrefix(sceneId) {
-    const basePath = sceneConfig(sceneId)?.multiRes?.basePath;
+    const scene = sceneConfig(sceneId);
+    const basePath = scene?.boundedMedia?.base || scene?.multiRes?.basePath;
     if (!basePath || typeof basePath !== "string") return null;
     try {
+      if (scene?.boundedMedia) return new URL(basePath, document.baseURI).href;
       return new URL(`${basePath.replace(/\/+$/, "")}/`, document.baseURI).href;
     } catch {
       return null;
@@ -175,6 +180,7 @@
     try {
       const absolute = new URL(source, document.baseURI).href;
       if (!absolute.startsWith(prefix)) return null;
+      if (sceneConfig(run.sceneId)?.boundedMedia) return "base";
       const relative = absolute.slice(prefix.length);
       const match = relative.match(/^1\/([fbudlr])0_0(?:\.[^/?]+)?(?:[?#]|$)/);
       return match?.[1] || null;
@@ -185,10 +191,17 @@
 
   function updateBaseProgress(run) {
     if (active?.token !== run.token) return;
-    const loaded = run.baseLoaded.size;
+    const isBounded = Boolean(sceneConfig(run.sceneId)?.boundedMedia);
+    const boundedState = isBounded
+      ? window.__rainDigitBoundedMediaRuntime?.state?.(run.sceneId)
+      : null;
+    const required = baseFacesForRun(run).length;
+    const loaded = boundedState && (boundedState.baseReady || boundedState.fallbackReady)
+      ? required
+      : run.baseLoaded.size;
     tileLayer.dataset.baseLoaded = String(loaded);
-    tileLayer.dataset.baseRequired = String(baseFaces.length);
-    if (statusLabel) statusLabel.textContent = `Preparing view ${loaded}/${baseFaces.length}`;
+    tileLayer.dataset.baseRequired = String(required);
+    if (statusLabel) statusLabel.textContent = `Preparing view ${loaded}/${required}`;
   }
 
   function settleBaseFace(run, face, outcome) {
@@ -218,7 +231,7 @@
         sceneId: run.sceneId,
         sourceSceneId: run.sourceSceneId,
         retryCount: run.retryCount,
-        baseRequired: baseFaces.length,
+        baseRequired: baseFacesForRun(run).length,
         baseLoaded: run.baseLoaded.size,
         baseFailed: run.baseFailed.size,
       },
@@ -304,9 +317,14 @@
   }
 
   function baseAttemptIsHealthy(run) {
+    const required = baseFacesForRun(run).length;
+    if (sceneConfig(run.sceneId)?.boundedMedia) {
+      const boundedState = window.__rainDigitBoundedMediaRuntime?.state?.(run.sceneId);
+      return Boolean(boundedState?.baseReady || boundedState?.fallbackReady);
+    }
     return Boolean(
-      run.baseRequested.size === baseFaces.length &&
-      run.baseLoaded.size === baseFaces.length &&
+      run.baseRequested.size >= required &&
+      run.baseLoaded.size === required &&
       run.baseFailed.size === 0 &&
       run.basePending.size === 0
     );
@@ -314,6 +332,7 @@
 
   function preloadTargetBaseTiles(run) {
     const scene = sceneConfig(run.sceneId);
+    if (scene?.boundedMedia?.base) return;
     const prefix = tilePrefix(run.sceneId);
     const extension = scene?.multiRes?.extension || "jpg";
     if (!prefix) return;
@@ -328,7 +347,7 @@
 
   function previewFor(sceneId) {
     const scene = sceneConfig(sceneId);
-    return scene?.multiRes?.equirectangularThumbnail || scene?.thumb || initialPreview;
+    return scene?.boundedMedia?.preview || scene?.multiRes?.equirectangularThumbnail || scene?.thumb || initialPreview;
   }
 
   function requestedScene() {
@@ -347,15 +366,55 @@
         sourceSceneId: run.sourceSceneId,
         targetSceneId: run.sceneId,
         retryCount: run.retryCount,
-        baseRequired: baseFaces.length,
+        baseRequired: baseFacesForRun(run).length,
         baseRequested: run.baseRequested.size,
         baseLoaded: run.baseLoaded.size,
         baseFailed: run.baseFailed.size,
         basePending: run.basePending.size,
+        boundedBaseReady: Boolean(window.__rainDigitBoundedMediaRuntime?.state?.(run.sceneId)?.baseReady),
+        boundedFallbackReady: Boolean(window.__rainDigitBoundedMediaRuntime?.state?.(run.sceneId)?.fallbackReady),
+        boundedFallbackAttempts: run.boundedFallbackAttempts || 0,
+        boundedRecoveryExhausted: Boolean(run.boundedRecoveryExhausted),
         detailPending: Math.max(0, run.tilePending - run.basePending.size),
       }
     }));
   }
+
+  document.addEventListener("raindigit:bounded-media", (event) => {
+    const boundedEvent = event.detail?.event;
+    const details = event.detail?.details || {};
+    const run = active;
+    if (!run || details.sceneId !== run.sceneId || !sceneConfig(run.sceneId)?.boundedMedia) return;
+    if (details.role === "fallback") run.boundedFallbackAttempts = details.attempt || run.boundedFallbackAttempts || 0;
+    if (details.role === "base" && boundedEvent === "image-attempt") {
+      run.baseRequested.add("base");
+      run.basePending.add("base");
+    } else if (details.role === "base" && boundedEvent === "image-attempt-failed") {
+      run.basePending.delete("base");
+      run.baseFailed.add("base");
+      run.tileLastFailureAt = performance.now();
+    } else if (boundedEvent === "base-ready") {
+      run.basePending.delete("base");
+      run.baseLoaded.add("base");
+      run.baseFailed.delete("base");
+      run.readiness = "base-ready";
+    } else if (boundedEvent === "fallback-ready") {
+      run.basePending.delete("base");
+      run.baseLoaded.add("base");
+      run.baseFailed.delete("base");
+      run.readiness = "fallback-ready";
+    } else if (boundedEvent === "recovery-exhausted") {
+      run.basePending.delete("base");
+      run.baseFailed.add("base");
+      run.boundedRecoveryExhausted = true;
+      run.readiness = "recovery-exhausted";
+      phase = "fallback";
+    } else {
+      return;
+    }
+    updateBaseProgress(run);
+    dispatch(boundedEvent, run);
+  });
 
   function guard(sceneId, initial = false) {
     const resolvedSceneId = initial ? requestedScene() : (sceneConfig(sceneId)?.id || config.firstScene);
@@ -378,6 +437,8 @@
       tilePending: 0,
       tileLastEventAt: 0,
       tileLastFailureAt: 0,
+      boundedFallbackAttempts: 0,
+      boundedRecoveryExhausted: false,
       baseRequested: new Set(),
       baseLoaded: new Set(),
       baseFailed: new Set(),
@@ -571,8 +632,14 @@
       const tileRetryDelay = tileFailureRetryDelays[
         Math.min(run.retryCount, tileFailureRetryDelays.length - 1)
       ];
+      if (run.boundedRecoveryExhausted) return;
+      const fallbackReady = Boolean(
+        window.__rainDigitBoundedMediaRuntime?.state?.(run.sceneId)?.fallbackReady,
+      );
       if (
+        !sceneConfig(run.sceneId)?.boundedMedia &&
         run.baseFailed.size > 0 &&
+        !fallbackReady &&
         run.basePending.size === 0 &&
         performance.now() - run.tileLastFailureAt >= tileRetryDelay
       ) {
@@ -659,9 +726,14 @@
 
   document.documentElement.dataset.tourSceneTransition = "target-base-progressive-v8";
   document.documentElement.dataset.tourWebglReadback = "disabled";
+  const beginScene = (sceneId) => {
+    if (active?.sceneId === sceneId) return active;
+    return guard(sceneId, false);
+  };
   const primeInitial = () => active || guard(requestedScene(), true);
   window.__rainDigitTourTransition = {
     attach,
+    beginScene,
     primeInitial,
     state: () => ({
       variant: "target-base-progressive",
@@ -678,11 +750,15 @@
       tileLoaded: active?.tileLoaded || 0,
       tileFailed: active?.tileFailed || 0,
       tilePending: active?.tilePending || 0,
-      baseRequired: baseFaces.length,
+      baseRequired: active ? baseFacesForRun(active).length : baseFaces.length,
       baseRequested: active?.baseRequested.size || 0,
       baseLoaded: active?.baseLoaded.size || 0,
       baseFailed: active?.baseFailed.size || 0,
       basePending: active?.basePending.size || 0,
+      boundedBaseReady: Boolean(window.__rainDigitBoundedMediaRuntime?.state?.(active?.sceneId)?.baseReady),
+      boundedFallbackReady: Boolean(window.__rainDigitBoundedMediaRuntime?.state?.(active?.sceneId)?.fallbackReady),
+      boundedFallbackAttempts: active?.boundedFallbackAttempts || 0,
+      boundedRecoveryExhausted: Boolean(active?.boundedRecoveryExhausted),
       detailPending: Math.max(0, (active?.tilePending || 0) - (active?.basePending.size || 0)),
       readiness: active?.readiness || "ready",
       guarded: shell.classList.contains("is-transition-guarded")

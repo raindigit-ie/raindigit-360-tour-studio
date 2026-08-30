@@ -292,3 +292,124 @@ export function mediaWorkerMetadata({
     sharpConcurrency: sharp.concurrency()
   };
 }
+export const BOUNDED_MEDIA_DELIVERY_CAPABILITY = "bounded-media-v1";
+export const BOUNDED_MEDIA_PROFILE =
+  "bounded-equirect-base-mobile4096-desktop8192-fallback-v1";
+export const BOUNDED_MEDIA_RECIPE_VERSION = "progressive-equirectangular-v1";
+export const BOUNDED_MEDIA_COMPILER_RECIPE =
+  "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1";
+export const BOUNDED_MEDIA_HARD_MAX_OBJECTS = 5;
+export async function buildBoundedMedia({
+  input,
+  targetRoot,
+  baseWidth = 2048,
+  mobileDetailWidth = 4096,
+  desktopDetailWidth = 8192,
+  fallbackWidth = 1024,
+  webpQuality = 82,
+  webpEffort = 4,
+  jpegQuality = 86,
+} = {}) {
+  const sourceMetadata = await sharp(input).metadata();
+  const sourceWidth = Number(sourceMetadata.width || 0);
+  const sourceHeight = Number(sourceMetadata.height || 0);
+  assert(
+    sourceWidth >= 1600 &&
+      sourceHeight >= 800 &&
+      Math.abs(sourceWidth / sourceHeight - 2) <= 0.02,
+    "Bounded media requires a full 2:1 equirectangular source.",
+  );
+  const resolvedBaseWidth = Math.min(
+    sourceWidth,
+    Math.max(1024, Number(baseWidth)),
+  );
+  const resolvedMobileDetailWidth = Math.min(
+    sourceWidth,
+    4096,
+    Math.max(resolvedBaseWidth, Number(mobileDetailWidth)),
+  );
+  const resolvedDesktopDetailWidth = Math.min(
+    sourceWidth,
+    8192,
+    Math.max(resolvedMobileDetailWidth, Number(desktopDetailWidth)),
+  );
+  const resolvedFallbackWidth = Math.min(
+    resolvedBaseWidth,
+    Math.max(512, Number(fallbackWidth)),
+  );
+  const outputs = [
+    {
+      role: "base",
+      file: "base.webp",
+      width: resolvedBaseWidth,
+      format: "webp",
+      target: "all",
+    },
+    {
+      role: "mobile-detail",
+      file: "mobile-detail.webp",
+      width: resolvedMobileDetailWidth,
+      format: "webp",
+      target: "mobile-webkit",
+    },
+    {
+      role: "desktop-detail",
+      file: "desktop-detail.webp",
+      width: resolvedDesktopDetailWidth,
+      format: "webp",
+      target: "desktop",
+    },
+    {
+      role: "fallback",
+      file: "fallback.jpg",
+      width: resolvedFallbackWidth,
+      format: "jpeg",
+      target: "non-webgl",
+    },
+  ];
+  assert(
+    outputs.length <= BOUNDED_MEDIA_HARD_MAX_OBJECTS,
+    "Bounded media object count exceeds the hard maximum.",
+  );
+  await mkdir(targetRoot, { recursive: true });
+  for (const output of outputs) {
+    const pipeline = sharp(input).resize({
+      width: output.width,
+      height: Math.floor(output.width / 2),
+      fit: "fill",
+      kernel: sharp.kernel.lanczos3,
+    });
+    if (output.format === "webp") {
+      await pipeline
+        .webp({ quality: webpQuality, effort: webpEffort })
+        .toFile(join(targetRoot, output.file));
+    } else {
+      await pipeline
+        .jpeg({
+          quality: jpegQuality,
+          progressive: true,
+          chromaSubsampling: "4:2:0",
+        })
+        .toFile(join(targetRoot, output.file));
+    }
+  }
+  return {
+    deliveryCapability: BOUNDED_MEDIA_DELIVERY_CAPABILITY,
+    mediaProfile: BOUNDED_MEDIA_PROFILE,
+    mediaRecipeVersion: BOUNDED_MEDIA_RECIPE_VERSION,
+    compilerRecipe: BOUNDED_MEDIA_COMPILER_RECIPE,
+    source: {
+      width: sourceWidth,
+      height: sourceHeight,
+    },
+    objectCount: outputs.length,
+    objects: outputs.map((output) => ({
+      role: output.role,
+      file: output.file,
+      width: output.width,
+      height: Math.floor(output.width / 2),
+      codec: output.format,
+      target: output.target,
+    })),
+  };
+}

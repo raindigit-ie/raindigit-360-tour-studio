@@ -161,11 +161,11 @@ async function main() {
     const ready = await page.locator("#editorReadiness li.is-ready").count();
     assert(readiness >= 6 && readiness === ready, `Fast flow reached export without a clean preflight (${ready}/${readiness}).`);
     const downloadPromise = page.waitForEvent("download", { timeout: 180_000 });
-    await click(page.getByRole("button", { name: "Build & download web package" }));
+    await click(page.getByRole("button", { name: "Build bounded web package" }));
     const download = await downloadPromise;
     const suggestedName = download.suggestedFilename();
     assert(suggestedName.endsWith(".zip"), `Fast flow downloaded an unexpected file: ${suggestedName}`);
-    await page.getByRole("link", { name: "Download web package" }).waitFor({ timeout: 180_000 });
+    await page.getByRole("link", { name: "Download bounded package" }).waitFor({ timeout: 180_000 });
 
     const release = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();
     assert(release.ready && release.multires?.ready, `Fast flow did not produce a ready web release: ${JSON.stringify(release)}`);

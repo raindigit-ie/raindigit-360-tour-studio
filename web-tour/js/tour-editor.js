@@ -344,7 +344,7 @@
             <small>This text travels with the package so its capabilities and test scope stay understandable.</small>
           </label>
         </details>
-          <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build & download web package</button>
+          <button class="editor-button editor-button--primary editor-button--wide" id="editorBuild" type="button">Build bounded web package</button>
           <div class="editor-build-progress" id="editorBuildProgress" hidden role="status" aria-live="polite">
             <div><span id="editorBuildProgressLabel">Preparing build</span><strong id="editorBuildProgressPercent">0%</strong></div>
             <div class="editor-build-progress__track"><i id="editorBuildProgressBar"></i></div>
@@ -352,9 +352,9 @@
         <div class="editor-release-actions" id="editorReleaseActions" hidden>
           <div class="editor-publish-card">
             <strong>Optimized website tour is ready</strong>
-            <span id="editorMultiresSummary">Versioned tiles, manifest and rollback pointer are included.</span>
-            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadMultires" download="raindigit-tour-web-package.zip">Download web package</a>
-            <a class="editor-button editor-button--wide" id="editorPreviewMultires" target="_blank" rel="noopener">Open optimized preview</a>
+            <span id="editorMultiresSummary">Four bounded media files per view, exact manifest and rollback pointer are included.</span>
+            <a class="editor-button editor-button--primary editor-button--wide" id="editorDownloadMultires" download="raindigit-tour-web-package.zip">Download bounded package</a>
+            <a class="editor-button editor-button--wide" id="editorPreviewMultires" target="_blank" rel="noopener">Open bounded preview</a>
           </div>
           <details class="editor-disclosure editor-disclosure--compact">
             <summary>Test on a website</summary>
@@ -3289,7 +3289,7 @@
     elements.PreviewLink.textContent = state.release.ready ? "Open finished tour" : "Open tour preview";
     elements.Build.disabled = !workspaceMode || state.building || !readiness.ready || !releaseSlugValid || !releaseVersionValid || !releaseSummaryValid;
     elements.Build.hidden = state.release.ready;
-    elements.Build.textContent = state.building ? state.buildProgress.message || "Building tour..." : "Build & download web package";
+    elements.Build.textContent = state.building ? state.buildProgress.message || "Building tour..." : "Build bounded web package";
     elements.BuildProgress.hidden = !state.building;
     elements.BuildProgressLabel.textContent = state.buildProgress.message || "Preparing build";
     elements.BuildProgressPercent.textContent = `${Math.max(0, Math.min(100, state.buildProgress.percent || 0))}%`;
@@ -3299,12 +3299,12 @@
     elements.PreviewMultires.href = state.release.multires?.ready ? `${endpoint}/release-multires/${state.release.multires.entrypoint}` : "";
     elements.DownloadMultires.href = studioUrl("release-multires-download");
     const lastBuildMs = state.release.buildDurationMs ?? state.release.multires?.buildMetrics?.timings?.totalMs;
-    const reusedViews = state.release.multires?.cache?.multires?.hits || 0;
+    const reusedViews = state.release.multires?.cache?.boundedMedia?.hits || 0;
     const cacheSummary = reusedViews > 0 ? ` · reused ${reusedViews}/${state.release.multires.scenes} view${reusedViews === 1 ? "" : "s"}` : "";
     const buildSummary = lastBuildMs === 0 ? " · already current" : Number.isFinite(lastBuildMs) ? ` · built in ${Math.max(1, Math.round(lastBuildMs / 1000))}s` : "";
     elements.MultiresSummary.textContent = state.release.multires?.ready
-      ? `${state.release.multires.scenes} views · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · tour ${state.release.multires.tourVersion} · Studio ${state.release.multires.studioVersion} · immutable ${state.release.multires.packageVersion}`
-      : "Versioned tiles, manifest and rollback pointer are included.";
+      ? `${state.release.multires.scenes} views · ${state.release.multires.mediaObjectsPerScene || 4} bounded media files per view · ${state.release.multires.hotspots} walking buttons${cacheSummary}${buildSummary} · tour ${state.release.multires.tourVersion} · Studio ${state.release.multires.studioVersion} · immutable ${state.release.multires.packageVersion}`
+      : "Four bounded media files per view, exact manifest and rollback pointer are included.";
     elements.BuildPortable.hidden = Boolean(state.release.legacyReady);
     elements.BuildPortable.disabled = !workspaceMode || state.building || !state.release.ready;
     elements.BuildPortable.textContent = state.building && state.buildingMode === "portable"
@@ -3327,7 +3327,7 @@
     elements.ReleaseStatus.textContent = !workspaceMode
       ? "Create a tour before publishing."
       : state.release.ready
-        ? `Optimized web package ready${state.release.multires?.bytes ? ` · ${(state.release.multires.bytes / 1024 / 1024).toFixed(1)} MB` : ""}. Test it before promotion.`
+        ? `Bounded web package ready${state.release.multires?.bytes ? ` · ${(state.release.multires.bytes / 1024 / 1024).toFixed(1)} MB` : ""}. Test it before promotion.`
         : !releaseSlugValid ? "Use lowercase letters, numbers and hyphens for the tour web name."
           : !releaseVersionValid ? "The Studio and tour capability versions must match."
             : !releaseSummaryValid ? "Describe what changed in this version."
@@ -4303,7 +4303,7 @@
     if (!built || !state.release.multires?.ready) return false;
     window.requestAnimationFrame(() => {
       elements.DownloadMultires.click();
-      setStatus("Tour built and web package download started");
+      setStatus("Tour built and bounded package download started");
       logOperatorStep("build-and-download-complete", {
         bytes: state.release.multires?.bytes || null,
         buildDurationMs: state.release.buildDurationMs || null,

@@ -61,6 +61,7 @@
     await loadScript(workspace
       ? `/${endpoint}/workspace-config.js?workspace=1`
       : "js/tour-config.js?v=20260802-wizard-v1");
+    await loadScript("js/bounded-media-runtime.js?v=20260830-bounded-media-v1");
     if (editing) {
       // The public-tour transition owns six multires cube faces. Studio works
       // directly with editable equirectangular panoramas, so mounting that
@@ -71,6 +72,7 @@
       await loadScript("js/tour-transition.js?v=20260827-safari-decode-v2");
     }
     await loadScript("js/tour.js?v=20260815-capture-view-v2");
+    await window.__rainDigitTourRuntimeReady;
     if (editing) {
       await loadScript("js/generated/editor-walking-button-list.js?v=20260810-svelte-route-thumbs-v1");
       await loadScript("js/tour-editor.js?v=20260815-polish-stage-resize-v1");

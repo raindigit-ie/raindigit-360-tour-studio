@@ -1,3 +1,4 @@
+window.__rainDigitTourRuntimeReady = (async () => {
 const { firstScene, scenes, title: tourTitle, map: configuredMap = { enabled: false, asset: null, pins: {} } } = window.TOUR_CONFIG;
 const sceneById = Object.fromEntries(scenes.map((scene) => [scene.id, scene]));
 const configScenes = {};
@@ -5,6 +6,10 @@ const viewParams = new URLSearchParams(window.location.search);
 const requestedScene = viewParams.get("scene");
 const initialScene = sceneById[requestedScene] ? requestedScene : firstScene;
 const studioRuntimeContext = window.__RAINDIGIT_STUDIO_CONTEXT__ || {};
+const boundedMediaRuntime = window.__rainDigitBoundedMediaRuntime || null;
+const initialBoundedCanvas = boundedMediaRuntime?.isBoundedScene(initialScene)
+  ? await boundedMediaRuntime.prepareScene(initialScene)
+  : null;
 const isLocalEditorRequest = viewParams.get("edit") === "1" &&
   (["127.0.0.1", "localhost", "::1"].includes(window.location.hostname) || studioRuntimeContext.editor === true);
 const isLocalDraftPreview = viewParams.get("preview") === "1" &&
@@ -160,6 +165,8 @@ function toPannellumHotspot(scene, hotspot, hotspotIndex) {
     targetYaw: hotspot.targetYaw,
     targetPitch: hotspot.targetPitch,
     targetHfov: hotspot.targetHfov,
+    clickHandlerFunc: (_event, args) => void loadSceneSafely(args.sceneId, args.targetPitch, args.targetYaw, args.targetHfov),
+    clickHandlerArgs: { sceneId: hotspot.target, targetPitch: hotspot.targetPitch, targetYaw: hotspot.targetYaw, targetHfov: hotspot.targetHfov },
     cssClass: "nav-hotspot-anchor",
     createTooltipFunc: createTransitionHotspot,
     createTooltipArgs: { label: hotspot.label, editorId: id }
@@ -181,12 +188,58 @@ function toPannellumLocalAdjustment(sceneId, adjustment) {
     createTooltipArgs: { ...adjustment, sceneId }
   };
 }
+let navigationSequence = 0;
+let pendingSceneNavigation = null;
+let lastSceneNavigationKey = null;
+let lastSceneNavigationAt = 0;
+async function loadSceneSafely(sceneId, pitch = "same", yaw = "same", hfov = "same") {
+  const scene = sceneById[sceneId];
+  if (!scene) return false;
+  const key = [sceneId, pitch, yaw, hfov].join("|");
+  if (pendingSceneNavigation?.key === key) return pendingSceneNavigation.promise;
+  const now = performance.now();
+  if (lastSceneNavigationKey === key && now - lastSceneNavigationAt < 500) return true;
+  lastSceneNavigationKey = key;
+  lastSceneNavigationAt = now;
+  const requestId = ++navigationSequence;
+  const promise = (async () => {
+    if (boundedMediaRuntime?.isBoundedScene(sceneId)) {
+      const canvas = await boundedMediaRuntime.prepareScene(sceneId);
+      if (requestId !== navigationSequence) return false;
+      if (!boundedMediaRuntime.configureScene(configScenes[sceneId], sceneId, canvas)) {
+        throw new Error(`Could not configure bounded-media scene ${sceneId}.`);
+      }
+    }
+    viewer.loadScene(sceneId, pitch, yaw, hfov);
+    return true;
+  })().catch((error) => {
+    emitTourDebug("runtime-bounded-base-failure", { sceneId, message: error.message });
+    const boundedState = boundedMediaRuntime?.state?.(sceneId);
+    if (!boundedState?.baseExhausted) {
+      window.__rainDigitTourTransition?.beginScene?.(sceneId);
+    }
+    return false;
+  }).finally(() => {
+    if (pendingSceneNavigation?.promise === promise) pendingSceneNavigation = null;
+  });
+  pendingSceneNavigation = { key, promise };
+  return promise;
+}
 
 for (const scene of scenes) {
   configScenes[scene.id] = {
     title: scene.title,
-    type: scene.type === "multires" && scene.multiRes ? "multires" : "equirectangular",
-    ...(scene.type === "multires" && scene.multiRes ? { multiRes: scene.multiRes } : { panorama: scene.panorama }),
+    type: "equirectangular",
+    ...(scene.boundedMedia
+      ? {
+          panorama: scene.id === initialScene ? initialBoundedCanvas : scene.boundedMedia.base,
+          dynamic: scene.id === initialScene,
+          dynamicUpdate: false,
+          boundedMedia: scene.boundedMedia,
+        }
+      : scene.type === "multires" && scene.multiRes
+        ? { type: "multires", multiRes: scene.multiRes }
+        : { panorama: scene.panorama }),
     pitch: scene.pitch,
     yaw: scene.yaw,
     hfov: scene.hfov,
@@ -582,7 +635,7 @@ for (const scene of scenes) {
       <small>${scene.subtitle}</small>
     </span>
   `;
-  button.addEventListener("click", () => viewer.loadScene(scene.id));
+  button.addEventListener("click", () => void loadSceneSafely(scene.id));
   sceneList.appendChild(button);
 }
 
@@ -610,7 +663,7 @@ for (const [index, space] of [...spaces.values()].entries()) {
   button.type = "button";
   button.dataset.routeSpace = space.id;
   button.textContent = space.label;
-  button.addEventListener("click", () => viewer.loadScene(space.firstScene));
+  button.addEventListener("click", () => void loadSceneSafely(space.firstScene));
   routeNodes.push(button);
   routeStrip.appendChild(button);
 }
@@ -657,7 +710,7 @@ if (configuredMap.enabled && configuredMap.asset) {
     button.textContent = String(scenes.findIndex((scene) => scene.id === sceneId) + 1);
     button.setAttribute("aria-label", `Open ${sceneById[sceneId].title}`);
     button.addEventListener("click", () => {
-      viewer.loadScene(sceneId);
+      void loadSceneSafely(sceneId);
       setFloorplanOpen(false);
     });
     floorplanPins.push(button);
@@ -880,6 +933,7 @@ window.addEventListener("message", (event) => {
 viewer.on("load", () => {
   revealRenderedTour();
   setActiveScene(viewer.getScene());
+  void boundedMediaRuntime?.upgrade(viewer, viewer.getScene());
   applySceneAdjustment(viewer.getScene());
   window.requestAnimationFrame(removeOrphanHotspotElements);
   window.requestAnimationFrame(() => emitTourDebug("runtime-scene-loaded", navigationHotspotInventory(viewer.getScene())));
@@ -887,3 +941,4 @@ viewer.on("load", () => {
 revealRenderedTour();
 setActiveScene(initialScene);
   if (isLocalDraftPreview) setNavigatorOpen(true);
+})();

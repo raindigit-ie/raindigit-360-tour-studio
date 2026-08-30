@@ -2,6 +2,39 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.3.0] — 2026-08-30
+
+### Changed
+
+- Replaces the 516-object-per-scene multires delivery topology with a bounded
+  four-object profile: 2048 WebP base, 4096 mobile/WebKit WebP detail, up to
+  8192 desktop WebP detail and 1024 JPEG recovery fallback.
+- Makes the checked-in Studio template the sole source of runtime and brand
+  files for exports, including a same-canvas progressive detail upgrade that
+  preserves scene, pitch, yaw and field of view.
+- Advances the portable format and runtime to `3.0.0`; package content remains
+  independently identified as `bounded-<content-digest>`.
+
+### Safety and verification
+
+- Binds every scene role to actual path, dimensions, bytes and SHA-256 in both
+  configuration and release manifest, rejects undeclared media and enforces a
+  hard maximum of five delivery objects per scene.
+- Keeps the opaque transition guard until base or bounded fallback is usable;
+  exhausted base and fallback recovery is terminal, while a detail failure
+  leaves the already usable panorama visible and does not emit terminal
+  monitoring noise.
+- Adds Chromium and WebKit dynamic-canvas verification, actual bounded package
+  verification, and fail-closed Studio readiness checks for the v3 schema.
+
+### Migration
+
+- Every active tour must be rebuilt from its exact source workspace. Relabelling
+  v2 multires metadata is forbidden because it cannot change actual topology.
+- A v3 package may be selected on DEV only after exact immutable upload and
+  remote verification. PROD still requires the separate physical iPhone Safari
+  acceptance for those exact bytes; no automated WebKit result substitutes it.
+
 ## [0.2.9] — 2026-08-30
 
 ### Fixed

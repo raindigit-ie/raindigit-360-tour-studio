@@ -6,6 +6,7 @@
   const runtimeSources = [
     "js/pannellum.js",
     "js/tour-config.js",
+    "js/bounded-media-runtime.js",
     "js/tour-transition.js",
     "js/tour.js",
   ];
@@ -61,5 +62,6 @@
   (async () => {
     runtimeSources.forEach(preloadScript);
     for (const source of runtimeSources) await loadScript(source);
+    await window.__rainDigitTourRuntimeReady;
   })().catch(showRuntimeRecovery);
 })();

@@ -1081,9 +1081,9 @@ async function main() {
     const readyCheckCount = await page.locator("#editorReadiness li.is-ready").count();
     assert(readinessChecks.length >= 6 && readyCheckCount === readinessChecks.length, `Release preflight is incomplete: ${JSON.stringify(readinessChecks)}`);
     await page.screenshot({ path: join(outputDir, "03-publish-mobile.png"), fullPage: true });
-    await page.getByRole("button", { name: "Build & download web package" }).click();
+    await page.getByRole("button", { name: "Build bounded web package" }).click();
     try {
-      await page.getByRole("link", { name: "Download web package" }).waitFor({ timeout: 180_000 });
+      await page.getByRole("link", { name: "Download bounded package" }).waitFor({ timeout: 180_000 });
     } catch (error) {
       const diagnostics = await page.evaluate(async () => {
         let releaseStatus = null;
@@ -1117,7 +1117,7 @@ async function main() {
     assert(!/data:image|blob:/i.test(logText), "The diagnostic journal contains media payloads.");
     assert(consoleErrors.length === 0, `Studio console errors: ${consoleErrors.join(" | ")}`);
 
-    const href = await page.getByRole("link", { name: "Download web package" }).getAttribute("href");
+    const href = await page.getByRole("link", { name: "Download bounded package" }).getAttribute("href");
     const releaseResponse = await page.request.get(new URL(href, baseUrl).href);
     assert(releaseResponse.ok() && (await releaseResponse.body()).length > 100_000, "The optimized website package was not built correctly.");
     const statusBeforePortableBuild = await (await page.request.get(`${baseUrl}/__tour-editor/release-status?workspace=1`)).json();

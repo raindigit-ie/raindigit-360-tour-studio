@@ -30,6 +30,7 @@ import {
   tourMonitoringRuntimeBundle,
   tourMonitoringConfig,
 } from "./lib/tour-monitoring-contract.mjs";
+import { assertBoundedMediaInventory } from "./lib/bounded-media-contract.mjs";
 
 function parseArguments(argv) {
   const options = {
@@ -229,11 +230,12 @@ async function main() {
   );
   const sourceManifest = JSON.parse(await readFile(manifests[0], "utf8"));
   assert(
-    [
-      "raindigit-tour-multires-release/v1",
-      "raindigit-tour-multires-release/v2",
-    ].includes(sourceManifest.schema),
-    "Source package is not a supported multires release.",
+    sourceManifest.schema === "raindigit-tour-bounded-release/v1" &&
+      sourceManifest.deliveryCapability === "bounded-media-v1" &&
+      sourceManifest.mediaProfile === "bounded-equirect-base-mobile4096-desktop8192-fallback-v1" &&
+      sourceManifest.mediaRecipeVersion === "progressive-equirectangular-v1" &&
+      sourceManifest.compilerRecipe === "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1",
+    "Source package is not a supported bounded-media release.",
   );
   const identity = releaseIdentity({
     tourVersion: options.tourVersion,
@@ -251,8 +253,7 @@ async function main() {
       sourceManifest.files
         .filter(
           (file) =>
-            file.path.startsWith("assets/mr/") ||
-            file.path.startsWith("assets/t/"),
+            file.path.startsWith("assets/bm/"),
         )
         .map((file) => [file.path, file.sha256]),
     );
@@ -323,6 +324,10 @@ async function main() {
       join(stagedRelease, "js", "tour-bootstrap.js"),
     );
     await cp(
+      join(options.runtimeTemplate, "js", "bounded-media-runtime.js"),
+      join(stagedRelease, "js", "bounded-media-runtime.js"),
+    );
+    await cp(
       join(options.runtimeTemplate, "js", "tour-transition.js"),
       join(stagedRelease, "js", "tour-transition.js"),
     );
@@ -362,6 +367,7 @@ async function main() {
     const configContext = { window: {} };
     vm.runInNewContext(configSource, configContext);
     const config = configContext.window.TOUR_CONFIG;
+    await assertBoundedMediaInventory(stagedRelease, config, sourceManifest);
     const changelog = await writeReleaseChangelog(stagedRelease, {
       slug: sourceManifest.slug,
       title: sourceManifest.title,
@@ -374,14 +380,13 @@ async function main() {
 
     const files = await inventory(stagedRelease);
     const digest = digestInventory(files);
-    const version = `multires-${digest.slice(0, 12)}`;
+    const version = `bounded-${digest.slice(0, 12)}`;
     const immutablePrefix = `tours/${sourceManifest.slug}/${version}/`;
     const mediaAfter = new Map(
       files
         .filter(
           (file) =>
-            file.path.startsWith("assets/mr/") ||
-            file.path.startsWith("assets/t/"),
+            file.path.startsWith("assets/bm/"),
         )
         .map((file) => [file.path, file.sha256]),
     );
@@ -411,7 +416,7 @@ async function main() {
     const generatedAt = new Date().toISOString();
     const manifest = {
       ...sourceManifest,
-      schema: "raindigit-tour-multires-release/v2",
+      schema: "raindigit-tour-bounded-release/v1",
       version,
       packageVersion: version,
       releaseState: "immutable-candidate",
@@ -446,6 +451,7 @@ async function main() {
         : {}),
       performance: { ...sourceManifest.performance, criticalFiles, criticalBytes },
     };
+    await assertBoundedMediaInventory(stagedRelease, config, manifest);
     delete manifest.mediaDependency;
     assert(
       criticalBytes <= manifest.performance.criticalBudgetBytes,

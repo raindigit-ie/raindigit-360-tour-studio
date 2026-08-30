@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { assertBoundedMediaInventory } from "./bounded-media-contract.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 const packageMetadata = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
@@ -24,7 +25,9 @@ export function assertReleaseContract() {
   if (!Array.isArray(releaseContract.capabilities) || releaseContract.capabilities.length < 1 || new Set(releaseContract.capabilities).size !== releaseContract.capabilities.length) {
     throw new Error("Release capabilities must be a non-empty unique list.");
   }
-  if (!releaseContract.capabilities.includes("self-contained-media")) throw new Error("The current release contract must require self-contained media.");
+  for (const capability of ["bounded-equirectangular-media", "dynamic-canvas-pannellum", "media-inventory-digest-binding", "self-contained-media"]) {
+    if (!releaseContract.capabilities.includes(capability)) throw new Error(`The current release contract must require ${capability}.`);
+  }
 }
 
 export function releaseIdentity({ tourVersion, previousTourVersion = null }) {
@@ -91,10 +94,16 @@ function executableOrMediaReference(value) {
 
 export async function assertPortableRelease(root, config) {
   if (config?.scenes?.length < 1) throw new Error("Portable release has no scenes.");
-  if (config.scenes.some((scene) => /^https?:\/\//i.test(scene.thumb || "") || /^https?:\/\//i.test(scene.panorama || "") || /^https?:\/\//i.test(scene.multiRes?.basePath || ""))) {
+  if (config.deliveryCapability !== "bounded-media-v1" ||
+      config.mediaProfile !== "bounded-equirect-base-mobile4096-desktop8192-fallback-v1" ||
+      config.mediaRecipeVersion !== "progressive-equirectangular-v1" ||
+      config.compilerRecipe !== "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1") {
+    throw new Error("Portable release package-level bounded-media contract is invalid.");
+  }
+  if (config.scenes.some((scene) => /^https?:\/\//i.test(scene.thumb || "") || /^https?:\/\//i.test(scene.panorama || "") || /^https?:\/\//i.test(scene.multiRes?.basePath || "") || scene.boundedMedia?.objects?.some((object) => /^https?:\/\//i.test(object.path || "")))) {
     throw new Error("Portable release contains an external scene-media dependency.");
   }
-  const required = ["index.html", "css/pannellum.css", "css/tour.css", "js/pannellum.js", "js/tour-bootstrap.js", "js/tour-config.js", "js/tour-monitoring.js", "js/generated/sentry-browser-10.71.0.min.js", "js/tour-transition.js", "js/tour.js", "licenses/pannellum-LICENSE.txt", "CHANGELOG.json", "CHANGELOG.md", "INSTALL.txt"];
+  const required = ["index.html", "css/pannellum.css", "css/tour.css", "js/pannellum.js", "js/bounded-media-runtime.js", "js/tour-bootstrap.js", "js/tour-config.js", "js/tour-monitoring.js", "js/generated/sentry-browser-10.71.0.min.js", "js/tour-transition.js", "js/tour.js", "licenses/pannellum-LICENSE.txt", "CHANGELOG.json", "CHANGELOG.md", "INSTALL.txt"];
   await Promise.all(required.map(async (path) => {
     const body = await readFile(join(root, path));
     if (body.byteLength === 0) throw new Error(`Portable release file is empty: ${path}`);
@@ -106,6 +115,7 @@ export async function assertPortableRelease(root, config) {
       if (/^https?:\/\//i.test(reference) && executableOrMediaReference(reference)) throw new Error(`${path} contains an external executable/media reference: ${reference}`);
     }
   }
+  await assertBoundedMediaInventory(root, config);
 }
 
 export function digestInventory(files) {
