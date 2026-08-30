@@ -1555,6 +1555,18 @@ async function main() {
       !/type:\s*"scene",\s*sceneId:\s*hotspot\.target/.test(tourRuntime),
       "The release runtime lets Pannellum race RainDigit for hotspot navigation.",
     );
+    const transitionBeginIndex = tourRuntime.indexOf(
+      "window.__rainDigitTourTransition?.beginScene?.(sceneId);",
+    );
+    const boundedPrepareIndex = tourRuntime.indexOf(
+      "await boundedMediaRuntime.prepareScene(sceneId)",
+    );
+    assert(
+      transitionBeginIndex >= 0 &&
+        boundedPrepareIndex >= 0 &&
+        transitionBeginIndex < boundedPrepareIndex,
+      "Keyboard or programmatic navigation can await bounded media before arming the opaque transition guard.",
+    );
     assert(
       tourRuntime.includes("window.__tourViewer = viewer"),
       "The release runtime does not expose the live viewer to the host readiness contract.",

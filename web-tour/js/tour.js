@@ -202,6 +202,12 @@ async function loadSceneSafely(sceneId, pitch = "same", yaw = "same", hfov = "sa
   lastSceneNavigationAt = now;
   const requestId = ++navigationSequence;
   const promise = (async () => {
+    // Own the transition before any asynchronous media preparation. Pointer
+    // input normally prearms the guard, but keyboard activation, assistive
+    // technology and programmatic clicks do not necessarily dispatch a
+    // pointerdown first. They must never expose the source canvas while the
+    // destination base is being prepared or retried.
+    window.__rainDigitTourTransition?.beginScene?.(sceneId);
     if (boundedMediaRuntime?.isBoundedScene(sceneId)) {
       const canvas = await boundedMediaRuntime.prepareScene(sceneId);
       if (requestId !== navigationSequence) return false;
