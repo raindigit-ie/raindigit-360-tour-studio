@@ -17,7 +17,11 @@ import { join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
 import { chromium, webkit } from "@playwright/test";
-import { releaseIdentity, studioVersion } from "./lib/release-contract.mjs";
+import {
+  releaseContract,
+  releaseIdentity,
+  studioVersion,
+} from "./lib/release-contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -50,8 +54,19 @@ async function runMagick(arguments_) {
 }
 
 async function imageDimensions(path) {
-  const { stdout } = await runMagick(["identify", "-format", "%w %h", path]);
-  return stdout.trim().split(/\s+/).map(Number);
+  for (const [binary, arguments_] of [
+    ["magick", ["identify", "-format", "%w %h", path]],
+    ["identify", ["-format", "%w %h", path]],
+  ]) {
+    try {
+      const { stdout } = await execFileAsync(binary, arguments_);
+      return stdout.trim().split(/\s+/).map(Number);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+  }
+  throw new Error("ImageMagick identify is required.");
 }
 
 async function walk(directory) {
@@ -164,7 +179,7 @@ async function runBrowserQa(packageRoot, pointer) {
     performancePage.on("response", (response) => {
       if (
         firstTileResponseAt === null &&
-        /\/assets\/mr\/.+\.webp(?:\?|$)/.test(response.url()) &&
+        /\/assets\/bm\/.+\/base\.webp(?:\?|$)/.test(response.url()) &&
         response.ok()
       )
         firstTileResponseAt = Date.now();
@@ -204,7 +219,7 @@ async function runBrowserQa(packageRoot, pointer) {
     }
     assert(
       firstTileResponseAt !== null,
-      "No first-scene WebP tile completed on the performance profile.",
+      "No first-scene bounded base completed on the performance profile.",
     );
     await performancePage.evaluate(
       () =>
@@ -300,7 +315,7 @@ async function runBrowserQa(packageRoot, pointer) {
       let delayedDetailResponses = 0;
       let expectedDocumentCancellationUntil = 0;
       await page.route(
-        /\/assets\/mr\/.+\/[2-9]\/.*\.(?:webp|jpe?g)(?:\?.*)?$/,
+        /\/assets\/bm\/.+\/(?:mobile-detail|desktop-detail)\.webp(?:\?.*)?$/,
         async (route) => {
           if (target.name === "chromium-desktop") {
             await new Promise((resolve) => setTimeout(resolve, 1_200));
@@ -310,7 +325,7 @@ async function runBrowserQa(packageRoot, pointer) {
         },
       );
       await page.route(
-        /\/assets\/mr\/.+\/1\/.+\.(?:webp|jpe?g)(?:\?.*)?$/,
+        /\/assets\/bm\/.+\/base\.webp(?:\?.*)?$/,
         async (route) => {
           if (
             target.name !== "webkit-mobile" ||
@@ -367,14 +382,12 @@ async function runBrowserQa(packageRoot, pointer) {
           failure.toLowerCase() === "cancelled"
         )
           return;
-        networkErrors.push(
-          `${request.url()}: ${failure}`,
-        );
+        networkErrors.push(`${request.url()}: ${failure}`);
       });
       page.on("response", (response) => {
         if (response.status() >= 400)
           networkErrors.push(`${response.status()} ${response.url()}`);
-        if (/\/assets\/mr\/.+\.webp(?:\?|$)/.test(response.url()))
+        if (/\/assets\/bm\/.+\/.+\.webp(?:\?|$)/.test(response.url()))
           tileRequests.push(response.url());
       });
       // Do not let navigation-level network idleness hide whether the runtime
@@ -443,16 +456,17 @@ async function runBrowserQa(packageRoot, pointer) {
         (entry) => entry.phase === "complete" && entry.initial === true,
       );
       assert(
-        initialComplete?.baseRequired === 6 &&
-          initialComplete.baseLoaded === 6 &&
+        initialComplete?.baseRequired === 1 &&
+          initialComplete.baseLoaded === 1 &&
           initialComplete.baseFailed === 0 &&
-          initialComplete.basePending === 0,
-        `${target.name} released before the complete target base cube was decoded: ${JSON.stringify(initialComplete)}.`,
+          initialComplete.basePending === 0 &&
+          initialComplete.boundedBaseReady === true,
+        `${target.name} released before the bounded base was decoded: ${JSON.stringify(initialComplete)}.`,
       );
       if (target.name === "chromium-desktop")
         assert(
           delayedDetailResponses === 0,
-          "The first reveal incorrectly waited for delayed detail tiles.",
+          "The first reveal incorrectly waited for delayed bounded detail media.",
         );
       if (target.nativeMobile)
         assert(
@@ -751,11 +765,11 @@ async function runBrowserQa(packageRoot, pointer) {
             const bounds = loader?.getBoundingClientRect();
             return Boolean(
               loader?.classList.contains("is-active") &&
-                style?.visibility !== "hidden" &&
-                Number(style?.opacity) > 0.98 &&
-                bounds &&
-                bounds.width >= innerWidth * 0.98 &&
-                bounds.height >= innerHeight * 0.98,
+              style?.visibility !== "hidden" &&
+              Number(style?.opacity) > 0.98 &&
+              bounds &&
+              bounds.width >= innerWidth * 0.98 &&
+              bounds.height >= innerHeight * 0.98,
             );
           },
           null,
@@ -777,15 +791,16 @@ async function runBrowserQa(packageRoot, pointer) {
           markerPresent: new URLSearchParams(location.search).has(
             "webgl-recovery",
           ),
-          navigatorControls: document.querySelectorAll("#navigatorToggle")
-            .length,
+          navigatorControls:
+            document.querySelectorAll("#navigatorToggle").length,
           resetControls: document.querySelectorAll("#resetView").length,
           captureControls: document.querySelectorAll("#captureView").length,
           fullscreenControls: document.querySelectorAll("#fullscreen").length,
         }));
         assert(
           contextRecovered.scene === contextRecoveryView.scene &&
-            Math.abs(contextRecovered.pitch - contextRecoveryView.pitch) <= 0.6 &&
+            Math.abs(contextRecovered.pitch - contextRecoveryView.pitch) <=
+              0.6 &&
             yawDistance(contextRecovered.yaw, contextRecoveryView.yaw) <= 0.6 &&
             Math.abs(contextRecovered.hfov - contextRecoveryView.hfov) <= 0.6,
           `webkit-mobile lost the scene/view during document-level WebGL recovery: ${JSON.stringify({ before: contextRecoveryView, after: contextRecovered })}.`,
@@ -809,7 +824,7 @@ async function runBrowserQa(packageRoot, pointer) {
       );
       assert(
         tileRequests.length > 0,
-        `${target.name} did not request multires WebP tiles.`,
+        `${target.name} did not request bounded WebP media.`,
       );
       assert(
         consoleErrors.length === 0,
@@ -1045,9 +1060,9 @@ async function main() {
       "Cold build did not populate both base-scene cache entries.",
     );
     assert(
-      coldBuild.cache.multires.hits === 0 &&
-        coldBuild.cache.multires.misses === 2,
-      "Cold build did not populate both multires cache entries.",
+      coldBuild.cache.boundedMedia.hits === 0 &&
+        coldBuild.cache.boundedMedia.misses === 2,
+      "Cold build did not populate both bounded-media cache entries.",
     );
     const pointer = JSON.parse(
       await readFile(
@@ -1092,67 +1107,76 @@ async function main() {
     );
     assert(
       config.scenes.every(
-        (scene) => scene.type === "multires" && !scene.panorama,
+        (scene) => scene.type === "bounded-media" && !scene.panorama,
       ),
-      "Scenes were not converted to multires.",
+      "Scenes were not converted to bounded media.",
     );
     assert(
       config.scenes.every(
         (scene) =>
-          scene.multiRes.tileResolution >= 512 &&
-          scene.multiRes.tileResolution <= 2048 &&
-          scene.multiRes.baseResolution === 512 &&
-          scene.multiRes.mediaProfile === "hybrid-512-2048-v1" &&
-          scene.multiRes.extension === "webp" &&
-          scene.multiRes.fallbackExtension === "jpg" &&
-          scene.multiRes.equirectangularThumbnail.startsWith(
-            "data:image/webp;base64,",
-          ),
+          scene.boundedMedia.deliveryCapability === "bounded-media-v1" &&
+          scene.boundedMedia.mediaProfile ===
+            "bounded-equirect-base-mobile4096-desktop8192-fallback-v1" &&
+          scene.boundedMedia.objectCount === 4 &&
+          scene.boundedMedia.objects.length === 4 &&
+          scene.boundedMedia.preview.startsWith("data:image/webp;base64,") &&
+          scene.boundedMedia.objects.map((object) => object.role).join(",") ===
+            "base,mobile-detail,desktop-detail,fallback",
       ),
-      "Multires contract is incomplete.",
+      "Bounded-media contract is incomplete.",
     );
 
     const files = await walk(releaseRoot);
-    const webpTiles = files.filter(
-      (path) =>
-        path.endsWith(".webp") &&
-        !path.includes("thumbnails") &&
-        !path.includes(`${join("assets", "seo")}${sep}`),
+    const boundedMediaFiles = files.filter((path) =>
+      path.includes(`${join("assets", "bm")}${sep}`),
     );
-    const fallbacks = files.filter((path) =>
-      /\/fallback\/[fbudlr]\.jpg$/.test(path),
+    const webpMedia = boundedMediaFiles.filter((path) =>
+      path.endsWith(".webp"),
     );
-    assert(webpTiles.length >= 12, "Too few multires WebP tiles were produced.");
+    const fallbacks = boundedMediaFiles.filter((path) =>
+      path.endsWith("fallback.jpg"),
+    );
     assert(
-      fallbacks.length === 12,
-      `Expected 12 JPEG fallback faces, found ${fallbacks.length}.`,
+      webpMedia.length === 6,
+      `Expected 6 bounded WebP objects, found ${webpMedia.length}.`,
+    );
+    assert(
+      fallbacks.length === 2,
+      `Expected 2 bounded JPEG fallbacks, found ${fallbacks.length}.`,
     );
     assert(
       !files.some((path) => /\/assets\/p\//.test(path)),
       "Full equirectangular public files were retained.",
     );
-    for (const tile of webpTiles) {
-      const [width, height] = await imageDimensions(tile);
-      assert(width <= 2048 && height <= 2048, `${tile} exceeds 2048 px.`);
+    for (const media of boundedMediaFiles) {
+      const [width, height] = await imageDimensions(media);
+      assert(
+        width <= 8192 && height <= 4096,
+        `${media} exceeds the bounded 8192x4096 ceiling.`,
+      );
     }
     const manifest = JSON.parse(
       await readFile(join(releaseRoot, "release-manifest.json"), "utf8"),
     );
     assert(
-      manifest.version.startsWith("multires-") &&
+      manifest.version.startsWith("bounded-") &&
         manifest.immutablePrefix.includes(manifest.version) &&
         manifest.packageVersion === pointer.packageVersion,
       "Versioned immutable manifest is invalid.",
     );
     assert(
-      manifest.schema === "raindigit-tour-multires-release/v2" &&
-        manifest.mediaProfile === "hybrid-512-2048-v1" &&
-        manifest.baseSize === 512 &&
-        manifest.tileSize === 2048 &&
-        manifest.webpEffort === 2 &&
+      manifest.schema === "raindigit-tour-bounded-release/v1" &&
+        manifest.deliveryCapability === "bounded-media-v1" &&
+        manifest.mediaProfile ===
+          "bounded-equirect-base-mobile4096-desktop8192-fallback-v1" &&
+        manifest.mediaRecipeVersion === "progressive-equirectangular-v1" &&
+        manifest.compilerRecipe ===
+          "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1" &&
+        manifest.mediaTopology.actualObjectsPerScene === 4 &&
+        manifest.mediaTopology.hardMaxObjectsPerScene === 5 &&
         manifest.studioVersion === studioVersion &&
-        manifest.formatVersion === "2.0.0" &&
-        manifest.runtimeVersion === "2.0.8" &&
+        manifest.formatVersion === releaseContract.formatVersion &&
+        manifest.runtimeVersion === releaseContract.runtimeVersion &&
         manifest.tourVersion === manifest.studioVersion,
       "Capability release identity is invalid.",
     );
@@ -1213,7 +1237,7 @@ async function main() {
     );
     assert(
       manifest.performance.criticalFiles.length >= 8 &&
-        manifest.performance.fallbackFiles.length === 6,
+        manifest.performance.fallbackFiles.length === 1,
       "First-scene budget inventory is incomplete.",
     );
     assert(
@@ -1226,7 +1250,7 @@ async function main() {
       manifest.performance.fallbackFiles.every((path) =>
         files.includes(join(releaseRoot, path)),
       ),
-      "A JPEG fallback face is absent from the release.",
+      "The first-scene bounded fallback is absent from the release.",
     );
     const seoDraft = JSON.parse(
       await readFile(join(releaseRoot, manifest.performance.seoDraft), "utf8"),
@@ -1383,9 +1407,9 @@ async function main() {
       "Warm build reprocessed unchanged base panoramas.",
     );
     assert(
-      warmBuild.cache.multires.hits === 2 &&
-        warmBuild.cache.multires.misses === 0,
-      "Warm build reprocessed unchanged multires tiles.",
+      warmBuild.cache.boundedMedia.hits === 2 &&
+        warmBuild.cache.boundedMedia.misses === 0,
+      "Warm build reprocessed unchanged bounded media.",
     );
     const repeatedPointer = JSON.parse(
       await readFile(
@@ -1436,9 +1460,9 @@ async function main() {
       "Metadata-only edit reprocessed base panoramas.",
     );
     assert(
-      metadataBuild.cache.multires.hits === 2 &&
-        metadataBuild.cache.multires.misses === 0,
-      "Metadata-only edit reprocessed multires tiles.",
+      metadataBuild.cache.boundedMedia.hits === 2 &&
+        metadataBuild.cache.boundedMedia.misses === 0,
+      "Metadata-only edit reprocessed bounded media.",
     );
     assert(
       metadataBuild.version !== pointer.version,
@@ -1490,26 +1514,29 @@ async function main() {
       "One-scene colour edit did not invalidate exactly one base derivative.",
     );
     assert(
-      oneSceneBuild.cache.multires.hits === 1 &&
-        oneSceneBuild.cache.multires.misses === 1,
-      "One-scene colour edit did not invalidate exactly one multires tile set.",
+      oneSceneBuild.cache.boundedMedia.hits === 1 &&
+        oneSceneBuild.cache.boundedMedia.misses === 1,
+      "One-scene colour edit did not invalidate exactly one bounded-media set.",
     );
     const pannellumRuntime = await readFile(
       join(releaseRoot, "js", "pannellum.js"),
       "utf8",
     );
     assert(
-      pannellumRuntime.includes("fallbackExtension") &&
-        pannellumRuntime.includes("equirectangularThumbnail"),
-      "Pinned preview support or JPEG fallback extension support is missing from the release runtime.",
+      pannellumRuntime.includes("equirectangularThumbnail") &&
+        pannellumRuntime.includes("texParameteri"),
+      "Pinned preview or dynamic texture-parameter support is missing from the release runtime.",
     );
     const tourRuntime = await readFile(
       join(releaseRoot, "js", "tour.js"),
       "utf8",
     );
     assert(
-      tourRuntime.includes("multiRes: scene.multiRes"),
-      "The release runtime does not pass multires scene data to Pannellum.",
+      tourRuntime.includes("boundedMediaRuntime") &&
+        tourRuntime.includes("prepareScene") &&
+        tourRuntime.includes("configureScene") &&
+        tourRuntime.includes("setUpdate(false)"),
+      "The release runtime does not configure and suspend bounded dynamic media.",
     );
     assert(
       tourRuntime.includes("sceneFadeDuration: 0"),
@@ -1552,7 +1579,9 @@ async function main() {
     assert(
       releaseEntrypoint.includes("data-tour-monitoring-config") &&
         releaseEntrypoint.includes('"enabled":true') &&
-        releaseEntrypoint.includes('"productionOrigins":["https://cdn.raindigit.ie"]') &&
+        releaseEntrypoint.includes(
+          '"productionOrigins":["https://cdn.raindigit.ie"]',
+        ) &&
         releaseEntrypoint.includes("ingest.de.sentry.io/4511985294901328"),
       "A production package can be built without canonical exact-origin monitoring.",
     );
@@ -1776,7 +1805,7 @@ async function main() {
     );
     await runBrowserQa(output, pointer);
     console.log(
-      `Future multires release passed: ${config.scenes.length} scenes, ${webpTiles.length} WebP tiles, 12 JPEG fallback faces.`,
+      `Future bounded release passed: ${config.scenes.length} scenes, ${webpMedia.length} WebP objects, ${fallbacks.length} JPEG fallbacks.`,
     );
   } finally {
     await rm(root, { recursive: true, force: true });

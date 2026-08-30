@@ -77,7 +77,9 @@ function parseArguments(argv) {
     );
   if (
     options.rollbackVersion &&
-    !/^(?:legacy|bounded|multires)-[a-f0-9]{8,64}$/.test(options.rollbackVersion)
+    !/^(?:legacy|bounded|multires)-[a-f0-9]{8,64}$/.test(
+      options.rollbackVersion,
+    )
   )
     throw new Error(
       "--rollback-version must be a legacy-*, multires-* or bounded-* content version.",
@@ -239,9 +241,11 @@ async function main() {
   assert(
     sourceManifest.schema === "raindigit-tour-bounded-release/v1" &&
       sourceManifest.deliveryCapability === "bounded-media-v1" &&
-      sourceManifest.mediaProfile === "bounded-equirect-base-mobile4096-desktop8192-fallback-v1" &&
+      sourceManifest.mediaProfile ===
+        "bounded-equirect-base-mobile4096-desktop8192-fallback-v1" &&
       sourceManifest.mediaRecipeVersion === "progressive-equirectangular-v1" &&
-      sourceManifest.compilerRecipe === "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1",
+      sourceManifest.compilerRecipe ===
+        "sharp-bounded-equirect-base2048-mobile4096-desktop8192-fallback1024-webp82-jpeg86-v1",
     "Source package is not a supported bounded-media release.",
   );
   const identity = releaseIdentity({
@@ -258,10 +262,7 @@ async function main() {
     await cp(sourceRelease, stagedRelease, { recursive: true });
     const mediaBefore = new Map(
       sourceManifest.files
-        .filter(
-          (file) =>
-            file.path.startsWith("assets/bm/"),
-        )
+        .filter((file) => file.path.startsWith("assets/bm/"))
         .map((file) => [file.path, file.sha256]),
     );
 
@@ -279,12 +280,20 @@ async function main() {
     assert(
       currentIndex.includes("data-runtime-loader") &&
         currentIndex.includes("js/tour-chrome.js") &&
+        currentIndex.includes("data-tour-monitoring-config") &&
+        currentIndex.includes("js/tour-monitoring.js") &&
         firstFrameSource.includes("visibility:hidden!important"),
-      "Runtime revision requires an existing deferred production shell with an opaque first-frame guard.",
+      "Runtime revision requires an existing monitored deferred production shell with an opaque first-frame guard.",
     );
     assert(
       await stat(join(stagedRelease, "js", "tour-chrome.js")).catch(() => null),
       "Runtime revision source is missing the deferred production chrome.",
+    );
+    assert(
+      await stat(join(stagedRelease, "js", "tour-monitoring.js")).catch(
+        () => null,
+      ),
+      "Runtime revision source is missing canonical production monitoring.",
     );
 
     const runtimeSource = await readFile(
@@ -335,10 +344,7 @@ async function main() {
     const immutablePrefix = `tours/${sourceManifest.slug}/${version}/`;
     const mediaAfter = new Map(
       files
-        .filter(
-          (file) =>
-            file.path.startsWith("assets/bm/"),
-        )
+        .filter((file) => file.path.startsWith("assets/bm/"))
         .map((file) => [file.path, file.sha256]),
     );
     assert(
@@ -351,7 +357,9 @@ async function main() {
         `Runtime revision changed media: ${path}`,
       );
 
-    const sourceFiles = new Map(sourceManifest.files.map((file) => [file.path, file]));
+    const sourceFiles = new Map(
+      sourceManifest.files.map((file) => [file.path, file]),
+    );
     const revisedFiles = new Map(files.map((file) => [file.path, file]));
     const criticalFiles = [
       ...new Set([
@@ -400,7 +408,11 @@ async function main() {
             },
           }
         : {}),
-      performance: { ...sourceManifest.performance, criticalFiles, criticalBytes },
+      performance: {
+        ...sourceManifest.performance,
+        criticalFiles,
+        criticalBytes,
+      },
     };
     await assertBoundedMediaInventory(stagedRelease, config, manifest);
     delete manifest.mediaDependency;
