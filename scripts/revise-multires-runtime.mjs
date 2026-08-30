@@ -23,13 +23,6 @@ import {
   writeReleaseChangelog,
 } from "./lib/release-contract.mjs";
 import { versionTourRuntime } from "./lib/version-tour-runtime.mjs";
-import {
-  configureTourMonitoringEntrypoint,
-  productionTourMonitoringEnvironment,
-  sentryBrowserBundle,
-  tourMonitoringRuntimeBundle,
-  tourMonitoringConfig,
-} from "./lib/tour-monitoring-contract.mjs";
 import { assertBoundedMediaInventory } from "./lib/bounded-media-contract.mjs";
 
 function parseArguments(argv) {
@@ -78,6 +71,10 @@ function parseArguments(argv) {
   });
   if (String(options.changeSummary || "").trim().length < 8)
     throw new Error("--change-summary must describe this tour version.");
+  if (options.colorMatrix)
+    throw new Error(
+      "Runtime-only color-matrix changes are disabled; rebuild from the canonical Studio workspace.",
+    );
   if (
     options.rollbackVersion &&
     !/^(?:legacy|bounded|multires)-[a-f0-9]{8,64}$/.test(options.rollbackVersion)
@@ -279,46 +276,16 @@ async function main() {
       firstFrameSource,
       "The source multires release has no inline first frame.",
     );
-    const firstFrame = firstFrameSource.includes("style=")
-      ? firstFrameSource
-      : firstFrameSource.replace(
-          /\s*\/>$/,
-          ' style="visibility:hidden!important;opacity:0!important" />',
-        );
-    const templateIndex = await readFile(
-      join(options.runtimeTemplate, "index.html"),
-      "utf8",
-    );
-    const inlineFirstFrameCss =
-      "<style data-runtime-critical>html,body,.tour-shell,.viewer{width:100%;height:100%;margin:0}html,body{overflow:hidden;background:#070807;color:#f8f1df}.tour-shell{position:relative;min-height:100svh;background:#070807}.viewer{position:absolute;inset:0}.tour-first-frame{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;pointer-events:none;opacity:1}.is-tour-ready .tour-first-frame{opacity:0}.is-tour-transition-boot .tour-first-frame,.tour-shell.is-transition-guarded>.tour-first-frame{z-index:1;visibility:hidden!important;opacity:0!important;transition:none}.tour-scene-transition--static{position:absolute;z-index:34;inset:0;display:block;visibility:visible;opacity:1;overflow:hidden;pointer-events:none;background:#070807;color:#f8f1df}.tour-scene-transition--static .tour-scene-transition__stage{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;background:#070807}.tour-scene-transition--static .tour-scene-transition__tiles{position:absolute;inset:0;display:grid;width:100%;height:100%;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));background:#070807}.tour-scene-transition--static .tour-scene-transition__tile{display:block;box-sizing:border-box;min-width:0;min-height:0;border:1px solid rgba(229,185,96,.18);background:linear-gradient(135deg,#080907,#17140d 52%,#090a08)}.tour-scene-transition--static .tour-scene-transition__mobile-status{position:absolute;z-index:1;left:50%;top:50%;display:flex;align-items:center;gap:7px;transform:translate(-50%,-50%);padding:7px 10px;border:1px solid rgba(229,185,96,.52);border-radius:999px;background:#090a08;color:#f8f1df;font:600 10px/1 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}.tour-scene-transition--static .tour-scene-transition__mobile-mark{width:7px;height:7px;border-radius:50%;background:#e5b960;box-shadow:0 0 12px rgba(229,185,96,.72)}html:not(.is-tour-ready) .tour-shell{visibility:visible!important}</style>";
-    const indexWithCriticalCss = templateIndex.includes(
-      '<link rel="stylesheet"',
-    )
-      ? templateIndex.replace(
-          /(<link rel="stylesheet")/,
-          `${inlineFirstFrameCss}$1`,
-        )
-      : templateIndex.includes("</head>")
-        ? templateIndex.replace("</head>", `${inlineFirstFrameCss}</head>`)
-        : templateIndex;
-    const revisedIndex = indexWithCriticalCss.replace(
-      '<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>',
-      `<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>${options.colorMatrix ? `<svg id="legacy-color-matrix-svg" width="0" height="0" aria-hidden="true"><filter id="legacy-color-matrix" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="${options.colorMatrix}" /></filter></svg>` : ""}${firstFrame}\n      ${staticTourLoaderMarkup()}`,
+    assert(
+      currentIndex.includes("data-runtime-loader") &&
+        currentIndex.includes("js/tour-chrome.js") &&
+        firstFrameSource.includes("visibility:hidden!important"),
+      "Runtime revision requires an existing deferred production shell with an opaque first-frame guard.",
     );
     assert(
-      revisedIndex !== templateIndex,
-      "The production-shell first frame could not be installed.",
+      await stat(join(stagedRelease, "js", "tour-chrome.js")).catch(() => null),
+      "Runtime revision source is missing the deferred production chrome.",
     );
-    await writeFile(join(stagedRelease, "index.html"), revisedIndex, "utf8");
-    await configureTourMonitoringEntrypoint(
-      join(stagedRelease, "index.html"),
-      tourMonitoringConfig({
-        identity,
-        slug: sourceManifest.slug,
-        environment: productionTourMonitoringEnvironment(),
-      }),
-    );
-    await rm(join(stagedRelease, "js", "tour-chrome.js"), { force: true });
 
     const runtimeSource = await readFile(
       join(options.runtimeTemplate, "js", "tour.js"),
@@ -330,7 +297,7 @@ async function main() {
       "utf8",
     );
     await cp(
-      join(options.runtimeTemplate, "js", "tour-bootstrap.js"),
+      join(options.runtimeTemplate, "js", "tour-bootstrap-release.js"),
       join(stagedRelease, "js", "tour-bootstrap.js"),
     );
     await cp(
@@ -340,36 +307,6 @@ async function main() {
     await cp(
       join(options.runtimeTemplate, "js", "tour-transition.js"),
       join(stagedRelease, "js", "tour-transition.js"),
-    );
-    await cp(
-      join(options.runtimeTemplate, tourMonitoringRuntimeBundle),
-      join(stagedRelease, "js", "tour-monitoring.js"),
-    );
-    await mkdir(join(stagedRelease, "js", "generated"), { recursive: true });
-    await cp(
-      join(options.runtimeTemplate, sentryBrowserBundle),
-      join(stagedRelease, sentryBrowserBundle),
-    );
-    await cp(
-      join(options.runtimeTemplate, "assets", "raindigit-mark.svg"),
-      join(stagedRelease, "assets", "raindigit-mark.svg"),
-    );
-    const templateCss = await readFile(
-      join(options.runtimeTemplate, "css", "tour.css"),
-      "utf8",
-    );
-    const firstFrameCss = templateCss.includes(".tour-first-frame")
-      ? ""
-      : "\n.tour-first-frame { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:cover; pointer-events:none; opacity:1; transition:opacity 180ms ease; }\n.is-tour-ready .tour-first-frame { opacity:0; }\n@media (prefers-reduced-motion: reduce) { .tour-first-frame { transition:none; } }\n";
-    const calibrationCss = options.colorMatrix
-      ? "\n.tour-first-frame { filter:url(#legacy-color-matrix); }\n"
-      : "";
-    const readinessCss =
-      "\nhtml:not(.is-tour-ready) .tour-shell { visibility:visible !important; }\n";
-    await writeFile(
-      join(stagedRelease, "css", "tour.css"),
-      `${templateCss.trimEnd()}${firstFrameCss}${calibrationCss}${readinessCss}\n`,
-      "utf8",
     );
 
     const configPath = join(stagedRelease, "js", "tour-config.js");
