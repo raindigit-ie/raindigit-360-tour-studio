@@ -11,18 +11,15 @@
     "js/tour.js",
   ];
 
-  function preloadScript(source) {
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "script";
-    link.href = source;
-    document.head.appendChild(link);
-  }
-
   function loadScript(source) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = source;
+      // Script-inserted external scripts default to async. Setting async to
+      // false before insertion lets the browser fetch the complete set in
+      // parallel while preserving the dependency order above, without a
+      // second speculative preload request that can stall mobile WebKit.
+      script.async = false;
       script.onload = resolve;
       script.onerror = () => reject(new Error(`Could not load ${source}`));
       document.body.appendChild(script);
@@ -60,8 +57,7 @@
   }
 
   (async () => {
-    runtimeSources.forEach(preloadScript);
-    for (const source of runtimeSources) await loadScript(source);
+    await Promise.all(runtimeSources.map(loadScript));
     await window.__rainDigitTourRuntimeReady;
   })().catch(showRuntimeRecovery);
 })();

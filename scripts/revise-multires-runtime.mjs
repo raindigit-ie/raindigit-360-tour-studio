@@ -312,6 +312,27 @@ async function main() {
         firstFrameSource.includes("visibility:hidden!important"),
       "Runtime revision requires an existing monitored deferred production shell with an opaque first-frame guard.",
     );
+    const neutralFirstFrameSource = firstFrameSource
+      .replace(/\s+src="[^"]+"/, "")
+      .replace(/\s+fetchpriority="[^"]+"/, "")
+      .replace(
+        'class="tour-first-frame"',
+        'class="tour-first-frame" data-first-paint="neutral"',
+      );
+    assert(
+      neutralFirstFrameSource.includes('data-first-paint="neutral"') &&
+        !/\s+src=/.test(neutralFirstFrameSource),
+      "Runtime revision could not make the portable first frame scene-neutral.",
+    );
+    const neutralIndex = currentIndex.replace(
+      firstFrameSource,
+      neutralFirstFrameSource,
+    );
+    assert(
+      neutralIndex !== currentIndex,
+      "Runtime revision did not update the portable first frame.",
+    );
+    await writeFile(join(stagedRelease, "index.html"), neutralIndex, "utf8");
     assert(
       await stat(join(stagedRelease, "js", "tour-chrome.js")).catch(() => null),
       "Runtime revision source is missing the deferred production chrome.",

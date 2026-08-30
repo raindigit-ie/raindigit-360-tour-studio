@@ -1,7 +1,7 @@
 {
   "schema": "raindigit-tour-release-contract/v1",
   "formatVersion": "3.0.0",
-  "runtimeVersion": "3.0.4",
+  "runtimeVersion": "3.0.5",
   "verificationProfile": "raindigit-portable-tour-v3",
   "capabilities": [
     "standalone",
@@ -26,7 +26,7 @@
     "production-error-monitoring-v1",
     "persistent-controls-during-transition",
     "content-versioned-runtime",
-    "parallel-runtime-preload",
+    "ordered-parallel-runtime-scripts",
     "deferred-navigator-media",
     "parent-readiness-handshake",
     "self-contained-media",

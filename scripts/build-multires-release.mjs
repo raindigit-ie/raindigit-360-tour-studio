@@ -1196,16 +1196,9 @@ async function main() {
         stagedRoot,
       ),
     );
-    const firstFrameData = project.scenes.find(
-      (scene) => scene.id === project.firstScene,
-    )?.boundedMedia?.preview;
-    assert(
-      firstFrameData?.startsWith("data:image/webp;base64,"),
-      "The inline first-frame preview is missing.",
-    );
     const entrypointWithPreview = entrypointSource.replace(
       '<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>',
-      `<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>\n      <img class="tour-first-frame" src="${firstFrameData}" alt="" aria-hidden="true" width="512" height="256" fetchpriority="high" style="visibility:hidden!important;opacity:0!important" />\n      ${staticTourLoaderMarkup()}`,
+      `<div id="panorama" class="viewer" aria-label="360 virtual tour"></div>\n      <img class="tour-first-frame" data-first-paint="neutral" alt="" aria-hidden="true" width="512" height="256" style="visibility:hidden!important;opacity:0!important" />\n      ${staticTourLoaderMarkup()}`,
     );
     assert(
       entrypointWithPreview !== entrypointSource,

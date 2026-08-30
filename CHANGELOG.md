@@ -2,6 +2,28 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.3.5] — 2026-08-30
+
+### Fixed
+
+- Replaces speculative runtime preloads with one ordered set of parallel
+  dynamically inserted scripts. This prevents mobile WebKit from leaving all
+  five runtime requests pending while preserving deterministic execution order.
+- Makes every portable entry document scene-neutral before runtime validation:
+  the static first-frame element has no scene-specific `src`, and the opaque
+  loader remains the only visible first paint until the requested scene is known.
+
+### Verification
+
+- Extends the package gate to reject a scene-specific static first frame and
+  any duplicate preload path in the public bootstrap.
+
+### Migration
+
+- Advances Studio/tour capability to `0.3.5` and runtime to `3.0.5`; all active
+  DEV tours require new immutable packages. The accepted 0.3.4 set remains an
+  immutable rollback and must not be relabelled.
+
 ## [0.3.4] — 2026-08-30
 
 ### Fixed

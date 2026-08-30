@@ -1730,6 +1730,22 @@ async function main() {
     );
     assert(
       releaseEntrypoint.includes(
+        'class="tour-first-frame" data-first-paint="neutral"',
+      ) &&
+        !/<img class="tour-first-frame"[^>]*\ssrc=/.test(releaseEntrypoint),
+      "The portable entry document contains a scene-specific first frame before the URL target is validated.",
+    );
+    const releaseBootstrap = await readFile(
+      join(releaseRoot, "js", "tour-bootstrap.js"),
+      "utf8",
+    );
+    assert(
+      releaseBootstrap.includes("script.async = false") &&
+        !releaseBootstrap.includes('link.rel = "preload"'),
+      "The public bootstrap must fetch one ordered parallel script set without speculative preload duplicates.",
+    );
+    assert(
+      releaseEntrypoint.includes(
         "grid-template-columns:repeat(6,minmax(0,1fr))",
       ) &&
         releaseEntrypoint.includes("background:#070807") &&
