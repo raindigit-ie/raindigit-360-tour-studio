@@ -248,6 +248,12 @@
       // identity is stable while its pixels and dimensions are replaced.
       viewer.setUpdate?.(true);
       viewer.updateOnce?.();
+      // Pannellum schedules dynamic texture uploads on animation frames.
+      // Disabling updates in the same task races that upload and can leave a
+      // cleared / black texture after the canvas dimensions change.
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
       viewer.setUpdate?.(false);
       if ([view.pitch, view.yaw, view.hfov].every(Number.isFinite)) {
         viewer.lookAt?.(view.pitch, view.yaw, view.hfov, 0);
