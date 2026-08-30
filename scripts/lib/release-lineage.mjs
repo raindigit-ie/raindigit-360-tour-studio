@@ -2,6 +2,21 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+export function assertImmutablePackageIdentity({ release, label = release?.slug || "Tour" }) {
+  const match = /^(multires|bounded)-([0-9a-f]{12})$/.exec(
+    String(release?.packageVersion || ""),
+  );
+  assert(match, `${label}: invalid immutable package identity.`);
+  assert(
+    /^[0-9a-f]{64}$/.test(String(release?.contentDigest || "")),
+    `${label}: invalid content digest.`,
+  );
+  assert(
+    match[2] === release.contentDigest.slice(0, 12),
+    `${label}: package identity is not derived from its digest.`,
+  );
+}
+
 export function assertReleaseLineage({
   manifest,
   changelog,

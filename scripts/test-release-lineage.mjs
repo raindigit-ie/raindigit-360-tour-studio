@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  assertImmutablePackageIdentity,
   assertPackageRollbackLineage,
   assertReleaseLineage
 } from "./lib/release-lineage.mjs";
@@ -14,6 +15,37 @@ function expectFailure(input, message) {
   }
   if (!failed) throw new Error(message);
 }
+
+function expectCallFailure(callback, message) {
+  let failed = false;
+  try {
+    callback();
+  } catch {
+    failed = true;
+  }
+  if (!failed) throw new Error(message);
+}
+
+for (const family of ["multires", "bounded"]) {
+  assertImmutablePackageIdentity({
+    release: {
+      slug: `${family}-fixture`,
+      packageVersion: `${family}-aaaaaaaaaaaa`,
+      contentDigest: "a".repeat(64)
+    }
+  });
+}
+expectCallFailure(
+  () =>
+    assertImmutablePackageIdentity({
+      release: {
+        slug: "mismatched-fixture",
+        packageVersion: "bounded-bbbbbbbbbbbb",
+        contentDigest: "a".repeat(64)
+      }
+    }),
+  "Immutable package identity accepted a digest mismatch."
+);
 
 const changelog = {
   schema: "raindigit-tour-changelog-ledger/v1",

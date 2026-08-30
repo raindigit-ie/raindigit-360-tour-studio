@@ -4,7 +4,10 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseTourConfig, tourGraphIdentity } from "./lib/tour-graph-identity.mjs";
-import { assertReleaseLineage } from "./lib/release-lineage.mjs";
+import {
+  assertImmutablePackageIdentity,
+  assertReleaseLineage,
+} from "./lib/release-lineage.mjs";
 import { assertStudioSourceCompatibility } from "./lib/candidate-migration-contract.mjs";
 
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -189,9 +192,7 @@ assert(
 );
 
 for (const release of dev.releases) {
-  assert(/^multires-[0-9a-f]{12}$/.test(release.packageVersion), `${release.slug}: invalid immutable package identity.`);
-  assert(/^[0-9a-f]{64}$/.test(release.contentDigest), `${release.slug}: invalid content digest.`);
-  assert(release.packageVersion === `multires-${release.contentDigest.slice(0, 12)}`, `${release.slug}: package identity is not derived from its digest.`);
+  assertImmutablePackageIdentity({ release, label: release.slug });
   assert(release.tourVersion === release.studioVersion, `${release.slug}: tour and Studio capability versions differ.`);
   assert(release.studioVersion === registry.contract.studioVersion, `${release.slug}: Studio capability is stale.`);
   assert(release.formatVersion === registry.contract.formatVersion, `${release.slug}: format capability is stale.`);
@@ -201,8 +202,7 @@ for (const release of dev.releases) {
 }
 
 for (const release of prod.releases) {
-  assert(/^multires-[0-9a-f]{12}$/.test(release.packageVersion), `${release.slug}: invalid PROD package identity.`);
-  assert(release.packageVersion === `multires-${release.contentDigest.slice(0, 12)}`, `${release.slug}: PROD package identity differs from its digest.`);
+  assertImmutablePackageIdentity({ release, label: `${release.slug} PROD` });
   if (productionStaged) {
     const accepted = dev.releases.find((candidate) => candidate.slug === release.slug);
     assert(
