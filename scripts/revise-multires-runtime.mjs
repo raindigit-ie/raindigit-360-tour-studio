@@ -305,6 +305,10 @@ async function main() {
       join(stagedRelease, "js", "bounded-media-runtime.js"),
     );
     await cp(
+      join(options.runtimeTemplate, "js", "pannellum.js"),
+      join(stagedRelease, "js", "pannellum.js"),
+    );
+    await cp(
       join(options.runtimeTemplate, "js", "tour-transition.js"),
       join(stagedRelease, "js", "tour-transition.js"),
     );

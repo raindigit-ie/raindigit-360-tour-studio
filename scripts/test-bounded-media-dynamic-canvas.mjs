@@ -84,7 +84,12 @@ async function runEngine(name, engine, assets) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(assets.origin + "/bounded-media-dynamic-canvas.html", { waitUntil: "networkidle" });
-  await page.waitForFunction(() => window.__boundedPrototype && window.__boundedPrototype.phase === "detail-rendered", null, { timeout: 10_000 });
+  try {
+    await page.waitForFunction(() => window.__boundedPrototype && ["detail-rendered", "error"].includes(window.__boundedPrototype.phase), null, { timeout: 10_000 });
+  } catch (error) {
+    const diagnostic = await page.evaluate(() => window.__boundedPrototype ? { ...window.__boundedPrototype, viewer: undefined } : null);
+    throw new Error(name + " timed out waiting for the dynamic canvas: " + JSON.stringify({ diagnostic, pageErrors: errors, cause: String(error) }));
+  }
   const state = await page.evaluate(() => {
     const value = { ...window.__boundedPrototype };
     delete value.viewer;
@@ -96,18 +101,24 @@ async function runEngine(name, engine, assets) {
   assert(state.baseRenderedAt < state.detailLoadedAt, name + " loaded detail before proving the base frame: " + JSON.stringify(state));
   assert(state.baseUpdateSuspended && state.detailUpdateSuspended, name + " left continuous dynamic texture uploads enabled: " + JSON.stringify(state));
   assert(state.setUpdateCalled && state.sameCanvas, name + " did not use the same dynamic canvas: " + JSON.stringify(state));
-  assert(state.widthBefore === 1024 && state.widthAfter === 2048, name + " did not upgrade the same canvas from base to detail dimensions: " + JSON.stringify(state));
+  assert(state.widthBefore === 1024 && state.widthAfter === 1536, name + " did not upgrade the same canvas from POT base to NPOT detail dimensions: " + JSON.stringify(state));
   assert(state.scene === "target", name + " changed scene during detail update: " + JSON.stringify(state));
   for (const key of ["pitch", "yaw", "hfov"]) {
     assert(Math.abs(state[key] - state[key + "After"]) < 0.01, name + " changed " + key + " during detail update: " + JSON.stringify(state));
   }
+  const panoramaScreenshot = await page.locator("#panorama").screenshot();
+  const screenshotStats = await sharp(panoramaScreenshot).stats();
+  const visibleChannels = screenshotStats.channels.slice(0, 3);
+  const screenshotMean = visibleChannels.reduce((sum, channel) => sum + channel.mean, 0) / visibleChannels.length;
+  const screenshotStdev = visibleChannels.reduce((sum, channel) => sum + channel.stdev, 0) / visibleChannels.length;
+  assert(screenshotMean > 10 && screenshotStdev > 5, name + " produced an incomplete or black NPOT WebGL texture: " + JSON.stringify({ screenshotMean, screenshotStdev, state }));
   await page.screenshot({ path: resolve(projectRoot, "output", "playwright", "bounded-media-dynamic-" + name + ".png") });
   await browser.close();
-  return { engine: name, phase: state.phase, loadCount: state.loadCount, sameCanvas: state.sameCanvas, canvasUpgrade: [state.widthBefore, state.widthAfter], scene: state.scene, view: { pitch: state.pitchAfter, yaw: state.yawAfter, hfov: state.hfovAfter } };
+  return { engine: name, phase: state.phase, loadCount: state.loadCount, sameCanvas: state.sameCanvas, canvasUpgrade: [state.widthBefore, state.widthAfter], screenshot: { mean: screenshotMean, stdev: screenshotStdev }, scene: state.scene, view: { pitch: state.pitchAfter, yaw: state.yawAfter, hfov: state.hfovAfter } };
 }
 
 const base = await panorama(1024, { r: 22, g: 40, b: 31 }, { r: 117, g: 77, b: 30 });
-const detail = await panorama(2048, { r: 42, g: 72, b: 55 }, { r: 232, g: 171, b: 68 });
+const detail = await panorama(1536, { r: 42, g: 72, b: 55 }, { r: 232, g: 171, b: 68 });
 const pannellum = await readFile(resolve(projectRoot, "web-tour", "js", "pannellum.js"));
 const pannellumCss = await readFile(resolve(projectRoot, "web-tour", "css", "pannellum.css"));
 const server = createServer((request, response) => {

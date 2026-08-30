@@ -28,11 +28,15 @@
     {
       "id": "webkit-async-preview-texture-race",
       "reason": "Ignore stale thumbnail callbacks and rebind the preview texture before asynchronous upload."
+    },
+    {
+      "id": "dynamic-npot-texture-completeness",
+      "reason": "Re-apply WebGL 1 texture parameters after progressive dynamic-canvas dimension changes."
     }
   ],
   "output": {
     "path": "web-tour/js/pannellum.js",
-    "sha256": "4e8c5b5841964f0f5004179b11b88f99c6b1df4c65c0564a87f95fe414696a6d",
-    "bytes": 71023
+    "sha256": "023c71ada7cb4bc871f75cf2128a28f77b5be173921055dceb3200d7369028ee",
+    "bytes": 71357
   }
 }

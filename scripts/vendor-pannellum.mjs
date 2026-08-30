@@ -23,7 +23,7 @@ const license = Object.freeze({
   name: "COPYING",
   sha256: "e20b384f83f8f580d69e32d2419e093d777830689b3ab48cafbe4284b6ebc3c1",
 });
-const expectedOutputSha256 = "4e8c5b5841964f0f5004179b11b88f99c6b1df4c65c0564a87f95fe414696a6d";
+const expectedOutputSha256 = "023c71ada7cb4bc871f75cf2128a28f77b5be173921055dceb3200d7369028ee";
 
 function digest(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -47,6 +47,29 @@ for (const input of inputs) {
 }
 const licenseBody = await download(license.name, license.sha256);
 let source = sources.map((value) => value.toString("utf8")).join("\n");
+const dynamicTextureNeedle = `                if (imageType == 'equirectangular') {
+                    gl.bindTexture(gl.TEXTURE_2D, program.texture);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+                }`;
+const dynamicTextureReplacement = `                if (imageType == 'equirectangular') {
+                    gl.bindTexture(gl.TEXTURE_2D, program.texture);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+
+                    // A dynamic canvas may change dimensions between progressive
+                    // media tiers. Re-apply completeness parameters after every
+                    // upload because WebGL 1 forbids REPEAT on NPOT textures.
+                    if (image.width && (image.width & (image.width - 1)) == 0)
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                    else
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                }`;
+if (!source.includes(dynamicTextureNeedle)) {
+  throw new Error("Pinned Pannellum source no longer matches the dynamic NPOT texture patch.");
+}
+source = source.replace(dynamicTextureNeedle, dynamicTextureReplacement);
 const asynchronousPreviewNeedle = `                previewProgram.texture = gl.createTexture();
                 gl.bindTexture(glBindType, previewProgram.texture);
 
@@ -119,6 +142,10 @@ await writeFile(
       {
         id: "webkit-async-preview-texture-race",
         reason: "Ignore stale thumbnail callbacks and rebind the preview texture before asynchronous upload.",
+      },
+      {
+        id: "dynamic-npot-texture-completeness",
+        reason: "Re-apply WebGL 1 texture parameters after progressive dynamic-canvas dimension changes.",
       },
     ],
     output: {
