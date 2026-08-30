@@ -1909,6 +1909,12 @@ async function main() {
       "Runtime-only fleet revisions must install the stripped canonical Studio stylesheet.",
     );
     assert(
+      revisedRuntime.includes('argument === "--generated-at"') &&
+        revisedRuntime.includes("const generatedAt = options.generatedAt;") &&
+        !revisedRuntime.includes("const generatedAt = new Date().toISOString();"),
+      "Runtime-only fleet revisions must use immutable operator-supplied generation time.",
+    );
+    assert(
       revisedRuntime.includes(
         'canvas.style.filter = "url(#legacy-color-matrix)";',
       ),

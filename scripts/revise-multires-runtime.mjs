@@ -35,6 +35,7 @@ function parseArguments(argv) {
     previousTourVersion: null,
     changeSummary: null,
     rollbackVersion: null,
+    generatedAt: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -53,9 +54,11 @@ function parseArguments(argv) {
       options.changeSummary = String(argv[++index] || "");
     else if (argument === "--rollback-version")
       options.rollbackVersion = String(argv[++index] || "");
+    else if (argument === "--generated-at")
+      options.generatedAt = String(argv[++index] || "");
     else if (argument === "--help") {
       console.log(
-        "Usage: node scripts/revise-multires-runtime.mjs --package package-root --tour-version <Studio version> --change-summary 'Migrated to portable v2' [--previous-tour-version <prior Studio version>] [--rollback-version package-version] [--runtime-template web-tour] [--color-matrix '20 SVG matrix values']",
+        "Usage: node scripts/revise-multires-runtime.mjs --package package-root --tour-version <Studio version> --change-summary 'Migrated to portable v2' --generated-at <immutable Studio commit ISO timestamp> [--previous-tour-version <prior Studio version>] [--rollback-version package-version] [--runtime-template web-tour] [--color-matrix '20 SVG matrix values']",
       );
       process.exit(0);
     } else throw new Error(`Unknown argument: ${argument}`);
@@ -71,6 +74,13 @@ function parseArguments(argv) {
   });
   if (String(options.changeSummary || "").trim().length < 8)
     throw new Error("--change-summary must describe this tour version.");
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(options.generatedAt) ||
+    new Date(options.generatedAt).toISOString() !== options.generatedAt
+  )
+    throw new Error(
+      "--generated-at must be the normalized ISO timestamp of the immutable Studio commit.",
+    );
   if (options.colorMatrix)
     throw new Error(
       "Runtime-only color-matrix changes are disabled; rebuild from the canonical Studio workspace.",
@@ -398,7 +408,7 @@ async function main() {
       const file = revisedFiles.get(path) || sourceFiles.get(path);
       return sum + (file?.bytes || 0);
     }, 0);
-    const generatedAt = new Date().toISOString();
+    const generatedAt = options.generatedAt;
     const manifest = {
       ...sourceManifest,
       schema: "raindigit-tour-bounded-release/v1",

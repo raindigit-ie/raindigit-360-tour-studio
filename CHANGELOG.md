@@ -2,6 +2,21 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.3.4] — 2026-08-30
+
+### Fixed
+
+- Makes runtime-only fleet revisions reproducible by binding `generatedAt` to
+  the immutable Studio commit time supplied by the operator transaction.
+- Prevents a retry from producing different manifest bytes beneath an existing
+  `bounded-<content-digest>` prefix; immutable collisions remain fail-closed.
+
+### Migration
+
+- Advances Studio/tour capability to `0.3.4` and runtime to `3.0.4` so the
+  deterministic manifest contract and the visible scene-marker fix receive a
+  fresh immutable package identity across all active tours.
+
 ## [0.3.3] — 2026-08-30
 
 ### Fixed

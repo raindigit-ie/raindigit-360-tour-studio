@@ -299,9 +299,9 @@
       "compatibilityPolicy": "exact-contract"
     },
     "toContract": {
-      "studioVersion": "0.3.3",
+      "studioVersion": "0.3.4",
       "formatVersion": "3.0.0",
-      "runtimeVersion": "3.0.3",
+      "runtimeVersion": "3.0.4",
       "verificationProfile": "raindigit-portable-tour-v3"
     },
     "policy": "all-active-tours-must-migrate-before-selection",
