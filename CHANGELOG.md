@@ -2,6 +2,26 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.3.3] — 2026-08-30
+
+### Fixed
+
+- Keeps the complete Pannellum interaction surface, including the walking-person
+  scene-transition marker, above the bounded-media canvas. This fixes markers
+  that remained clickable but were visually covered by the panorama renderer.
+
+### Verification
+
+- Adds a cross-engine stacking contract and a rendered-pixel regression check
+  that compares the marker region with and without the marker. DOM visibility,
+  computed style and hit-testing alone can no longer produce a false pass.
+
+### Migration
+
+- Advances Studio/tour capability to `0.3.3` and runtime to `3.0.3`. Every
+  active DEV tour must receive a new immutable runtime package while preserving
+  its exact four-object-per-scene bounded media and accepted rollback package.
+
 ## [0.3.0] — 2026-08-30
 
 ### Changed

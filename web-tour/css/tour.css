@@ -587,14 +587,10 @@ body:not(.is-navigator-open) .scene-panel {
   white-space: nowrap;
 }
 
-.nav-hotspot-anchor {
-  width: 44px;
-  height: 44px;
-  pointer-events: auto;
-}
-
 .pnlm-dragfix { pointer-events: auto; }
 
+/* Hotspots must paint above the bounded-media canvas. */
+.viewer.pnlm-container > .pnlm-ui { z-index: 3; }
 .pnlm-render-container { z-index: 2; pointer-events: none; }
 .pnlm-render-container canvas { pointer-events: none; }
 .pnlm-hotspot-base.nav-hotspot-anchor {

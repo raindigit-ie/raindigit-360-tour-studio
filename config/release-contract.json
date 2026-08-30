@@ -1,7 +1,7 @@
 {
   "schema": "raindigit-tour-release-contract/v1",
   "formatVersion": "3.0.0",
-  "runtimeVersion": "3.0.2",
+  "runtimeVersion": "3.0.3",
   "verificationProfile": "raindigit-portable-tour-v3",
   "capabilities": [
     "standalone",

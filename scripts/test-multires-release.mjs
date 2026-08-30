@@ -17,6 +17,7 @@ import { join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
 import { chromium, webkit } from "@playwright/test";
+import sharp from "sharp";
 import {
   releaseContract,
   releaseIdentity,
@@ -28,6 +29,54 @@ const projectRoot = resolve(import.meta.dirname, "..");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function visibleHotspotPixelRatio(page, hotspot) {
+  const marker = hotspot.locator(".nav-hotspot");
+  await marker.waitFor({ state: "visible" });
+  const clip = await marker.boundingBox();
+  assert(clip, "Hotspot marker has no paintable bounding box.");
+
+  const painted = await page.screenshot({ clip });
+  try {
+    await marker.evaluate((element) => {
+      element.style.visibility = "hidden";
+    });
+    await page.waitForTimeout(50);
+    const underlay = await page.screenshot({ clip });
+    const [paintedPixels, underlayPixels] = await Promise.all([
+      sharp(painted).removeAlpha().raw().toBuffer({ resolveWithObject: true }),
+      sharp(underlay).removeAlpha().raw().toBuffer({ resolveWithObject: true }),
+    ]);
+    assert(
+      paintedPixels.info.width === underlayPixels.info.width &&
+        paintedPixels.info.height === underlayPixels.info.height &&
+        paintedPixels.info.channels === underlayPixels.info.channels,
+      "Hotspot paint comparison changed image geometry.",
+    );
+
+    const channels = paintedPixels.info.channels;
+    const pixelCount = paintedPixels.info.width * paintedPixels.info.height;
+    let changedPixels = 0;
+    for (let offset = 0; offset < paintedPixels.data.length; offset += channels) {
+      let maximumDifference = 0;
+      for (let channel = 0; channel < channels; channel += 1) {
+        maximumDifference = Math.max(
+          maximumDifference,
+          Math.abs(
+            paintedPixels.data[offset + channel] -
+              underlayPixels.data[offset + channel],
+          ),
+        );
+      }
+      if (maximumDifference >= 16) changedPixels += 1;
+    }
+    return changedPixels / pixelCount;
+  } finally {
+    await marker.evaluate((element) => {
+      element.style.removeProperty("visibility");
+    });
+  }
 }
 
 async function assertContentVersion(source, pathname, targetPath) {
@@ -548,6 +597,33 @@ async function runBrowserQa(packageRoot, pointer) {
       );
       const firstHotspot = page.locator(".nav-hotspot-anchor").first();
       await firstHotspot.waitFor({ state: "attached" });
+      const hotspotStacking = await firstHotspot.evaluate((hotspot) => {
+        const userInterface = hotspot.closest(".pnlm-ui");
+        const renderer = document.querySelector(".pnlm-render-container");
+        const box = hotspot.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2,
+        );
+        return {
+          userInterfaceZ: Number(getComputedStyle(userInterface).zIndex),
+          rendererZ: Number(getComputedStyle(renderer).zIndex),
+          ownsHitTarget: hit === hotspot || hotspot.contains(hit),
+        };
+      });
+      assert(
+        hotspotStacking.userInterfaceZ > hotspotStacking.rendererZ &&
+          hotspotStacking.ownsHitTarget,
+        `${target.name} hotspot is interactive but its parent layer is below the panorama: ${JSON.stringify(hotspotStacking)}.`,
+      );
+      const changedPixelRatio = await visibleHotspotPixelRatio(
+        page,
+        firstHotspot,
+      );
+      assert(
+        changedPixelRatio > 0.25,
+        `${target.name} hotspot is clickable but does not paint above the panorama: ${JSON.stringify({ changedPixelRatio })}.`,
+      );
       const nativeNavigationHandlers = await firstHotspot.evaluate((hotspot) => ({
         click: hotspot.onclick?.toString() ?? null,
         touchend: hotspot.ontouchend?.toString() ?? null,

@@ -23,6 +23,11 @@ assert.match(
   /\.topbar,[\s\S]*?\.scene-panel,[\s\S]*?\.floorplan-panel\s*\{[\s\S]*?position:\s*absolute\s*;[\s\S]*?z-index:\s*10\s*;/,
   "Persistent controls must share the canonical positioned layer above scene transitions."
 );
+assert.match(
+  css,
+  /\.viewer\.pnlm-container\s*>\s*\.pnlm-ui\s*\{\s*z-index:\s*3\s*;\s*\}[\s\S]*?\.pnlm-render-container\s*\{\s*z-index:\s*2\s*;/,
+  "The complete Pannellum UI parent must paint above the compositor-promoted panorama."
+);
 
 const phaseAssignment = runtime.indexOf(
   'overlay.dataset.phase = initial ? "initial-loading" : "loading";'

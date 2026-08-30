@@ -7,6 +7,7 @@ async function stacking(page) {
     const overlay = document.querySelector(".tour-scene-transition");
     const topbar = document.querySelector(".topbar");
     const panel = document.querySelector(".scene-panel");
+    const userInterface = document.querySelector(".pnlm-ui");
     const renderer = document.querySelector(".pnlm-render-container");
     const hotspot = document.querySelector(".pnlm-hotspot-base.nav-hotspot-anchor");
     const rect = (element) => {
@@ -26,6 +27,7 @@ async function stacking(page) {
       overlayZ: Number(getComputedStyle(overlay).zIndex),
       topbarZ: Number(getComputedStyle(topbar).zIndex),
       panelZ: Number(getComputedStyle(panel).zIndex),
+      userInterfaceZ: Number(getComputedStyle(userInterface).zIndex),
       rendererZ: Number(getComputedStyle(renderer).zIndex),
       hotspotZ: hotspot ? Number(getComputedStyle(hotspot).zIndex) : null,
       topbarRect: rect(topbar),
@@ -50,6 +52,8 @@ async function transitionAndAssert(page) {
   expect(during.overlayZ).toBeLessThan(during.topbarZ);
   expect(during.overlayZ).toBeLessThan(during.panelZ);
   expect(during.overlayZ).toBeGreaterThan(during.rendererZ);
+  expect(during.userInterfaceZ).toBeGreaterThan(during.rendererZ);
+  expect(during.overlayZ).toBeGreaterThan(during.userInterfaceZ);
   if (during.hotspotZ !== null) expect(during.overlayZ).toBeGreaterThan(during.hotspotZ);
   expect(during.topbarOwnsPoint).toBe(true);
   expect(during.panelOwnsPoint).toBe(true);

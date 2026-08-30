@@ -288,5 +288,23 @@
         "status": "automated-pass-physical-iphone-pending"
       }
     ]
+  },
+  "pendingMigration": {
+    "status": "candidate-build-pending",
+    "fromContract": {
+      "studioVersion": "0.3.2",
+      "formatVersion": "3.0.0",
+      "runtimeVersion": "3.0.2",
+      "verificationProfile": "raindigit-portable-tour-v3",
+      "compatibilityPolicy": "exact-contract"
+    },
+    "toContract": {
+      "studioVersion": "0.3.3",
+      "formatVersion": "3.0.0",
+      "runtimeVersion": "3.0.3",
+      "verificationProfile": "raindigit-portable-tour-v3"
+    },
+    "policy": "all-active-tours-must-migrate-before-selection",
+    "reason": "The bounded panorama renderer covered visible scene-transition markers while leaving their hitboxes clickable; every active tour requires a fresh immutable runtime package and rendered-pixel verification."
   }
 }
