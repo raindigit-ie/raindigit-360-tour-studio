@@ -295,6 +295,9 @@ if (packageRoot) {
   }
 }
 
+const candidateSummary = registry.pendingMigration
+  ? `; candidate ${registry.pendingMigration.toContract.studioVersion}/${registry.pendingMigration.toContract.runtimeVersion} is pending immutable DEV cutover`
+  : '';
 console.log(
-  `Release governance passed: ${active.length} active tours, independent DEV/PROD state, complete ${migration.fromContract.studioVersion} → ${migration.toContract.studioVersion} migration matrix and integrity-bound DEV attestation.`
+  `Release governance passed: ${active.length} active tours, independent DEV/PROD state, complete ${migration.fromContract.studioVersion} → ${migration.toContract.studioVersion} migration matrix and integrity-bound DEV attestation${candidateSummary}.`
 );
