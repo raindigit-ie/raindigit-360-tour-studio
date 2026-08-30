@@ -1900,6 +1900,15 @@ async function main() {
     );
     assert(
       revisedRuntime.includes(
+        'join(options.runtimeTemplate, "css", "tour.css")',
+      ) &&
+        revisedRuntime.includes(
+          'join(stagedRelease, "css", "tour.css")',
+        ),
+      "Runtime-only fleet revisions must install the canonical Studio stylesheet.",
+    );
+    assert(
+      revisedRuntime.includes(
         'canvas.style.filter = "url(#legacy-color-matrix)";',
       ),
       "Legacy parity calibration is lost when the operator previews the original scene adjustment.",

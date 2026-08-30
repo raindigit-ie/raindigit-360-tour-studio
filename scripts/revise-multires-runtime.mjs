@@ -300,6 +300,10 @@ async function main() {
       join(options.runtimeTemplate, "js", "tour.js"),
       "utf8",
     );
+    await cp(
+      join(options.runtimeTemplate, "css", "tour.css"),
+      join(stagedRelease, "css", "tour.css"),
+    );
     await writeFile(
       join(stagedRelease, "js", "tour.js"),
       reviseRuntime(runtimeSource, options.colorMatrix),
