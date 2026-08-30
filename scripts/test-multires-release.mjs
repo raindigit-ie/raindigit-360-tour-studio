@@ -1904,8 +1904,9 @@ async function main() {
       ) &&
         revisedRuntime.includes(
           'join(stagedRelease, "css", "tour.css")',
-        ),
-      "Runtime-only fleet revisions must install the canonical Studio stylesheet.",
+        ) &&
+        revisedRuntime.includes("releaseTourStyles(stylesheetSource)"),
+      "Runtime-only fleet revisions must install the stripped canonical Studio stylesheet.",
     );
     assert(
       revisedRuntime.includes(

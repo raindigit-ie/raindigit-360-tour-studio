@@ -102,6 +102,23 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function releaseTourStyles(source) {
+  const stripStart = "/* RELEASE_STRIP_START: studio-only styles */";
+  const stripEnd = "/* RELEASE_STRIP_END: studio-only styles */";
+  const stripStartIndex = source.indexOf(stripStart);
+  const stripEndIndex = source.indexOf(stripEnd);
+  assert(
+    stripStartIndex >= 0 && stripEndIndex > stripStartIndex,
+    "The canonical Studio stylesheet has invalid release-strip markers.",
+  );
+  const release = `${source.slice(0, stripStartIndex).trimEnd()}\n`;
+  assert(
+    !/\.editor-panel|\.frame-picker-app/.test(release),
+    "Studio-only styles leaked into the revised public tour stylesheet.",
+  );
+  return release;
+}
+
 function staticTourLoaderMarkup() {
   const tiles = Array.from({ length: 24 }, (_, index) => {
     const row = Math.floor(index / 6);
@@ -300,9 +317,14 @@ async function main() {
       join(options.runtimeTemplate, "js", "tour.js"),
       "utf8",
     );
-    await cp(
+    const stylesheetSource = await readFile(
       join(options.runtimeTemplate, "css", "tour.css"),
+      "utf8",
+    );
+    await writeFile(
       join(stagedRelease, "css", "tour.css"),
+      releaseTourStyles(stylesheetSource),
+      "utf8",
     );
     await writeFile(
       join(stagedRelease, "js", "tour.js"),
