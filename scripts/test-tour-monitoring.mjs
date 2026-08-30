@@ -290,7 +290,8 @@ async function testRuntimeRevisionWiring() {
   assert(
     source.includes('currentIndex.includes("data-tour-monitoring-config")') &&
       source.includes('currentIndex.includes("js/tour-monitoring.js")') &&
-      source.includes('stat(join(stagedRelease, "js", "tour-monitoring.js"))'),
+      source.includes('stat(join(stagedRelease, "js", "tour-monitoring.js"))') &&
+      source.includes('rollbackVersion: options.rollbackVersion || sourceManifest.version'),
     "Runtime-only fleet revisions can silently omit canonical production monitoring.",
   );
 }

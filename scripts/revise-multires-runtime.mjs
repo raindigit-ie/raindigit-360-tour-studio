@@ -384,6 +384,7 @@ async function main() {
       runtimeVersion: identity.runtimeVersion,
       tourVersion: identity.tourVersion,
       previousTourVersion: identity.previousTourVersion,
+      rollbackVersion: options.rollbackVersion || sourceManifest.version,
       capabilities: identity.capabilities,
       verificationProfile: identity.verificationProfile,
       changelog: {
