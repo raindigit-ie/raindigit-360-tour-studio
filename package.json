@@ -2,7 +2,7 @@
   "name": "raindigit-360-tour-studio",
   "private": true,
   "type": "module",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Local RainDigit studio for preparing self-hosted 360 property tours.",
   "homepage": "https://raindigit.ie/services/immersive-tours",
   "repository": {

@@ -2,6 +2,28 @@
 
 All notable Studio changes are recorded here. Versions follow Semantic Versioning.
 
+## [0.3.6] — 2026-08-31
+
+### Fixed
+
+- Isolates authored person-navigation hotspots above Pannellum utility layers so
+  the icon remains visible and the intended hotspot owns its touch target.
+- Hides empty interaction/info panels after readiness, preventing a transparent
+  or black 200×150 overlay from intercepting the centre of the panorama.
+- Uses one canonical public-runtime inventory for both full builds and
+  runtime-only revisions, including Pannellum CSS and tour chrome.
+
+### Verification
+
+- Adds computed visible-layer and real-click transition coverage for every
+  active tour, plus exact public-runtime parity checks.
+
+### Migration
+
+- Advances Studio/tour capability to `0.3.6` and runtime to `3.0.6`; all three
+  active DEV tours require new immutable packages. The accepted 0.3.5 set
+  remains an immutable rollback and must not be relabelled.
+
 ## [0.3.5] — 2026-08-30
 
 ### Fixed

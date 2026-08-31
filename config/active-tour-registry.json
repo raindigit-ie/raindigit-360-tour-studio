@@ -10,6 +10,22 @@
     "verificationProfile": "raindigit-portable-tour-v3",
     "compatibilityPolicy": "exact-contract"
   },
+  "pendingMigration": {
+    "status": "candidate-build-pending",
+    "fromContract": {
+      "studioVersion": "0.3.5",
+      "formatVersion": "3.0.0",
+      "runtimeVersion": "3.0.5",
+      "verificationProfile": "raindigit-portable-tour-v3"
+    },
+    "toContract": {
+      "studioVersion": "0.3.6",
+      "formatVersion": "3.0.0",
+      "runtimeVersion": "3.0.6",
+      "verificationProfile": "raindigit-portable-tour-v3"
+    },
+    "policy": "evaluate-every-active-tour"
+  },
   "activeTours": [
     {
       "slug": "killarney-360-property-tour-demo",

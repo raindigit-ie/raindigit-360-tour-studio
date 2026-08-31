@@ -11,7 +11,7 @@
   },
   "registry": {
     "path": "config/active-tour-registry.json",
-    "sha256": "4ab98fd459aba389e0ed42f859d3255ddc0b6fb4c026f7fd4e950b18bca1eddf"
+    "sha256": "5857f35657562879491fb97d5937151a83876ee6918d5e3d4e8ff647c41ed4b4"
   },
   "migrationMatrixDigest": "3cd814bd58307a145cc793cfe1721358a66242015d98bb80fb5714f269209080",
   "contract": {
@@ -158,5 +158,5 @@
       "separate-prod-credential-boundary-not-yet-proven"
     ]
   },
-  "attestationDigest": "97e09fbd431b70224c77f8d38823c46acfb58509b6092526e6ba33af734b5db6"
+  "attestationDigest": "be24c46a3114c6dfa27bef81aae4a1d9282ac92566de571967e7c83eb086d154"
 }
